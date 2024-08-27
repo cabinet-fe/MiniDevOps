@@ -1,0 +1,16 @@
+{
+  "name": "mini-devops",
+  "module": "index.ts",
+  "type": "module",
+  "workspaces": [
+    "server",
+    "web"
+  ],
+  "dependencies": {
+    "cat-kit": "3.6.8"
+  },
+  "devDependencies": {
+    "ts-conf-base": "2.3.3",
+    "@types/bun": "latest"
+  }
+}

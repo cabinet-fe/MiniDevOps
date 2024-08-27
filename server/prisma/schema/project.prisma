@@ -1,0 +1,7 @@
+model Project {
+  id        Int      @id @default(autoincrement())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  repoId    Int
+  repo      Repo     @relation(references: [id], fields: [repoId])
+}

@@ -1,0 +1,7 @@
+{
+  "references": [
+    { "path": "server/tsconfig.json" },
+    { "path": "web/tsconfig.json" }
+  ],
+  "exclude": ["node_modules"]
+}

@@ -1,0 +1,6 @@
+{
+  "name": "@mini-devops/web",
+  "dependencies": {
+    "ultra-ui": "0.0.291"
+  }
+}
