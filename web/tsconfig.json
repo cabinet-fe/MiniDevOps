@@ -4,5 +4,5 @@
     "declaration": true,
     "composite": true
   },
-  "include": ["**/*.ts"]
+  "include": ["**/*.ts", "**/*.vue"]
 }

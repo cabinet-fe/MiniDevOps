@@ -1,6 +1,9 @@
 {
   "name": "@mini-devops/web",
-  "dependencies": {
-    "ultra-ui": "0.0.291"
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build"
   }
 }
