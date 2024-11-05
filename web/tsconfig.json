@@ -2,7 +2,10 @@
   "extends": "ts-conf-base/tsconfig.vue.json",
   "compilerOptions": {
     "declaration": true,
-    "composite": true
+    "composite": true,
+    "paths": {
+      "@/*": ["./*"]
+    }
   },
   "include": ["**/*.ts", "**/*.vue"]
 }

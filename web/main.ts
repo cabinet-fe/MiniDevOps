@@ -1,11 +1,12 @@
 import { createApp, h } from 'vue'
 import App from './app.vue'
 import { router } from './router'
-import 'ultra-ui/styles/theme.css'
-import 'ultra-ui/styles/index'
 import { vLoading } from 'ultra-ui/components/loading/directive'
-import 'ultra-ui/components/loading/style.css'
-import 'ultra-ui/components/context-menu/style'
+import { loadTheme } from 'ultra-ui'
+import 'ultra-ui/styles'
+import 'virtual:uno.css'
+
+loadTheme()
 
 const app = createApp({
   render: () => h(App)
