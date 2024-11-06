@@ -5,6 +5,14 @@
   "scripts": {
     "dev": "bun --hot index.ts",
     "db:init": "prisma migrate dev --name init",
-    "db:reset": "prisma migrate reset"
+    "db:reset": "prisma migrate reset",
+    "update": "bun update"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.22.0",
+    "hono": "^4.6.9"
+  },
+  "devDependencies": {
+    "prisma": "^5.22.0"
   }
 }

@@ -1,12 +1,11 @@
 model Repo {
-  id        Int       @id @default(autoincrement())
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  id        Int      @id @default(autoincrement())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
   name      String
-  url       String
+  address   String
   username  String
   pwd       String
-  branches  String?
-  codePath  String?
-  projects  Project[]
+  codePath  String
+  tasks     Task[]
 }

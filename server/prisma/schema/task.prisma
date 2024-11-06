@@ -1,0 +1,11 @@
+model Task {
+  id         Int      @id @default(autoincrement())
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  name       String
+  repoId     Int
+  repo       Repo     @relation(references: [id], fields: [repoId])
+  branch     String
+  bundlerDir String
+  remoteIds  String?
+}

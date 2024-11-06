@@ -7,22 +7,10 @@
     "web"
   ],
   "dependencies": {
-    "cat-kit": "^3.7.4",
-    "@prisma/client": "^5.21.1",
-    "hono": "^4.6.9",
-    "ultra-ui": "^0.2.5",
-    "vue-router": "^4.4.5",
-    "icon-ultra": "^3.0.15"
+    "cat-kit": "^3.7.4"
   },
   "devDependencies": {
     "ts-conf-base": "2.3.3",
-    "@types/bun": "^1.1.13",
-    "prisma": "^5.21.1",
-    "vite": "^5.4.10",
-    "@vitejs/plugin-vue": "^5.1.4",
-    "@vitejs/plugin-vue-jsx": "^4.0.1",
-    "vite-helper": "^1.0.5",
-    "unplugin-vue-components": "^0.27.4",
-    "unocss": "^0.64.0"
+    "@types/bun": "^1.1.13"
   }
 }

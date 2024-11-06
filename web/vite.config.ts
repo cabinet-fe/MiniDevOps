@@ -2,7 +2,11 @@ import { defineConfig } from 'vite'
 import Vue from '@vitejs/plugin-vue'
 import VueJSX from '@vitejs/plugin-vue-jsx'
 import Components from 'unplugin-vue-components/vite'
-import { UltraUIResolver } from 'vite-helper'
+import {
+  UltraUIResolver,
+  MetaComponentsResolver,
+  defineServerProxy
+} from 'vite-helper'
 
 import { dirname } from 'path'
 import { fileURLToPath } from 'url'
@@ -16,12 +20,15 @@ export default defineConfig(() => {
       Vue(),
       VueJSX(),
       Components({
-        resolvers: [UltraUIResolver]
+        resolvers: [UltraUIResolver, MetaComponentsResolver]
       }),
       UnoCSS()
     ],
     server: {
-      port: 3000
+      port: 3001,
+      proxy: defineServerProxy({
+        '/api': 'http://localhost:3000/api'
+      })
     },
     base: '/',
 
