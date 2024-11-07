@@ -5,9 +5,10 @@ import { getPageParams } from '../utils/page'
 import { gitClone } from '../utils/git'
 import { $ } from 'bun'
 import path from 'path'
+import { exists } from 'fs/promises'
 import { runCmd } from '../utils/cmd'
 
-export const repo = new Hono()
+export const repo = new Hono().basePath('/repos')
 
 repo.get('/page', async c => {
   const rows = await db.repo.findMany({
@@ -54,7 +55,10 @@ repo.post('/', async c => {
   address = address.replace(/^https?:\/\//, '')
   username = encodeURIComponent(username)
 
-  await gitClone({ address, username, pwd, destination: codePath })
+  const codeExist = await exists(codePath)
+  if (!codeExist) {
+    await gitClone({ address, username, pwd, destination: codePath })
+  }
 
   const ret = await db.repo.create({
     data
@@ -80,6 +84,18 @@ repo.get('/:id', async c => {
 /** 删除 */
 repo.delete('/:id', async c => {
   const { id } = c.req.param()
+
+  const task = await db.task.findFirst({
+    where: { repoId: +id }
+  })
+  if (task)
+    return c.json(
+      {
+        msg: `任务${task.name}引用了这个仓库，请先删除对应的仓库`
+      },
+      400
+    )
+
   await db.repo.delete({
     where: { id: +id }
   })

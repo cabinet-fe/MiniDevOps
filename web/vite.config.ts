@@ -26,9 +26,16 @@ export default defineConfig(() => {
     ],
     server: {
       port: 3001,
-      proxy: defineServerProxy({
-        '/api': 'http://localhost:3000/api'
-      })
+      proxy: {
+        ...defineServerProxy({
+          '/api': 'http://localhost:3000/api'
+        }),
+        '/ws': {
+          target: 'ws://localhost:3000',
+          ws: true,
+          rewriteWsOrigin: true
+        }
+      }
     },
     base: '/',
 

@@ -1,6 +1,10 @@
 import { $ } from 'bun'
 import { runCmd } from './cmd'
 
+export function getRepoName(gitAddress: string) {
+  return gitAddress.slice(gitAddress.lastIndexOf('/') + 1).replace(/\.git$/, '')
+}
+
 export async function gitClone(options: {
   /** 仓库地址 */
   address: string

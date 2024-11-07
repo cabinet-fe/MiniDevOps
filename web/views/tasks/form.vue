@@ -1,5 +1,5 @@
 <template>
-  <m-dialog-pro :ctx="ctx" style="width: 500px">
+  <m-dialog-pro :ctx="ctx" style="width: 800px">
     <u-form :model="model" label-width="100px">
       <u-input label="任务名称" field="name" />
       <u-select
@@ -11,14 +11,26 @@
         @update:model-value="getBranchList"
       />
       <u-select label="分支" field="branch" :options="branchList" />
-      <u-input label="构建物目录" field="bundlerDir" />
+      <u-input
+        label="构建物路径"
+        field="bundlerDir"
+        tips="构建后的构建物相对于代码根目录的路径"
+      />
+      <u-input
+        label="部署目录"
+        field="deployPath"
+        tips="指定部署到本机服务器上的目录"
+      />
       <u-multi-select
         label="远程目录"
         field="remoteIds"
         :options="remoteList"
         value-key="id"
         label-key="name"
+        span="full"
       />
+
+      <m-code-editor span="full" label="构建脚本" field="script" />
     </u-form>
 
     <template #trigger>
@@ -43,7 +55,9 @@ const model = new FormModel({
   branch: { required: true },
   address: { required: true },
   bundlerDir: { required: true },
+  deployPath: {},
   remoteIds: { value: () => [] as number[] },
+  script: { value: '' },
   id: {}
 })
 
@@ -51,11 +65,11 @@ const remoteList = shallowRef<any[]>([])
 const repoList = shallowRef<any[]>([])
 
 http.get('/remotes/list').then(({ data }) => {
-  remoteList.value = data.data
+  remoteList.value = data
 })
 
 http.get('/repos/list').then(({ data }) => {
-  repoList.value = data.data
+  repoList.value = data
 })
 
 const branchList = shallowRef<any[]>([])
@@ -66,7 +80,7 @@ function getBranchList(repoId?: number) {
     return
   }
   http.get(`/repos/${repoId}/branch`).then(({ data }) => {
-    branchList.value = data.data.map(v => ({ label: v, value: v }))
+    branchList.value = data.map(v => ({ label: v, value: v }))
   })
 }
 
@@ -100,7 +114,7 @@ defineExpose({
     const { remoteIds, ...rest } = data
     model.setData({
       ...rest,
-      remoteIds: remoteIds?.split(',').map(Number)
+      remoteIds: !remoteIds ? [] : remoteIds.split(',').map(Number)
     })
     getBranchList(rest.repoId)
     ctx.open({ action })

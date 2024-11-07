@@ -2,7 +2,7 @@ import { Hono } from 'hono'
 import { db } from '../db'
 import { getPageParams } from '../utils/page'
 
-export const remote = new Hono()
+export const remote = new Hono().basePath('/remotes')
 
 remote.get('/page', async c => {
   const rows = await db.remote.findMany(getPageParams(c))

@@ -3,13 +3,13 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "pnpm run vite",
     "build": "vite build",
     "update": "bun update"
   },
   "dependencies": {
     "ultra-ui": "^0.2.6",
-    "@meta/components": "^0.1.110",
+    "@meta/components": "^0.1.115",
     "@meta/utils": "^0.0.31",
     "@meta/hooks": "^0.1.16",
     "@meta/apis": "^0.1.70",

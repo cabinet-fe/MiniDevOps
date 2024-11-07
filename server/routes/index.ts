@@ -1,9 +1,14 @@
-import type { Hono } from 'hono'
+import { Hono } from 'hono'
 import { repo } from './repos'
 import { task } from './tasks'
 import { remote } from './remotes'
-export function registerRoutes(app: Hono) {
-  app.route('/repos', repo)
-  app.route('/tasks', task)
-  app.route('/remotes', remote)
-}
+import { taskWS } from './tasks-ws'
+
+export const http = new Hono()
+export const ws = new Hono()
+
+http.route('/', repo)
+http.route('/', task)
+http.route('/', remote)
+
+ws.route('/', taskWS)

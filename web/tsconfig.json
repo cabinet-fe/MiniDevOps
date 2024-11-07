@@ -3,6 +3,7 @@
   "compilerOptions": {
     "declaration": true,
     "composite": true,
+    "types": ["vite/client"],
     "paths": {
       "@/*": ["./*"]
     }

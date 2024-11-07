@@ -7,5 +7,7 @@ model Task {
   repo       Repo     @relation(references: [id], fields: [repoId])
   branch     String
   bundlerDir String
+  script     String?
+  deployPath String?
   remoteIds  String?
 }

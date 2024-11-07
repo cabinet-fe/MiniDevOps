@@ -28,7 +28,7 @@
 
 <script lang="ts" setup>
 import { defineTableProServer } from '@meta/components'
-import { defineTableColumns } from 'ultra-ui'
+import { defineTableColumns, message } from 'ultra-ui'
 import { shallowReactive, useTemplateRef } from 'vue'
 import RepoForm from './form.vue'
 import { Delete, EditPen } from 'icon-ultra'
@@ -61,5 +61,6 @@ const formRef = useTemplateRef('formRef')
 const handleDelete = async (row: any) => {
   await http.delete(`/repos/${row.id}`)
   tableRef.value?.fetchData()
+  message.success('删除成功')
 }
 </script>

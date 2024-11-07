@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "dev": "bun --hot index.ts",
-    "db:init": "prisma migrate dev --name init",
+    "db:migrate": "prisma migrate dev",
     "db:reset": "prisma migrate reset",
     "update": "bun update"
   },

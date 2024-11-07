@@ -1,9 +1,10 @@
 import { Hono } from 'hono'
-import { registerRoutes } from './routes'
+import { http, ws } from './routes'
 import { logger } from 'hono/logger'
 import { date } from 'cat-kit/be'
+import { websocket } from './ws'
 
-const app = new Hono().basePath('/api')
+const app = new Hono()
 
 app.use(
   logger((msg, ...rest: string[]) => {
@@ -12,12 +13,14 @@ app.use(
 )
 
 app.onError((err, c) => {
-  return c.json({ msg: err.stack }, 500)
+  return c.json({ msg: err.message }, 500)
 })
 
-registerRoutes(app)
+app.route('/api', http)
+app.route('/ws', ws)
 
 export default {
-  fetch: app.fetch
-  // websocket: {}
+  fetch: app.fetch,
+  port: 3000,
+  websocket
 }
