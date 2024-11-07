@@ -1,7 +1,6 @@
 import { Hono } from 'hono'
 import { db } from '../db'
 import { getPageParams } from '../utils/page'
-import { sleep } from 'cat-kit/be'
 import { addBuildingTask, removeBuildingTask } from '../state'
 
 export const task = new Hono().basePath('/tasks')
