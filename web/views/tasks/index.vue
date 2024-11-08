@@ -112,7 +112,19 @@ socket.addEventListener('error', e => {
 const buildingTasks = shallowRef<Set<number>>(new Set())
 
 socket.addEventListener('message', event => {
-  buildingTasks.value = new Set(JSON.parse(event.data))
+  const msg = JSON.parse(event.data)
+
+  if (msg.type === 'progress') {
+    buildingTasks.value = new Set(msg.data)
+  } else if (msg.type === 'result') {
+    const { status, taskName } = msg.data
+
+    if (status === 'success') {
+      message.success(`${taskName} 构建成功`)
+    } else {
+      message.error(`${taskName} 构建失败`)
+    }
+  }
 })
 
 onBeforeUnmount(() => {

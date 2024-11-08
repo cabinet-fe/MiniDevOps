@@ -1,7 +1,13 @@
 import { Hono } from 'hono'
 import { db } from '../db'
 import { getPageParams } from '../utils/page'
-import { addBuildingTask, removeBuildingTask } from '../state'
+
+import { $ } from 'bun'
+import { runCmd, runCmds } from '../utils/cmd'
+import path from 'path'
+import { getRepoName, gitCheckout, gitClone } from '../utils/git'
+import fs from 'fs/promises'
+import { taskProgressMessage, taskResultMessage } from '../service/tasks'
 
 export const task = new Hono().basePath('/tasks')
 
@@ -48,17 +54,74 @@ task.post('/', async c => {
 // 构建
 task.post('/:id/build', async c => {
   const id = c.req.param('id')
-  addBuildingTask(+id)
-  setTimeout(() => {
-    removeBuildingTask(+id)
-  }, 10000)
 
+  const task = await db.task.findUnique({
+    where: { id: +id },
+    include: { repo: true }
+  })
+  if (!task) {
+    return c.json({ msg: '任务不存在' }, 404)
+  }
+
+  const repoDir = path.resolve(
+    task.repo.codePath,
+    getRepoName(task.repo.address)
+  )
+
+  if (!(await fs.exists(repoDir))) {
+    return c.json({ msg: '仓库不存在' }, 404)
+  }
+
+  const scripts = task.script?.split('\n') ?? []
+
+  taskProgressMessage.update(s => {
+    s.add(+id)
+  })
+
+  ~(async function () {
+    try {
+      await gitCheckout(repoDir, task.branch)
+      await runCmds(scripts, repoDir)
+
+      taskResultMessage.update(() => {
+        return {
+          taskName: task.name,
+          status: 'success'
+        }
+      })
+    } catch (err) {
+      console.error(err)
+      taskResultMessage.update(() => {
+        return {
+          taskName: task.name,
+          status: 'error',
+          error: err
+        }
+      })
+    } finally {
+      taskProgressMessage.update(s => {
+        s.delete(+id)
+      })
+    }
+  })()
   return c.json({ msg: '成功' })
 })
 
 // 停止构建
 task.post('/:id/stop-build', async c => {
   const id = c.req.param('id')
-  removeBuildingTask(+id)
+  taskProgressMessage.update(s => {
+    s.delete(+id)
+  })
+
+  const task = await db.task.findUnique({ where: { id: +id } })
+
+  taskResultMessage.update(() => {
+    return {
+      taskName: task!.name,
+      status: 'error',
+      error: '构建已停止'
+    }
+  })
   return c.json({ msg: '成功' })
 })

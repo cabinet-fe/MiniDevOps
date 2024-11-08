@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import { upgradeWebSocket } from '../ws'
-import { connections, publish } from '../state'
+import { taskPool } from '../service/tasks'
 
 export const taskWS = new Hono().basePath('/tasks')
 
@@ -10,12 +10,11 @@ taskWS.get(
     return {
       onMessage(ev, ws) {
         if (ev.data === 'connect') {
-          connections.add(ws)
-          publish()
+          taskPool.add(ws)
         }
       },
       onClose: (_, ws) => {
-        connections.delete(ws)
+        taskPool.delete(ws)
       }
     }
   })

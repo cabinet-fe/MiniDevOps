@@ -27,6 +27,7 @@ export async function gitClone(options: {
  * 切换分支并拉取
  */
 export async function gitCheckout(cwd: string, branch: string) {
+  await runCmd($`git clean -f`.cwd(cwd))
   await runCmd($`git checkout .`.cwd(cwd))
   await runCmd($`git checkout ${branch.replace('origin/', '')}`.cwd(cwd))
   await runCmd($`git pull --no-rebase`.cwd(cwd))

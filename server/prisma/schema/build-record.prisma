@@ -1,0 +1,9 @@
+model BuildRecord {
+  id        Int      @id @default(autoincrement())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  // 关联任务
+  taskId    Int
+  buildInfo String
+  status    String
+}

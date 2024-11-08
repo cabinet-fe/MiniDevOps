@@ -2,7 +2,7 @@
 import { Hono } from 'hono'
 import { db } from '../db'
 import { getPageParams } from '../utils/page'
-import { gitClone } from '../utils/git'
+import { getRepoName, gitClone } from '../utils/git'
 import { $ } from 'bun'
 import path from 'path'
 import { exists } from 'fs/promises'
@@ -55,7 +55,7 @@ repo.post('/', async c => {
   address = address.replace(/^https?:\/\//, '')
   username = encodeURIComponent(username)
 
-  const codeExist = await exists(codePath)
+  const codeExist = await exists(path.resolve(codePath, getRepoName(address)))
   if (!codeExist) {
     await gitClone({ address, username, pwd, destination: codePath })
   }
