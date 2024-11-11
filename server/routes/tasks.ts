@@ -1,11 +1,9 @@
 import { Hono } from 'hono'
 import { db } from '../db'
 import { getPageParams } from '../utils/page'
-
-import { $ } from 'bun'
-import { runCmd, runCmds } from '../utils/cmd'
+import { runCmds } from '../utils/cmd'
 import path from 'path'
-import { getRepoName, gitCheckout, gitClone } from '../utils/git'
+import { getRepoName, gitCheckout } from '../utils/git'
 import fs from 'fs/promises'
 import { taskProgressMessage, taskResultMessage } from '../service/tasks'
 
@@ -52,11 +50,12 @@ task.post('/', async c => {
 })
 
 // 构建
+const abortMap = new Map<number, () => void>()
 task.post('/:id/build', async c => {
-  const id = c.req.param('id')
+  const id = +c.req.param('id')
 
   const task = await db.task.findUnique({
-    where: { id: +id },
+    where: { id },
     include: { repo: true }
   })
   if (!task) {
@@ -75,12 +74,13 @@ task.post('/:id/build', async c => {
   const scripts = task.script?.split('\n') ?? []
 
   taskProgressMessage.update(s => {
-    s.add(+id)
+    s.add(id)
   })
 
   ~(async function () {
     try {
       await gitCheckout(repoDir, task.branch)
+
       await runCmds(scripts, repoDir)
 
       taskResultMessage.update(() => {
@@ -90,7 +90,6 @@ task.post('/:id/build', async c => {
         }
       })
     } catch (err) {
-      console.error(err)
       taskResultMessage.update(() => {
         return {
           taskName: task.name,
@@ -100,8 +99,10 @@ task.post('/:id/build', async c => {
       })
     } finally {
       taskProgressMessage.update(s => {
-        s.delete(+id)
+        s.delete(id)
       })
+
+      abortMap.delete(id)
     }
   })()
   return c.json({ msg: '成功' })
@@ -109,12 +110,17 @@ task.post('/:id/build', async c => {
 
 // 停止构建
 task.post('/:id/stop-build', async c => {
-  const id = c.req.param('id')
+  const id = +c.req.param('id')
   taskProgressMessage.update(s => {
-    s.delete(+id)
+    s.delete(id)
   })
 
-  const task = await db.task.findUnique({ where: { id: +id } })
+  const task = await db.task.findUnique({ where: { id } })
+
+  const abort = abortMap.get(id)
+
+  abort?.()
+  abortMap.delete(id)
 
   taskResultMessage.update(() => {
     return {

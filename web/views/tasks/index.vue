@@ -20,15 +20,7 @@
         >
           <u-icon><VideoPlay /></u-icon>
         </u-action>
-        <u-action
-          v-else
-          title="停止构建"
-          type="warning"
-          need-confirm
-          @run="handleStopBuild(rowData)"
-        >
-          <u-icon><VideoPause /></u-icon>
-        </u-action>
+
         <u-action @run="formRef?.open('update', rowData)">
           <u-icon><EditPen /></u-icon>
         </u-action>
