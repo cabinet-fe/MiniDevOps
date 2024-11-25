@@ -10,7 +10,7 @@
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
-    "hono": "^4.6.9"
+    "hono": "^4.6.12"
   },
   "devDependencies": {
     "prisma": "^5.22.0"
