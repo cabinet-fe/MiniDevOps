@@ -1,0 +1,13 @@
+{
+  "name": "@mini-devops/server",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "bun run index.ts",
+    "prisma": "prisma init --db --output ./generated/prisma"
+  },
+  "dependencies": {
+    "hono": "^4.7.5",
+    "prisma": "^6.5.0"
+  }
+}

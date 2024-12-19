@@ -4,8 +4,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
-    "update": "bun update"
+    "build": "vite build"
   },
   "dependencies": {
     "ultra-ui": "^0.3.39",
@@ -24,8 +23,6 @@
     "@vitejs/plugin-vue-jsx": "^4.1.2",
     "@builder/vite": "^1.0.2",
     "unplugin-vue-components": "^28.4.1",
-    "unocss": "^0.65.4",
-    "@types/bun": "^1.2.8",
-    "ts-conf-base": "^2.4.2"
+    "unocss": "^0.65.4"
   }
 }
