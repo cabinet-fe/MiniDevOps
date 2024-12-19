@@ -9,10 +9,10 @@
     "update": "bun update"
   },
   "dependencies": {
-    "@prisma/client": "^5.22.0",
-    "hono": "^4.6.12"
+    "@prisma/client": "^6.1.0",
+    "hono": "^4.6.14"
   },
   "devDependencies": {
-    "prisma": "^5.22.0"
+    "prisma": "^6.1.0"
   }
 }
