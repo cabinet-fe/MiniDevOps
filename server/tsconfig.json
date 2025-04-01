@@ -1,9 +1,0 @@
-{
-  "extends": "ts-conf-base/tsconfig.node.json",
-  "compilerOptions": {
-    "declaration": true,
-    "composite": true,
-    "types": ["bun-types"]
-  },
-  "include": ["**/*.ts"]
-}

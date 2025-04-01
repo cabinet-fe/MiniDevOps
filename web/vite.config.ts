@@ -1,13 +1,5 @@
 import { defineConfig } from 'vite'
-import Vue from '@vitejs/plugin-vue'
-import VueJSX from '@vitejs/plugin-vue-jsx'
-import Components from 'unplugin-vue-components/vite'
-import {
-  UltraUIResolver,
-  MetaComponentsResolver,
-  defineServerProxy
-} from 'vite-helper'
-
+import { pluginPresets, createServer } from '@builder/vite'
 import { dirname } from 'path'
 import { fileURLToPath } from 'url'
 import UnoCSS from 'unocss/vite'
@@ -17,26 +9,25 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 export default defineConfig(() => {
   return {
     plugins: [
-      Vue(),
-      VueJSX(),
-      Components({
-        resolvers: [UltraUIResolver, MetaComponentsResolver]
+      ...pluginPresets(['vue', 'vue-jsx', 'unplugin-components'], {
+        'unplugin-components': {
+          dts: './components.d.ts'
+        }
       }),
+
       UnoCSS()
     ],
-    server: {
+    server: createServer({
       port: 3001,
       proxy: {
-        ...defineServerProxy({
-          '/api': 'http://localhost:3000/api'
-        }),
+        '/api': 'http://localhost:8080',
         '/ws': {
-          target: 'ws://localhost:3000',
+          target: 'ws://localhost:8080',
           ws: true,
           rewriteWsOrigin: true
         }
       }
-    },
+    }),
     base: '/',
 
     resolve: {

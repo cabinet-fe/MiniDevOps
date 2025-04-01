@@ -1,9 +1,0 @@
--- CreateTable
-CREATE TABLE "BuildRecord" (
-    "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" DATETIME NOT NULL,
-    "taskId" INTEGER NOT NULL,
-    "buildInfo" TEXT NOT NULL,
-    "status" TEXT NOT NULL
-);
