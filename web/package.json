@@ -9,7 +9,6 @@
   },
   "dependencies": {
     "ultra-ui": "^0.3.58",
-    "@meta/components": "^0.3.38",
     "vue-router": "^4.5.0",
     "icon-ultra": "^3.0.18",
     "pinia": "^3.0.3",
@@ -22,6 +21,7 @@
     "@types/bun": "^1.2.18",
     "ts-conf-base": "^2.4.2",
     "fast-glob": "^3.3.3",
-    "cat-kit": "^3.7.12"
+    "cat-kit": "^3.7.12",
+    "sass-embedded": "^1.89.2"
   }
 }

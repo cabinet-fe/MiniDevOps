@@ -16,7 +16,7 @@
       <u-button
         type="primary"
         :loading="loading"
-        class="w-full bg-blue-600 hover:bg-blue-700 text-white"
+        class="w-full"
         @click="handleLogin"
       >
         登录

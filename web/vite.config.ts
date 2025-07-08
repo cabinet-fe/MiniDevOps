@@ -9,7 +9,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 
 export default defineConfig(async () => {
   const optimizeDeps = await fg.glob(['ultra-ui/components/**/style.js'], {
-    cwd: resolve(__dirname, '../node_modules')
+    cwd: resolve(__dirname, 'node_modules')
   })
 
   return {
@@ -34,6 +34,18 @@ export default defineConfig(async () => {
       }
     }),
     base: '/',
+
+    css: {
+      preprocessorOptions: {
+        scss: {
+          additionalData: `
+            @use 'ultra-ui/styles/mixins' as m;
+            @use 'ultra-ui/styles/vars' as vars;
+            @use 'ultra-ui/styles/functions' as fn;
+          `
+        }
+      }
+    },
 
     resolve: {
       extensions: ['.ts', '.js', '.json', '.tsx'],

@@ -1,0 +1,70 @@
+package utils
+
+import "github.com/gofiber/fiber/v2"
+
+// SuccessResponse 成功响应结构
+type SuccessResponse struct {
+	Success bool        `json:"success"`
+	Message string      `json:"message"`
+	Data    interface{} `json:"data,omitempty"`
+}
+
+// ErrorResponse 错误响应结构
+type ErrorResponse struct {
+	Success bool   `json:"success"`
+	Message string `json:"message"`
+	Error   string `json:"error,omitempty"`
+}
+
+// PaginationResponse 分页响应结构
+type PaginationResponse struct {
+	Success bool        `json:"success"`
+	Message string      `json:"message"`
+	Data    interface{} `json:"data"`
+	Total   int64       `json:"total"`
+	Page    int         `json:"page"`
+	Limit   int         `json:"limit"`
+}
+
+// SuccessWithData 返回包含数据的成功响应
+func SuccessWithData(c *fiber.Ctx, message string, data interface{}) error {
+	return c.JSON(SuccessResponse{
+		Success: true,
+		Message: message,
+		Data:    data,
+	})
+}
+
+// Success 返回成功响应
+func Success(c *fiber.Ctx, message string) error {
+	return c.JSON(SuccessResponse{
+		Success: true,
+		Message: message,
+	})
+}
+
+// Error 返回错误响应
+func Error(c *fiber.Ctx, statusCode int, message string, err error) error {
+	response := ErrorResponse{
+		Success: false,
+		Message: message,
+	}
+
+	if err != nil {
+		response.Error = err.Error()
+	}
+
+	return c.Status(statusCode).JSON(response)
+}
+
+// PaginationSuccess 返回分页成功响应
+func PaginationSuccess(c *fiber.Ctx, message string, data interface{}, total int64, page, limit int) error {
+	return c.JSON(PaginationResponse{
+		Success: true,
+		Message: message,
+		Data:    data,
+		Total:   total,
+		Page:    page,
+		Limit:   limit,
+	})
+}
