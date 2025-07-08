@@ -2,7 +2,7 @@ import { Http } from 'cat-kit/fe'
 import { message } from 'ultra-ui'
 
 export const http = new Http({
-  baseUrl: '/api',
+  baseUrl: '/api/v1',
   after(res) {
     if (res.code >= 400) message.error(res.data.msg || res.message)
     if (res.data?.data !== undefined) {

@@ -1,43 +1,26 @@
 package router
 
 import (
+	"minidevops/server/internal/service"
+
 	"github.com/gofiber/fiber/v2"
 	"gorm.io/gorm"
 )
 
 // SetupTaskRoutes 设置任务管理路由
 func SetupTaskRoutes(router fiber.Router, db *gorm.DB) {
+	configService := service.NewConfigService(db)
+	taskService := service.NewTaskService(db, configService)
 	taskGroup := router.Group("/tasks")
 
-	taskGroup.Get("/", func(c *fiber.Ctx) error {
-		return c.JSON(fiber.Map{"message": "任务列表"})
-	})
+	taskGroup.Get("/", taskService.GetTasks)
+	taskGroup.Post("/", taskService.CreateTask)
+	taskGroup.Get("/:id", taskService.GetTask)
+	taskGroup.Put("/:id", taskService.UpdateTask)
+	taskGroup.Delete("/:id", taskService.DeleteTask)
 
-	taskGroup.Post("/", func(c *fiber.Ctx) error {
-		return c.JSON(fiber.Map{"message": "创建任务"})
-	})
-
-	taskGroup.Get("/:id", func(c *fiber.Ctx) error {
-		return c.JSON(fiber.Map{"message": "任务详情"})
-	})
-
-	taskGroup.Put("/:id", func(c *fiber.Ctx) error {
-		return c.JSON(fiber.Map{"message": "更新任务"})
-	})
-
-	taskGroup.Delete("/:id", func(c *fiber.Ctx) error {
-		return c.JSON(fiber.Map{"message": "删除任务"})
-	})
-
-	taskGroup.Post("/:id/build", func(c *fiber.Ctx) error {
-		return c.JSON(fiber.Map{"message": "构建任务"})
-	})
-
-	taskGroup.Post("/:id/push", func(c *fiber.Ctx) error {
-		return c.JSON(fiber.Map{"message": "推送任务"})
-	})
-
-	taskGroup.Get("/:id/download", func(c *fiber.Ctx) error {
-		return c.JSON(fiber.Map{"message": "下载构建物"})
-	})
+	// 任务操作路由
+	taskGroup.Post("/:id/build", taskService.BuildTask)
+	taskGroup.Post("/:id/push", taskService.PushTask)
+	taskGroup.Get("/:id/download", taskService.DownloadBuildArtifacts)
 }

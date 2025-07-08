@@ -1,6 +1,8 @@
 package router
 
 import (
+	"minidevops/server/internal/utils"
+
 	"github.com/gofiber/fiber/v2"
 	"gorm.io/gorm"
 )
@@ -14,8 +16,7 @@ func SetupRoutes(app *fiber.App, db *gorm.DB) {
 	SetupAuthRoutes(api, db)
 
 	// 需要认证的路由组
-	protected := api.Group("")
-	// TODO: 添加JWT中间件
+	protected := api.Group("", utils.JWTMiddleware())
 
 	// 用户管理路由
 	SetupUserRoutes(protected, db)

@@ -9,7 +9,7 @@
       </div>
 
       <u-form :model="model" size="large">
-        <u-input placeholder="请输入账号" field="name" />
+        <u-input placeholder="请输入账号" field="username" />
         <u-input placeholder="请输入密码" field="password" />
       </u-form>
 
@@ -29,21 +29,20 @@
 import { FormModel } from 'ultra-ui'
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { userService } from '@/apis/user'
 
 const router = useRouter()
 const loading = ref(false)
 
 const model = new FormModel({
-  name: {},
-  password: {}
+  username: { value: '' },
+  password: { value: '' }
 })
 
 async function handleLogin() {
   loading.value = true
 
-  try {
-    router.push('/repos')
-  } catch (err) {}
+  const res = await userService.login(model.data)
 
   loading.value = false
 }

@@ -25,12 +25,12 @@ export default defineConfig(async () => {
     server: createServer({
       port: 3001,
       proxy: {
-        '/api': 'http://localhost:8080',
-        '/ws': {
-          target: 'ws://localhost:8080',
-          ws: true,
-          rewriteWsOrigin: true
-        }
+        '/api/v1': 'http://127.0.0.1:8080/api/v1'
+        // '/ws': {
+        //   target: 'ws://localhost:8080',
+        //   ws: true,
+        //   rewriteWsOrigin: true
+        // }
       }
     }),
     base: '/',

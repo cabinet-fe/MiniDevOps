@@ -1,6 +1,7 @@
 package service
 
 import (
+	"fmt"
 	"minidevops/server/internal/models"
 	"minidevops/server/internal/utils"
 
@@ -36,6 +37,8 @@ func (s *AuthService) Login(c *fiber.Ctx) error {
 	if err := c.BodyParser(&req); err != nil {
 		return utils.Error(c, fiber.StatusBadRequest, "请求参数解析失败", err)
 	}
+
+	fmt.Println(req)
 
 	// 查找用户
 	var user models.User
@@ -73,7 +76,20 @@ func (s *AuthService) Logout(c *fiber.Ctx) error {
 
 // GetProfile 获取用户信息
 func (s *AuthService) GetProfile(c *fiber.Ctx) error {
-	// TODO: 从JWT中获取用户ID
-	// 这里需要实现JWT中间件后才能完整实现
-	return utils.Success(c, "获取用户信息")
+	// 从JWT中获取用户ID
+	userID := utils.GetUserIDFromContext(c)
+	if userID == 0 {
+		return utils.Error(c, fiber.StatusUnauthorized, "用户未认证", nil)
+	}
+
+	// 查找用户信息
+	var user models.User
+	if err := s.db.Preload("Roles.Permissions").Where("id = ?", userID).First(&user).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return utils.Error(c, fiber.StatusNotFound, "用户不存在", nil)
+		}
+		return utils.Error(c, fiber.StatusInternalServerError, "数据库查询失败", err)
+	}
+
+	return utils.SuccessWithData(c, "获取用户信息成功", user)
 }

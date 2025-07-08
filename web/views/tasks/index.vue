@@ -91,35 +91,35 @@ const handleDelete = async (row: Record<string, any>) => {
   message.success('删除成功')
 }
 
-const socket = new WebSocket(`ws://${location.host}/ws/tasks/progress`)
+// const socket = new WebSocket(`ws://${location.host}/ws/tasks/progress`)
 
-socket.addEventListener('open', () => {
-  socket.send('connect')
-})
+// socket.addEventListener('open', () => {
+//   socket.send('connect')
+// })
 
-socket.addEventListener('error', e => {
-  console.log(e)
-})
+// socket.addEventListener('error', e => {
+//   console.log(e)
+// })
 
 const buildingTasks = shallowRef<Set<number>>(new Set())
 
-socket.addEventListener('message', event => {
-  const msg = JSON.parse(event.data)
+// socket.addEventListener('message', event => {
+//   const msg = JSON.parse(event.data)
 
-  if (msg.type === 'progress') {
-    buildingTasks.value = new Set(msg.data)
-  } else if (msg.type === 'result') {
-    const { status, taskName } = msg.data
+//   if (msg.type === 'progress') {
+//     buildingTasks.value = new Set(msg.data)
+//   } else if (msg.type === 'result') {
+//     const { status, taskName } = msg.data
 
-    if (status === 'success') {
-      message.success(`${taskName} 构建成功`)
-    } else {
-      message.error(`${taskName} 构建失败`)
-    }
-  }
-})
+//     if (status === 'success') {
+//       message.success(`${taskName} 构建成功`)
+//     } else {
+//       message.error(`${taskName} 构建失败`)
+//     }
+//   }
+// })
 
 onBeforeUnmount(() => {
-  socket.close()
+  // socket.close()
 })
 </script>

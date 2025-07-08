@@ -4,6 +4,7 @@ import (
 	"log"
 	"minidevops/server/internal/db"
 	"minidevops/server/internal/router"
+	"minidevops/server/internal/service"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
@@ -25,6 +26,12 @@ func main() {
 	// 初始化种子数据
 	if err := db.SeedData(database); err != nil {
 		log.Fatal("种子数据初始化失败:", err)
+	}
+
+	// 初始化默认配置
+	configService := service.NewConfigService(database)
+	if err := configService.InitDefaultConfigs(); err != nil {
+		log.Fatal("默认配置初始化失败:", err)
 	}
 
 	// 创建Fiber应用
