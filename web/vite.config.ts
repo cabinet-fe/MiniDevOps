@@ -8,12 +8,9 @@ import fg from 'fast-glob'
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
 export default defineConfig(async () => {
-  const optimizeDeps = await fg.glob(
-    ['ultra-ui/components/**/style.js', '@meta/components/**/style.js'],
-    {
-      cwd: resolve(__dirname, '../node_modules')
-    }
-  )
+  const optimizeDeps = await fg.glob(['ultra-ui/components/**/style.js'], {
+    cwd: resolve(__dirname, '../node_modules')
+  })
 
   return {
     plugins: [

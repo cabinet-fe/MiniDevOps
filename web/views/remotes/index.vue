@@ -27,7 +27,6 @@
 </template>
 
 <script lang="ts" setup>
-import { defineTableProServer } from '@meta/components'
 import { defineTableColumns, message } from 'ultra-ui'
 import { shallowReactive, useTemplateRef } from 'vue'
 import RemoteForm from './form.vue'
@@ -46,12 +45,6 @@ const columns = defineTableColumns(
 
 const queries = shallowReactive({
   name: ''
-})
-const server = defineTableProServer({
-  api: '/remotes/page',
-  queries,
-  dataPath: 'data.rows',
-  totalPath: 'data.total'
 })
 
 const formRef = useTemplateRef('formRef')

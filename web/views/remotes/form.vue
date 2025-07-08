@@ -1,5 +1,5 @@
 <template>
-  <m-dialog-pro :ctx="ctx" style="width: 500px">
+  <u-dialog v-model="visible" style="width: 500px">
     <u-form :model="model">
       <u-input label="目录名称" field="name" />
       <u-input label="主机地址" field="host" />
@@ -11,13 +11,13 @@
         新增
       </u-button>
     </template>
-  </m-dialog-pro>
+  </u-dialog>
 </template>
 
 <script lang="ts" setup>
 import { http } from '@/utils/http'
-import { useDialogPro } from '@meta/components'
 import { FormModel } from 'ultra-ui'
+import { ref } from 'vue'
 
 const emit = defineEmits(['success'])
 
@@ -28,29 +28,11 @@ const model = new FormModel({
   id: {}
 })
 
-const ctx = useDialogPro({
-  models: [model],
-  async submit(state) {
-    if (state.action === 'create') {
-      await http.post('/remotes', model.data)
-    } else {
-      await http.put(`/remotes/${model.data.id}`, model.data)
-    }
-    emit('success')
-  },
-  afterOpen(state) {
-    if (!state.action) return
-    state.title = {
-      create: '新增远程目录',
-      update: '修改远程目录'
-    }[state.action]
-  }
-})
+const visible = ref(false)
 
 defineExpose({
   open(action: 'update', data: Record<string, any>) {
     model.setData(data)
-    ctx.open({ action })
   }
 })
 </script>
