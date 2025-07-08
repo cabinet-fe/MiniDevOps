@@ -225,7 +225,7 @@ func (s *ConfigService) UpdateMountPath(c *fiber.Ctx) error {
 	return utils.SuccessWithData(c, "更新挂载路径成功", config)
 }
 
-// InitDefaultConfigs 初始化默认配置
+// 初始化默认配置
 func (s *ConfigService) InitDefaultConfigs() error {
 	// 检查挂载路径配置是否存在
 	var config models.SystemConfig
