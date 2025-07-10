@@ -1,7 +1,7 @@
 package router
 
 import (
-	"minidevops/server/internal/service"
+	"server/internal/service"
 
 	"github.com/gofiber/fiber/v2"
 	"gorm.io/gorm"

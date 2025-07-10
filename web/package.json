@@ -9,19 +9,19 @@
   },
   "dependencies": {
     "ultra-ui": "^0.3.58",
-    "vue-router": "^4.5.0",
-    "icon-ultra": "^3.0.18",
+    "vue-router": "^4.5.1",
+    "icon-ultra": "^3.0.20",
     "pinia": "^3.0.3",
     "vue": "^3.5.17"
   },
   "devDependencies": {
     "vite": "npm:rolldown-vite@latest",
-    "@builder/vite": "^2.0.1",
+    "@builder/vite": "^2.0.2",
     "unocss": "66.3.3",
     "@types/bun": "^1.2.18",
     "ts-conf-base": "^2.4.2",
     "fast-glob": "^3.3.3",
-    "cat-kit": "^3.7.12",
+    "cat-kit": "^3.7.13",
     "sass-embedded": "^1.89.2"
   }
 }

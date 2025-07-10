@@ -2,8 +2,8 @@ package service
 
 import (
 	"fmt"
-	"minidevops/server/internal/models"
-	"minidevops/server/internal/utils"
+	"server/internal/models"
+	"server/internal/utils"
 
 	"github.com/gofiber/fiber/v2"
 	"gorm.io/gorm"

@@ -2,12 +2,11 @@ package main
 
 import (
 	"log"
-	"minidevops/server/internal/db"
-	"minidevops/server/internal/router"
-	"minidevops/server/internal/service"
+	"server/internal/db"
+	"server/internal/router"
+	"server/internal/service"
 
 	"github.com/gofiber/fiber/v2"
-	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/gofiber/fiber/v2/middleware/logger"
 )
 
@@ -50,16 +49,11 @@ func main() {
 
 	// 中间件
 	app.Use(logger.New())
-	app.Use(cors.New(cors.Config{
-		AllowOrigins: "*",
-		AllowMethods: "GET,POST,HEAD,PUT,DELETE,PATCH",
-		AllowHeaders: "Origin, Content-Type, Accept, Authorization",
-	}))
 
 	// 设置路由
 	router.SetupRoutes(app, database)
 
 	// 启动服务器
-	log.Println("服务器启动在端口 :8080")
-	log.Fatal(app.Listen(":8080"))
+	app.Listen(":8080")
+	// log.Fatal(app.Listen(":8080"))
 }

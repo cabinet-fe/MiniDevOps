@@ -1,8 +1,8 @@
 package db
 
 import (
-	"minidevops/server/internal/models"
-	"minidevops/server/internal/utils"
+	"server/internal/models"
+	"server/internal/utils"
 
 	"gorm.io/gorm"
 )
