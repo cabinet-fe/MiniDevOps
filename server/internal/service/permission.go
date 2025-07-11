@@ -12,12 +12,12 @@ import (
 
 // PermissionService 权限服务
 type PermissionService struct {
-	db *gorm.DB
+	*CrudService[models.Permission]
 }
 
 // NewPermissionService 创建权限服务实例
 func NewPermissionService(db *gorm.DB) *PermissionService {
-	return &PermissionService{db: db}
+	return &PermissionService{CrudService: NewCrudService[models.Permission](db)}
 }
 
 // CreatePermissionRequest 创建权限请求结构
@@ -60,7 +60,7 @@ func (s *PermissionService) GetPermissions(c *fiber.Ctx) error {
 
 	offset := (page - 1) * pageSize
 
-	query := s.db.Model(&models.Permission{}).Preload("Parent").Preload("Children")
+	query := s.DB.Model(&models.Permission{}).Preload("Parent").Preload("Children").Preload("Roles")
 
 	// 关键词搜索
 	if keyword != "" {
@@ -95,7 +95,7 @@ func (s *PermissionService) GetPermissions(c *fiber.Ctx) error {
 // GetPermissionTree 获取权限树形结构
 func (s *PermissionService) GetPermissionTree(c *fiber.Ctx) error {
 	var permissions []models.Permission
-	if err := s.db.Preload("Children").Where("parent_id IS NULL").Order("sort ASC, id ASC").Find(&permissions).Error; err != nil {
+	if err := s.DB.Preload("Children").Where("parent_id IS NULL").Order("sort ASC, id ASC").Find(&permissions).Error; err != nil {
 		return utils.Error(c, fiber.StatusInternalServerError, "查询权限树失败", err)
 	}
 
@@ -116,14 +116,14 @@ func (s *PermissionService) CreatePermission(c *fiber.Ctx) error {
 
 	// 检查权限标识是否已存在
 	var existPermission models.Permission
-	if err := s.db.Where("code = ?", req.Code).First(&existPermission).Error; err == nil {
+	if err := s.DB.Where("code = ?", req.Code).First(&existPermission).Error; err == nil {
 		return utils.Error(c, fiber.StatusBadRequest, "权限标识已存在", nil)
 	}
 
 	// 如果有父级权限，检查父级权限是否存在且为菜单类型
 	if req.ParentID != nil {
 		var parentPermission models.Permission
-		if err := s.db.First(&parentPermission, *req.ParentID).Error; err != nil {
+		if err := s.DB.First(&parentPermission, *req.ParentID).Error; err != nil {
 			if err == gorm.ErrRecordNotFound {
 				return utils.Error(c, fiber.StatusBadRequest, "父级权限不存在", nil)
 			}
@@ -145,12 +145,12 @@ func (s *PermissionService) CreatePermission(c *fiber.Ctx) error {
 		ParentID: req.ParentID,
 	}
 
-	if err := s.db.Create(&permission).Error; err != nil {
+	if err := s.Create(c, &permission); err != nil {
 		return utils.Error(c, fiber.StatusInternalServerError, "创建权限失败", err)
 	}
 
 	// 重新加载权限信息（包含父级和子级）
-	if err := s.db.Preload("Parent").Preload("Children").First(&permission, permission.ID).Error; err != nil {
+	if err := s.DB.Preload("Parent").Preload("Children").First(&permission, permission.ID).Error; err != nil {
 		return utils.Error(c, fiber.StatusInternalServerError, "加载权限信息失败", err)
 	}
 
@@ -165,7 +165,7 @@ func (s *PermissionService) GetPermission(c *fiber.Ctx) error {
 	}
 
 	var permission models.Permission
-	if err := s.db.Preload("Parent").Preload("Children").Preload("Roles").First(&permission, uint(id)).Error; err != nil {
+	if err := s.DB.Preload("Parent").Preload("Children").Preload("Roles").First(&permission, uint(id)).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return utils.Error(c, fiber.StatusNotFound, "权限不存在", nil)
 		}
@@ -188,8 +188,8 @@ func (s *PermissionService) UpdatePermission(c *fiber.Ctx) error {
 	}
 
 	// 检查权限是否存在
-	var permission models.Permission
-	if err := s.db.First(&permission, uint(id)).Error; err != nil {
+	permission, err := s.GetByID(c, uint(id))
+	if err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return utils.Error(c, fiber.StatusNotFound, "权限不存在", nil)
 		}
@@ -199,7 +199,7 @@ func (s *PermissionService) UpdatePermission(c *fiber.Ctx) error {
 	// 检查权限标识是否已存在（排除自己）
 	if req.Code != nil {
 		var existPermission models.Permission
-		if err := s.db.Where("code = ? AND id != ?", *req.Code, id).First(&existPermission).Error; err == nil {
+		if err := s.DB.Where("code = ? AND id != ?", *req.Code, id).First(&existPermission).Error; err == nil {
 			return utils.Error(c, fiber.StatusBadRequest, "权限标识已存在", nil)
 		}
 	}
@@ -214,7 +214,7 @@ func (s *PermissionService) UpdatePermission(c *fiber.Ctx) error {
 		// 检查父级权限是否存在且为菜单类型
 		if *req.ParentID != 0 {
 			var parentPermission models.Permission
-			if err := s.db.First(&parentPermission, *req.ParentID).Error; err != nil {
+			if err := s.DB.First(&parentPermission, *req.ParentID).Error; err != nil {
 				if err == gorm.ErrRecordNotFound {
 					return utils.Error(c, fiber.StatusBadRequest, "父级权限不存在", nil)
 				}
@@ -249,13 +249,13 @@ func (s *PermissionService) UpdatePermission(c *fiber.Ctx) error {
 	}
 
 	if len(updates) > 0 {
-		if err := s.db.Model(&permission).Updates(updates).Error; err != nil {
+		if err := s.DB.Model(&permission).Updates(updates).Error; err != nil {
 			return utils.Error(c, fiber.StatusInternalServerError, "更新权限失败", err)
 		}
 	}
 
 	// 重新加载权限信息
-	if err := s.db.Preload("Parent").Preload("Children").First(&permission, permission.ID).Error; err != nil {
+	if err := s.DB.Preload("Parent").Preload("Children").First(&permission, permission.ID).Error; err != nil {
 		return utils.Error(c, fiber.StatusInternalServerError, "加载权限信息失败", err)
 	}
 
@@ -270,8 +270,8 @@ func (s *PermissionService) DeletePermission(c *fiber.Ctx) error {
 	}
 
 	// 检查权限是否存在
-	var permission models.Permission
-	if err := s.db.Preload("Children").First(&permission, uint(id)).Error; err != nil {
+	permission, err := s.GetByID(c, uint(id))
+	if err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return utils.Error(c, fiber.StatusNotFound, "权限不存在", nil)
 		}
@@ -284,7 +284,7 @@ func (s *PermissionService) DeletePermission(c *fiber.Ctx) error {
 	}
 
 	// 删除权限
-	if err := s.db.Delete(&permission).Error; err != nil {
+	if err := s.Delete(c, uint(id)); err != nil {
 		return utils.Error(c, fiber.StatusInternalServerError, "删除权限失败", err)
 	}
 
@@ -294,7 +294,7 @@ func (s *PermissionService) DeletePermission(c *fiber.Ctx) error {
 // loadChildrenRecursively 递归加载子权限
 func (s *PermissionService) loadChildrenRecursively(permission *models.Permission) {
 	var children []models.Permission
-	if err := s.db.Where("parent_id = ?", permission.ID).Order("sort ASC, id ASC").Find(&children).Error; err != nil {
+	if err := s.DB.Where("parent_id = ?", permission.ID).Order("sort ASC, id ASC").Find(&children).Error; err != nil {
 		return
 	}
 

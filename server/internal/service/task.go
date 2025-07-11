@@ -19,14 +19,14 @@ import (
 
 // TaskService 任务服务
 type TaskService struct {
-	db            *gorm.DB
+	*CrudService[models.Task]
 	configService *ConfigService
 }
 
 // NewTaskService 创建任务服务实例
 func NewTaskService(db *gorm.DB, configService *ConfigService) *TaskService {
 	return &TaskService{
-		db:            db,
+		CrudService:   NewCrudService[models.Task](db),
 		configService: configService,
 	}
 }
@@ -81,7 +81,7 @@ func (s *TaskService) GetTasks(c *fiber.Ctx) error {
 
 	offset := (page - 1) * pageSize
 
-	query := s.db.Model(&models.Task{}).Preload("Repository").Preload("RemoteServers")
+	query := s.DB.Model(&models.Task{}).Preload("Repository").Preload("RemoteServers")
 
 	// 关键词搜索
 	if keyword != "" {
@@ -118,13 +118,13 @@ func (s *TaskService) CreateTask(c *fiber.Ctx) error {
 
 	// 检查任务标识是否已存在
 	var existTask models.Task
-	if err := s.db.Where("code = ?", req.Code).First(&existTask).Error; err == nil {
+	if err := s.DB.Where("code = ?", req.Code).First(&existTask).Error; err == nil {
 		return utils.Error(c, fiber.StatusBadRequest, "任务标识已存在", nil)
 	}
 
 	// 检查仓库是否存在
 	var repository models.Repository
-	if err := s.db.First(&repository, req.RepositoryID).Error; err != nil {
+	if err := s.DB.First(&repository, req.RepositoryID).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return utils.Error(c, fiber.StatusBadRequest, "所属仓库不存在", nil)
 		}
@@ -142,7 +142,7 @@ func (s *TaskService) CreateTask(c *fiber.Ctx) error {
 		AutoPush:     req.AutoPush,
 	}
 
-	if err := s.db.Create(&task).Error; err != nil {
+	if err := s.Create(c, &task); err != nil {
 		return utils.Error(c, fiber.StatusInternalServerError, "创建任务失败", err)
 	}
 
@@ -154,7 +154,7 @@ func (s *TaskService) CreateTask(c *fiber.Ctx) error {
 	}
 
 	// 重新加载任务信息
-	if err := s.db.Preload("Repository").Preload("RemoteServers").First(&task, task.ID).Error; err != nil {
+	if err := s.DB.Preload("Repository").Preload("RemoteServers").First(&task, task.ID).Error; err != nil {
 		return utils.Error(c, fiber.StatusInternalServerError, "加载任务信息失败", err)
 	}
 
@@ -169,7 +169,7 @@ func (s *TaskService) GetTask(c *fiber.Ctx) error {
 	}
 
 	var task models.Task
-	if err := s.db.Preload("Repository").Preload("RemoteServers").First(&task, uint(id)).Error; err != nil {
+	if err := s.DB.Preload("Repository").Preload("RemoteServers").First(&task, uint(id)).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return utils.Error(c, fiber.StatusNotFound, "任务不存在", nil)
 		}
@@ -192,8 +192,8 @@ func (s *TaskService) UpdateTask(c *fiber.Ctx) error {
 	}
 
 	// 检查任务是否存在
-	var task models.Task
-	if err := s.db.First(&task, uint(id)).Error; err != nil {
+	task, err := s.GetByID(c, uint(id))
+	if err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return utils.Error(c, fiber.StatusNotFound, "任务不存在", nil)
 		}
@@ -203,7 +203,7 @@ func (s *TaskService) UpdateTask(c *fiber.Ctx) error {
 	// 检查任务标识是否已存在（排除自己）
 	if req.Code != nil {
 		var existTask models.Task
-		if err := s.db.Where("code = ? AND id != ?", *req.Code, id).First(&existTask).Error; err == nil {
+		if err := s.DB.Where("code = ? AND id != ?", *req.Code, id).First(&existTask).Error; err == nil {
 			return utils.Error(c, fiber.StatusBadRequest, "任务标识已存在", nil)
 		}
 	}
@@ -211,7 +211,7 @@ func (s *TaskService) UpdateTask(c *fiber.Ctx) error {
 	// 检查仓库是否存在
 	if req.RepositoryID != nil {
 		var repository models.Repository
-		if err := s.db.First(&repository, *req.RepositoryID).Error; err != nil {
+		if err := s.DB.First(&repository, *req.RepositoryID).Error; err != nil {
 			if err == gorm.ErrRecordNotFound {
 				return utils.Error(c, fiber.StatusBadRequest, "所属仓库不存在", nil)
 			}
@@ -244,7 +244,7 @@ func (s *TaskService) UpdateTask(c *fiber.Ctx) error {
 	}
 
 	if len(updates) > 0 {
-		if err := s.db.Model(&task).Updates(updates).Error; err != nil {
+		if err := s.DB.Model(&task).Updates(updates).Error; err != nil {
 			return utils.Error(c, fiber.StatusInternalServerError, "更新任务失败", err)
 		}
 	}
@@ -257,7 +257,7 @@ func (s *TaskService) UpdateTask(c *fiber.Ctx) error {
 	}
 
 	// 重新加载任务信息
-	if err := s.db.Preload("Repository").Preload("RemoteServers").First(&task, task.ID).Error; err != nil {
+	if err := s.DB.Preload("Repository").Preload("RemoteServers").First(&task, task.ID).Error; err != nil {
 		return utils.Error(c, fiber.StatusInternalServerError, "加载任务信息失败", err)
 	}
 
@@ -272,8 +272,8 @@ func (s *TaskService) DeleteTask(c *fiber.Ctx) error {
 	}
 
 	// 检查任务是否存在
-	var task models.Task
-	if err := s.db.First(&task, uint(id)).Error; err != nil {
+	task, err := s.GetByID(c, uint(id))
+	if err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return utils.Error(c, fiber.StatusNotFound, "任务不存在", nil)
 		}
@@ -288,7 +288,7 @@ func (s *TaskService) DeleteTask(c *fiber.Ctx) error {
 	}
 
 	// 删除任务
-	if err := s.db.Delete(&task).Error; err != nil {
+	if err := s.Delete(c, uint(id)); err != nil {
 		return utils.Error(c, fiber.StatusInternalServerError, "删除任务失败", err)
 	}
 
@@ -307,7 +307,7 @@ func (s *TaskService) BuildTask(c *fiber.Ctx) error {
 
 	// 获取任务信息
 	var task models.Task
-	if err := s.db.Preload("Repository").Preload("RemoteServers").First(&task, uint(id)).Error; err != nil {
+	if err := s.DB.Preload("Repository").Preload("RemoteServers").First(&task, uint(id)).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return utils.Error(c, fiber.StatusNotFound, "任务不存在", nil)
 		}
@@ -360,7 +360,7 @@ func (s *TaskService) PushTask(c *fiber.Ctx) error {
 
 	// 获取任务信息
 	var task models.Task
-	if err := s.db.Preload("Repository").Preload("RemoteServers").First(&task, uint(id)).Error; err != nil {
+	if err := s.DB.Preload("Repository").Preload("RemoteServers").First(&task, uint(id)).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return utils.Error(c, fiber.StatusNotFound, "任务不存在", nil)
 		}
@@ -401,7 +401,7 @@ func (s *TaskService) DownloadBuildArtifacts(c *fiber.Ctx) error {
 
 	// 获取任务信息
 	var task models.Task
-	if err := s.db.Preload("Repository").First(&task, uint(id)).Error; err != nil {
+	if err := s.DB.Preload("Repository").First(&task, uint(id)).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return utils.Error(c, fiber.StatusNotFound, "任务不存在", nil)
 		}
@@ -443,7 +443,7 @@ func (s *TaskService) DownloadBuildArtifacts(c *fiber.Ctx) error {
 
 // assignRemoteServers 分配远程服务器
 func (s *TaskService) assignRemoteServers(taskID uint, remoteServerIDs []uint) error {
-	return s.db.Transaction(func(tx *gorm.DB) error {
+	return s.DB.Transaction(func(tx *gorm.DB) error {
 		// 删除现有的远程服务器关联
 		if err := tx.Where("task_id = ?", taskID).Delete(&models.TaskRemote{}).Error; err != nil {
 			return err
@@ -467,7 +467,7 @@ func (s *TaskService) assignRemoteServers(taskID uint, remoteServerIDs []uint) e
 // getMountPath 获取挂载路径
 func (s *TaskService) getMountPath() (string, error) {
 	var config models.SystemConfig
-	err := s.db.Where("key = ?", models.ConfigKeyMountPath).First(&config).Error
+	err := s.DB.Where("key = ?", models.ConfigKeyMountPath).First(&config).Error
 
 	if err == gorm.ErrRecordNotFound {
 		// 返回默认路径

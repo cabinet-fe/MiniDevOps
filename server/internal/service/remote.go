@@ -12,12 +12,12 @@ import (
 
 // RemoteService 远程服务器服务
 type RemoteService struct {
-	db *gorm.DB
+	*CrudService[models.RemoteServer]
 }
 
 // NewRemoteService 创建远程服务器服务实例
 func NewRemoteService(db *gorm.DB) *RemoteService {
-	return &RemoteService{db: db}
+	return &RemoteService{CrudService: NewCrudService[models.RemoteServer](db)}
 }
 
 // CreateRemoteRequest 创建远程服务器请求结构
@@ -65,7 +65,7 @@ func (s *RemoteService) GetRemotes(c *fiber.Ctx) error {
 
 	offset := (page - 1) * pageSize
 
-	query := s.db.Model(&models.RemoteServer{}).Preload("Tasks")
+	query := s.DB.Model(&models.RemoteServer{}).Preload("Tasks")
 
 	// 关键词搜索
 	if keyword != "" {
@@ -121,7 +121,7 @@ func (s *RemoteService) CreateRemote(c *fiber.Ctx) error {
 
 	// 检查主机地址和端口是否已存在
 	var existRemote models.RemoteServer
-	if err := s.db.Where("host = ? AND port = ?", req.Host, req.Port).First(&existRemote).Error; err == nil {
+	if err := s.DB.Where("host = ? AND port = ?", req.Host, req.Port).First(&existRemote).Error; err == nil {
 		return utils.Error(c, fiber.StatusBadRequest, "该主机地址和端口已存在", nil)
 	}
 
@@ -137,7 +137,7 @@ func (s *RemoteService) CreateRemote(c *fiber.Ctx) error {
 		Path:     req.Path,
 	}
 
-	if err := s.db.Create(&remote).Error; err != nil {
+	if err := s.Create(c, &remote); err != nil {
 		return utils.Error(c, fiber.StatusInternalServerError, "创建远程服务器失败", err)
 	}
 
@@ -156,7 +156,7 @@ func (s *RemoteService) GetRemote(c *fiber.Ctx) error {
 	}
 
 	var remote models.RemoteServer
-	if err := s.db.Preload("Tasks").First(&remote, uint(id)).Error; err != nil {
+	if err := s.DB.Preload("Tasks").First(&remote, uint(id)).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return utils.Error(c, fiber.StatusNotFound, "远程服务器不存在", nil)
 		}
@@ -183,8 +183,8 @@ func (s *RemoteService) UpdateRemote(c *fiber.Ctx) error {
 	}
 
 	// 检查远程服务器是否存在
-	var remote models.RemoteServer
-	if err := s.db.First(&remote, uint(id)).Error; err != nil {
+	remote, err := s.GetByID(c, uint(id))
+	if err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return utils.Error(c, fiber.StatusNotFound, "远程服务器不存在", nil)
 		}
@@ -194,17 +194,17 @@ func (s *RemoteService) UpdateRemote(c *fiber.Ctx) error {
 	// 检查主机地址和端口是否已存在（排除自己）
 	if req.Host != nil && req.Port != nil {
 		var existRemote models.RemoteServer
-		if err := s.db.Where("host = ? AND port = ? AND id != ?", *req.Host, *req.Port, id).First(&existRemote).Error; err == nil {
+		if err := s.DB.Where("host = ? AND port = ? AND id != ?", *req.Host, *req.Port, id).First(&existRemote).Error; err == nil {
 			return utils.Error(c, fiber.StatusBadRequest, "该主机地址和端口已存在", nil)
 		}
 	} else if req.Host != nil {
 		var existRemote models.RemoteServer
-		if err := s.db.Where("host = ? AND port = ? AND id != ?", *req.Host, remote.Port, id).First(&existRemote).Error; err == nil {
+		if err := s.DB.Where("host = ? AND port = ? AND id != ?", *req.Host, remote.Port, id).First(&existRemote).Error; err == nil {
 			return utils.Error(c, fiber.StatusBadRequest, "该主机地址和端口已存在", nil)
 		}
 	} else if req.Port != nil {
 		var existRemote models.RemoteServer
-		if err := s.db.Where("host = ? AND port = ? AND id != ?", remote.Host, *req.Port, id).First(&existRemote).Error; err == nil {
+		if err := s.DB.Where("host = ? AND port = ? AND id != ?", remote.Host, *req.Port, id).First(&existRemote).Error; err == nil {
 			return utils.Error(c, fiber.StatusBadRequest, "该主机地址和端口已存在", nil)
 		}
 	}
@@ -253,13 +253,13 @@ func (s *RemoteService) UpdateRemote(c *fiber.Ctx) error {
 	}
 
 	if len(updates) > 0 {
-		if err := s.db.Model(&remote).Updates(updates).Error; err != nil {
+		if err := s.DB.Model(&remote).Updates(updates).Error; err != nil {
 			return utils.Error(c, fiber.StatusInternalServerError, "更新远程服务器失败", err)
 		}
 	}
 
 	// 重新加载远程服务器信息
-	if err := s.db.Preload("Tasks").First(&remote, remote.ID).Error; err != nil {
+	if err := s.DB.Preload("Tasks").First(&remote, remote.ID).Error; err != nil {
 		return utils.Error(c, fiber.StatusInternalServerError, "加载远程服务器信息失败", err)
 	}
 
@@ -278,8 +278,8 @@ func (s *RemoteService) DeleteRemote(c *fiber.Ctx) error {
 	}
 
 	// 检查远程服务器是否存在
-	var remote models.RemoteServer
-	if err := s.db.Preload("Tasks").First(&remote, uint(id)).Error; err != nil {
+	remote, err := s.GetByID(c, uint(id))
+	if err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return utils.Error(c, fiber.StatusNotFound, "远程服务器不存在", nil)
 		}
@@ -292,7 +292,7 @@ func (s *RemoteService) DeleteRemote(c *fiber.Ctx) error {
 	}
 
 	// 删除远程服务器
-	if err := s.db.Delete(&remote).Error; err != nil {
+	if err := s.Delete(c, uint(id)); err != nil {
 		return utils.Error(c, fiber.StatusInternalServerError, "删除远程服务器失败", err)
 	}
 
@@ -308,7 +308,7 @@ func (s *RemoteService) TestConnection(c *fiber.Ctx) error {
 
 	// 检查远程服务器是否存在
 	var remote models.RemoteServer
-	if err := s.db.First(&remote, uint(id)).Error; err != nil {
+	if err := s.DB.First(&remote, uint(id)).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return utils.Error(c, fiber.StatusNotFound, "远程服务器不存在", nil)
 		}

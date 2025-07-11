@@ -12,12 +12,12 @@ import (
 
 // RepositoryService 代码仓库服务
 type RepositoryService struct {
-	db *gorm.DB
+	*CrudService[models.Repository]
 }
 
 // NewRepositoryService 创建代码仓库服务实例
 func NewRepositoryService(db *gorm.DB) *RepositoryService {
-	return &RepositoryService{db: db}
+	return &RepositoryService{CrudService: NewCrudService[models.Repository](db)}
 }
 
 // CreateRepositoryRequest 创建仓库请求结构
@@ -55,7 +55,7 @@ func (s *RepositoryService) GetRepositories(c *fiber.Ctx) error {
 
 	offset := (page - 1) * pageSize
 
-	query := s.db.Model(&models.Repository{}).Preload("Tasks")
+	query := s.DB.Model(&models.Repository{}).Preload("Tasks")
 
 	// 关键词搜索
 	if keyword != "" {
@@ -92,7 +92,7 @@ func (s *RepositoryService) CreateRepository(c *fiber.Ctx) error {
 
 	// 检查仓库地址是否已存在
 	var existRepository models.Repository
-	if err := s.db.Where("url = ?", req.URL).First(&existRepository).Error; err == nil {
+	if err := s.DB.Where("url = ?", req.URL).First(&existRepository).Error; err == nil {
 		return utils.Error(c, fiber.StatusBadRequest, "仓库地址已存在", nil)
 	}
 
@@ -108,7 +108,7 @@ func (s *RepositoryService) CreateRepository(c *fiber.Ctx) error {
 		Branch: req.Branch,
 	}
 
-	if err := s.db.Create(&repository).Error; err != nil {
+	if err := s.Create(c, &repository); err != nil {
 		return utils.Error(c, fiber.StatusInternalServerError, "创建仓库失败", err)
 	}
 
@@ -123,7 +123,7 @@ func (s *RepositoryService) GetRepository(c *fiber.Ctx) error {
 	}
 
 	var repository models.Repository
-	if err := s.db.Preload("Tasks").First(&repository, uint(id)).Error; err != nil {
+	if err := s.DB.Preload("Tasks").First(&repository, uint(id)).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return utils.Error(c, fiber.StatusNotFound, "仓库不存在", nil)
 		}
@@ -146,8 +146,8 @@ func (s *RepositoryService) UpdateRepository(c *fiber.Ctx) error {
 	}
 
 	// 检查仓库是否存在
-	var repository models.Repository
-	if err := s.db.First(&repository, uint(id)).Error; err != nil {
+	repository, err := s.GetByID(c, uint(id))
+	if err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return utils.Error(c, fiber.StatusNotFound, "仓库不存在", nil)
 		}
@@ -157,7 +157,7 @@ func (s *RepositoryService) UpdateRepository(c *fiber.Ctx) error {
 	// 检查仓库地址是否已存在（排除自己）
 	if req.URL != nil {
 		var existRepository models.Repository
-		if err := s.db.Where("url = ? AND id != ?", *req.URL, id).First(&existRepository).Error; err == nil {
+		if err := s.DB.Where("url = ? AND id != ?", *req.URL, id).First(&existRepository).Error; err == nil {
 			return utils.Error(c, fiber.StatusBadRequest, "仓库地址已存在", nil)
 		}
 	}
@@ -175,13 +175,13 @@ func (s *RepositoryService) UpdateRepository(c *fiber.Ctx) error {
 	}
 
 	if len(updates) > 0 {
-		if err := s.db.Model(&repository).Updates(updates).Error; err != nil {
+		if err := s.DB.Model(&repository).Updates(updates).Error; err != nil {
 			return utils.Error(c, fiber.StatusInternalServerError, "更新仓库失败", err)
 		}
 	}
 
 	// 重新加载仓库信息
-	if err := s.db.Preload("Tasks").First(&repository, repository.ID).Error; err != nil {
+	if err := s.DB.Preload("Tasks").First(&repository, repository.ID).Error; err != nil {
 		return utils.Error(c, fiber.StatusInternalServerError, "加载仓库信息失败", err)
 	}
 
@@ -196,8 +196,8 @@ func (s *RepositoryService) DeleteRepository(c *fiber.Ctx) error {
 	}
 
 	// 检查仓库是否存在
-	var repository models.Repository
-	if err := s.db.Preload("Tasks").First(&repository, uint(id)).Error; err != nil {
+	repository, err := s.GetByID(c, uint(id))
+	if err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return utils.Error(c, fiber.StatusNotFound, "仓库不存在", nil)
 		}
@@ -210,7 +210,7 @@ func (s *RepositoryService) DeleteRepository(c *fiber.Ctx) error {
 	}
 
 	// 删除仓库
-	if err := s.db.Delete(&repository).Error; err != nil {
+	if err := s.Delete(c, uint(id)); err != nil {
 		return utils.Error(c, fiber.StatusInternalServerError, "删除仓库失败", err)
 	}
 

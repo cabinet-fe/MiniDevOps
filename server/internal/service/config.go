@@ -13,12 +13,12 @@ import (
 
 // ConfigService 系统配置服务
 type ConfigService struct {
-	db *gorm.DB
+	*CrudService[models.SystemConfig]
 }
 
 // NewConfigService 创建系统配置服务实例
 func NewConfigService(db *gorm.DB) *ConfigService {
-	return &ConfigService{db: db}
+	return &ConfigService{CrudService: NewCrudService[models.SystemConfig](db)}
 }
 
 // ConfigRequest 配置请求结构
@@ -37,7 +37,7 @@ type ConfigListResponse struct {
 // GetConfigs 获取系统配置列表
 func (s *ConfigService) GetConfigs(c *fiber.Ctx) error {
 	var configs []models.SystemConfig
-	if err := s.db.Order("created_at ASC").Find(&configs).Error; err != nil {
+	if err := s.DB.Order("created_at ASC").Find(&configs).Error; err != nil {
 		return utils.Error(c, fiber.StatusInternalServerError, "查询配置列表失败", err)
 	}
 
@@ -57,7 +57,7 @@ func (s *ConfigService) GetConfig(c *fiber.Ctx) error {
 	}
 
 	var config models.SystemConfig
-	if err := s.db.Where("key = ?", key).First(&config).Error; err != nil {
+	if err := s.DB.Where("key = ?", key).First(&config).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return utils.Error(c, fiber.StatusNotFound, "配置不存在", nil)
 		}
@@ -81,7 +81,7 @@ func (s *ConfigService) UpdateConfig(c *fiber.Ctx) error {
 
 	// 查找现有配置
 	var config models.SystemConfig
-	err := s.db.Where("key = ?", key).First(&config).Error
+	err := s.DB.Where("key = ?", key).First(&config).Error
 
 	if err == gorm.ErrRecordNotFound {
 		// 配置不存在，创建新配置
@@ -90,7 +90,7 @@ func (s *ConfigService) UpdateConfig(c *fiber.Ctx) error {
 			Value:       req.Value,
 			Description: req.Description,
 		}
-		if err := s.db.Create(&config).Error; err != nil {
+		if err := s.DB.Create(&config).Error; err != nil {
 			return utils.Error(c, fiber.StatusInternalServerError, "创建配置失败", err)
 		}
 	} else if err != nil {
@@ -104,12 +104,12 @@ func (s *ConfigService) UpdateConfig(c *fiber.Ctx) error {
 			updates["description"] = req.Description
 		}
 
-		if err := s.db.Model(&config).Updates(updates).Error; err != nil {
+		if err := s.DB.Model(&config).Updates(updates).Error; err != nil {
 			return utils.Error(c, fiber.StatusInternalServerError, "更新配置失败", err)
 		}
 
 		// 重新加载配置
-		if err := s.db.Where("key = ?", key).First(&config).Error; err != nil {
+		if err := s.DB.Where("key = ?", key).First(&config).Error; err != nil {
 			return utils.Error(c, fiber.StatusInternalServerError, "加载配置失败", err)
 		}
 	}
@@ -126,7 +126,7 @@ func (s *ConfigService) DeleteConfig(c *fiber.Ctx) error {
 
 	// 检查配置是否存在
 	var config models.SystemConfig
-	if err := s.db.Where("key = ?", key).First(&config).Error; err != nil {
+	if err := s.DB.Where("key = ?", key).First(&config).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return utils.Error(c, fiber.StatusNotFound, "配置不存在", nil)
 		}
@@ -134,7 +134,7 @@ func (s *ConfigService) DeleteConfig(c *fiber.Ctx) error {
 	}
 
 	// 删除配置
-	if err := s.db.Delete(&config).Error; err != nil {
+	if err := s.DB.Delete(&config).Error; err != nil {
 		return utils.Error(c, fiber.StatusInternalServerError, "删除配置失败", err)
 	}
 
@@ -144,7 +144,7 @@ func (s *ConfigService) DeleteConfig(c *fiber.Ctx) error {
 // GetMountPath 获取挂载路径配置
 func (s *ConfigService) GetMountPath(c *fiber.Ctx) error {
 	var config models.SystemConfig
-	err := s.db.Where("key = ?", models.ConfigKeyMountPath).First(&config).Error
+	err := s.DB.Where("key = ?", models.ConfigKeyMountPath).First(&config).Error
 
 	if err == gorm.ErrRecordNotFound {
 		// 如果配置不存在，返回默认路径
@@ -196,7 +196,7 @@ func (s *ConfigService) UpdateMountPath(c *fiber.Ctx) error {
 
 	// 查找现有配置
 	var config models.SystemConfig
-	err := s.db.Where("key = ?", models.ConfigKeyMountPath).First(&config).Error
+	err := s.DB.Where("key = ?", models.ConfigKeyMountPath).First(&config).Error
 
 	if err == gorm.ErrRecordNotFound {
 		// 配置不存在，创建新配置
@@ -205,19 +205,19 @@ func (s *ConfigService) UpdateMountPath(c *fiber.Ctx) error {
 			Value:       req.Path,
 			Description: "任务挂载路径",
 		}
-		if err := s.db.Create(&config).Error; err != nil {
+		if err := s.DB.Create(&config).Error; err != nil {
 			return utils.Error(c, fiber.StatusInternalServerError, "创建挂载路径配置失败", err)
 		}
 	} else if err != nil {
 		return utils.Error(c, fiber.StatusInternalServerError, "查询挂载路径配置失败", err)
 	} else {
 		// 配置存在，更新配置
-		if err := s.db.Model(&config).Update("value", req.Path).Error; err != nil {
+		if err := s.DB.Model(&config).Update("value", req.Path).Error; err != nil {
 			return utils.Error(c, fiber.StatusInternalServerError, "更新挂载路径配置失败", err)
 		}
 
 		// 重新加载配置
-		if err := s.db.Where("key = ?", models.ConfigKeyMountPath).First(&config).Error; err != nil {
+		if err := s.DB.Where("key = ?", models.ConfigKeyMountPath).First(&config).Error; err != nil {
 			return utils.Error(c, fiber.StatusInternalServerError, "加载挂载路径配置失败", err)
 		}
 	}
@@ -229,7 +229,7 @@ func (s *ConfigService) UpdateMountPath(c *fiber.Ctx) error {
 func (s *ConfigService) InitDefaultConfigs() error {
 	// 检查挂载路径配置是否存在
 	var config models.SystemConfig
-	err := s.db.Where("key = ?", models.ConfigKeyMountPath).First(&config).Error
+	err := s.DB.Where("key = ?", models.ConfigKeyMountPath).First(&config).Error
 
 	if err == gorm.ErrRecordNotFound {
 		// 创建默认挂载路径配置
@@ -242,7 +242,7 @@ func (s *ConfigService) InitDefaultConfigs() error {
 			Description: "任务挂载路径",
 		}
 
-		if err := s.db.Create(&config).Error; err != nil {
+		if err := s.DB.Create(&config).Error; err != nil {
 			return err
 		}
 

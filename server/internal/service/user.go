@@ -12,12 +12,12 @@ import (
 
 // UserService 用户服务
 type UserService struct {
-	db *gorm.DB
+	*CrudService[models.User]
 }
 
 // NewUserService 创建用户服务实例
 func NewUserService(db *gorm.DB) *UserService {
-	return &UserService{db: db}
+	return &UserService{CrudService: NewCrudService[models.User](db)}
 }
 
 // CreateUserRequest 创建用户请求结构
@@ -60,7 +60,7 @@ func (s *UserService) GetUsers(c *fiber.Ctx) error {
 
 	offset := (page - 1) * pageSize
 
-	query := s.db.Model(&models.User{}).Preload("Roles")
+	query := s.DB.Model(&models.User{}).Preload("Roles.Permissions")
 
 	// 关键词搜索
 	if keyword != "" {
@@ -97,7 +97,7 @@ func (s *UserService) CreateUser(c *fiber.Ctx) error {
 
 	// 检查用户名是否已存在
 	var existUser models.User
-	if err := s.db.Where("username = ?", req.Username).First(&existUser).Error; err == nil {
+	if err := s.DB.Where("username = ?", req.Username).First(&existUser).Error; err == nil {
 		return utils.Error(c, fiber.StatusBadRequest, "用户名已存在", nil)
 	}
 
@@ -116,7 +116,7 @@ func (s *UserService) CreateUser(c *fiber.Ctx) error {
 		Email:    req.Email,
 	}
 
-	if err := s.db.Create(&user).Error; err != nil {
+	if err := s.Create(c, &user); err != nil {
 		return utils.Error(c, fiber.StatusInternalServerError, "创建用户失败", err)
 	}
 
@@ -128,7 +128,7 @@ func (s *UserService) CreateUser(c *fiber.Ctx) error {
 	}
 
 	// 重新加载用户信息（包含角色）
-	if err := s.db.Preload("Roles").First(&user, user.ID).Error; err != nil {
+	if err := s.DB.Preload("Roles.Permissions").First(&user, user.ID).Error; err != nil {
 		return utils.Error(c, fiber.StatusInternalServerError, "加载用户信息失败", err)
 	}
 
@@ -143,7 +143,7 @@ func (s *UserService) GetUser(c *fiber.Ctx) error {
 	}
 
 	var user models.User
-	if err := s.db.Preload("Roles.Permissions").First(&user, uint(id)).Error; err != nil {
+	if err := s.DB.Preload("Roles.Permissions").First(&user, uint(id)).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return utils.Error(c, fiber.StatusNotFound, "用户不存在", nil)
 		}
@@ -166,8 +166,8 @@ func (s *UserService) UpdateUser(c *fiber.Ctx) error {
 	}
 
 	// 检查用户是否存在
-	var user models.User
-	if err := s.db.First(&user, uint(id)).Error; err != nil {
+	user, err := s.GetByID(c, uint(id))
+	if err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return utils.Error(c, fiber.StatusNotFound, "用户不存在", nil)
 		}
@@ -194,7 +194,7 @@ func (s *UserService) UpdateUser(c *fiber.Ctx) error {
 	}
 
 	if len(updates) > 0 {
-		if err := s.db.Model(&user).Updates(updates).Error; err != nil {
+		if err := s.DB.Model(&user).Updates(updates).Error; err != nil {
 			return utils.Error(c, fiber.StatusInternalServerError, "更新用户失败", err)
 		}
 	}
@@ -207,7 +207,7 @@ func (s *UserService) UpdateUser(c *fiber.Ctx) error {
 	}
 
 	// 重新加载用户信息
-	if err := s.db.Preload("Roles").First(&user, user.ID).Error; err != nil {
+	if err := s.DB.Preload("Roles.Permissions").First(&user, user.ID).Error; err != nil {
 		return utils.Error(c, fiber.StatusInternalServerError, "加载用户信息失败", err)
 	}
 
@@ -222,8 +222,8 @@ func (s *UserService) DeleteUser(c *fiber.Ctx) error {
 	}
 
 	// 检查用户是否存在
-	var user models.User
-	if err := s.db.First(&user, uint(id)).Error; err != nil {
+	_, err = s.GetByID(c, uint(id))
+	if err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return utils.Error(c, fiber.StatusNotFound, "用户不存在", nil)
 		}
@@ -231,7 +231,7 @@ func (s *UserService) DeleteUser(c *fiber.Ctx) error {
 	}
 
 	// 删除用户
-	if err := s.db.Delete(&user).Error; err != nil {
+	if err := s.Delete(c, uint(id)); err != nil {
 		return utils.Error(c, fiber.StatusInternalServerError, "删除用户失败", err)
 	}
 
@@ -241,7 +241,7 @@ func (s *UserService) DeleteUser(c *fiber.Ctx) error {
 // assignRoles 分配角色
 func (s *UserService) assignRoles(userID uint, roleIDs []uint) error {
 	// 开启事务
-	return s.db.Transaction(func(tx *gorm.DB) error {
+	return s.DB.Transaction(func(tx *gorm.DB) error {
 		// 删除现有的角色关联
 		if err := tx.Where("user_id = ?", userID).Delete(&models.UserRole{}).Error; err != nil {
 			return err

@@ -21,11 +21,11 @@ type Permission struct {
 	UpdatedAt time.Time      `json:"updated_at"`
 	DeletedAt gorm.DeletedAt `json:"-" gorm:"index"`
 
-	Name     string         `json:"name" gorm:"not null" validate:"required"`             // 权限名称（必填）
-	Type     PermissionType `json:"type" gorm:"not null" validate:"required"`             // 类型（菜单、按钮）
-	Code     string         `json:"code" gorm:"uniqueIndex;not null" validate:"required"` // 权限标识（必填）
-	Sort     int            `json:"sort" gorm:"default:0"`                                // 排序
-	ParentID *uint          `json:"parent_id" gorm:"default:null"`                        // 父级菜单ID
+	Name     string         `json:"name" gorm:"not null" validate:"required"`                   // 权限名称（必填）
+	Type     PermissionType `json:"type" gorm:"not null" validate:"required"`                   // 类型（菜单、按钮）
+	Code     string         `json:"code" gorm:"uniqueIndex;not null;index" validate:"required"` // 权限标识（必填）
+	Sort     int            `json:"sort" gorm:"default:0"`                                      // 排序
+	ParentID *uint          `json:"parent_id" gorm:"default:null;index"`                        // 父级菜单ID
 
 	// 关联关系
 	Parent   *Permission  `json:"parent" gorm:"foreignKey:ParentID"`        // 父级权限

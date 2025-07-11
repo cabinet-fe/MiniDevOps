@@ -13,9 +13,9 @@ type SystemConfig struct {
 	UpdatedAt time.Time      `json:"updated_at"`
 	DeletedAt gorm.DeletedAt `json:"-" gorm:"index"`
 
-	Key         string `json:"key" gorm:"uniqueIndex;not null" validate:"required"` // 配置键
-	Value       string `json:"value" gorm:"type:text"`                              // 配置值
-	Description string `json:"description" gorm:""`                                 // 配置描述
+	Key         string `json:"key" gorm:"uniqueIndex;not null;index" validate:"required"` // 配置键
+	Value       string `json:"value" gorm:"type:text"`                                    // 配置值
+	Description string `json:"description" gorm:""`                                       // 配置描述
 }
 
 // 预定义的系统配置键

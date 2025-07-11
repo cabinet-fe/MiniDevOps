@@ -12,12 +12,12 @@ import (
 
 // RoleService 角色服务
 type RoleService struct {
-	db *gorm.DB
+	*CrudService[models.Role]
 }
 
 // NewRoleService 创建角色服务实例
 func NewRoleService(db *gorm.DB) *RoleService {
-	return &RoleService{db: db}
+	return &RoleService{CrudService: NewCrudService[models.Role](db)}
 }
 
 // CreateRoleRequest 创建角色请求结构
@@ -59,7 +59,7 @@ func (s *RoleService) GetRoles(c *fiber.Ctx) error {
 
 	offset := (page - 1) * pageSize
 
-	query := s.db.Model(&models.Role{}).Preload("Permissions")
+	query := s.DB.Model(&models.Role{}).Preload("Permissions").Preload("Users")
 
 	// 关键词搜索
 	if keyword != "" {
@@ -96,7 +96,7 @@ func (s *RoleService) CreateRole(c *fiber.Ctx) error {
 
 	// 检查角色标识是否已存在
 	var existRole models.Role
-	if err := s.db.Where("code = ?", req.Code).First(&existRole).Error; err == nil {
+	if err := s.DB.Where("code = ?", req.Code).First(&existRole).Error; err == nil {
 		return utils.Error(c, fiber.StatusBadRequest, "角色标识已存在", nil)
 	}
 
@@ -108,7 +108,7 @@ func (s *RoleService) CreateRole(c *fiber.Ctx) error {
 		DataScope:   req.DataScope,
 	}
 
-	if err := s.db.Create(&role).Error; err != nil {
+	if err := s.Create(c, &role); err != nil {
 		return utils.Error(c, fiber.StatusInternalServerError, "创建角色失败", err)
 	}
 
@@ -120,7 +120,7 @@ func (s *RoleService) CreateRole(c *fiber.Ctx) error {
 	}
 
 	// 重新加载角色信息（包含权限）
-	if err := s.db.Preload("Permissions").First(&role, role.ID).Error; err != nil {
+	if err := s.DB.Preload("Permissions").First(&role, role.ID).Error; err != nil {
 		return utils.Error(c, fiber.StatusInternalServerError, "加载角色信息失败", err)
 	}
 
@@ -135,7 +135,7 @@ func (s *RoleService) GetRole(c *fiber.Ctx) error {
 	}
 
 	var role models.Role
-	if err := s.db.Preload("Permissions").Preload("Users").First(&role, uint(id)).Error; err != nil {
+	if err := s.DB.Preload("Permissions").Preload("Users").First(&role, uint(id)).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return utils.Error(c, fiber.StatusNotFound, "角色不存在", nil)
 		}
@@ -158,8 +158,8 @@ func (s *RoleService) UpdateRole(c *fiber.Ctx) error {
 	}
 
 	// 检查角色是否存在
-	var role models.Role
-	if err := s.db.First(&role, uint(id)).Error; err != nil {
+	role, err := s.GetByID(c, uint(id))
+	if err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return utils.Error(c, fiber.StatusNotFound, "角色不存在", nil)
 		}
@@ -169,7 +169,7 @@ func (s *RoleService) UpdateRole(c *fiber.Ctx) error {
 	// 检查角色标识是否已存在（排除自己）
 	if req.Code != nil {
 		var existRole models.Role
-		if err := s.db.Where("code = ? AND id != ?", *req.Code, id).First(&existRole).Error; err == nil {
+		if err := s.DB.Where("code = ? AND id != ?", *req.Code, id).First(&existRole).Error; err == nil {
 			return utils.Error(c, fiber.StatusBadRequest, "角色标识已存在", nil)
 		}
 	}
@@ -190,7 +190,7 @@ func (s *RoleService) UpdateRole(c *fiber.Ctx) error {
 	}
 
 	if len(updates) > 0 {
-		if err := s.db.Model(&role).Updates(updates).Error; err != nil {
+		if err := s.DB.Model(&role).Updates(updates).Error; err != nil {
 			return utils.Error(c, fiber.StatusInternalServerError, "更新角色失败", err)
 		}
 	}
@@ -203,7 +203,7 @@ func (s *RoleService) UpdateRole(c *fiber.Ctx) error {
 	}
 
 	// 重新加载角色信息
-	if err := s.db.Preload("Permissions").First(&role, role.ID).Error; err != nil {
+	if err := s.DB.Preload("Permissions").Preload("Users").First(&role, role.ID).Error; err != nil {
 		return utils.Error(c, fiber.StatusInternalServerError, "加载角色信息失败", err)
 	}
 
@@ -219,7 +219,7 @@ func (s *RoleService) DeleteRole(c *fiber.Ctx) error {
 
 	// 检查角色是否存在
 	var role models.Role
-	if err := s.db.Preload("Users").First(&role, uint(id)).Error; err != nil {
+	if err := s.DB.Preload("Users").First(&role, uint(id)).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return utils.Error(c, fiber.StatusNotFound, "角色不存在", nil)
 		}
@@ -232,7 +232,7 @@ func (s *RoleService) DeleteRole(c *fiber.Ctx) error {
 	}
 
 	// 删除角色
-	if err := s.db.Delete(&role).Error; err != nil {
+	if err := s.Delete(c, uint(id)); err != nil {
 		return utils.Error(c, fiber.StatusInternalServerError, "删除角色失败", err)
 	}
 
@@ -242,7 +242,7 @@ func (s *RoleService) DeleteRole(c *fiber.Ctx) error {
 // assignPermissions 分配权限
 func (s *RoleService) assignPermissions(roleID uint, permissionIDs []uint) error {
 	// 开启事务
-	return s.db.Transaction(func(tx *gorm.DB) error {
+	return s.DB.Transaction(func(tx *gorm.DB) error {
 		// 删除现有的权限关联
 		if err := tx.Where("role_id = ?", roleID).Delete(&models.RolePermission{}).Error; err != nil {
 			return err
