@@ -7,11 +7,16 @@ import (
 	"gorm.io/gorm"
 )
 
-// SetupAuthRoutes 设置认证相关路由
+// SetupLoginRoutes 设置登录路由（无需认证）
+func SetupLoginRoutes(router fiber.Router, db *gorm.DB) {
+	authService := auth.NewAuthService(db)
+	router.Post("/login", authService.Login)
+}
+
+// SetupAuthRoutes 设置认证相关路由（需要认证）
 func SetupAuthRoutes(router fiber.Router, db *gorm.DB) {
 	authService := auth.NewAuthService(db)
 
-	router.Post("/login", authService.Login)
 	router.Post("/logout", authService.Logout)
 	router.Get("/profile", authService.GetProfile)
 }

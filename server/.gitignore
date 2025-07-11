@@ -25,6 +25,10 @@ go.work
 # Log files
 *.log
 
+# Air 热重载相关
+tmp/
+build-errors.log
+
 # IDE
 .vscode/
 .idea/

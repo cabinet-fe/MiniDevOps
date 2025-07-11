@@ -37,7 +37,6 @@ func (s *AuthService) Login(c *fiber.Ctx) error {
 	if err := c.BodyParser(&req); err != nil {
 		return utils.Error(c, fiber.StatusBadRequest, "请求参数解析失败", err)
 	}
-
 	fmt.Println(req)
 
 	// 查找用户
