@@ -1,10 +1,11 @@
 import {
   createRouter,
   createWebHistory,
+  type RouteLocationNormalized,
   type RouteRecordSingleView
 } from 'vue-router'
 import Login from '@/pages/login.vue'
-import { WebCache } from 'cat-kit/fe'
+import { session, TOKEN } from '@/utils/cache'
 import Layout from '@/pages/layout.vue'
 const views = import.meta.glob<boolean, string>('../views/**/index.vue')
 
@@ -32,18 +33,15 @@ export const router = createRouter({
   history: createWebHistory('/')
 })
 
-function hasLogin() {
-  return WebCache.create('session').get('token')
+const whiteList = new Set(['/login'])
+
+function access(to: RouteLocationNormalized) {
+  if (whiteList.has(to.path)) return true
+  if (session.get(TOKEN)) return true
+  return false
 }
 
-router.beforeEach((to, from, next) => {
-  if (to.path === '/login') {
-    next()
-  } else {
-    if (hasLogin()) {
-      next()
-    } else {
-      next('/login')
-    }
-  }
+router.beforeEach((to, _, next) => {
+  if (access(to)) return next()
+  next('/login')
 })

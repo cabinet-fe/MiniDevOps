@@ -1,8 +1,9 @@
-import { http } from '@/utils/http'
+import { defineNoAuthService } from '@/utils/define-service'
 
-export const userService = {
-  async login(data: { username: string; password: string }) {
-    const res = await http.post('/post', data)
-    return res.data
+export const userService = defineNoAuthService('/user', client => {
+  return {
+    login: (data: { username: string; password: string }) => {
+      return client.post('/login', data)
+    }
   }
-}
+})
