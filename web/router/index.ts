@@ -27,6 +27,7 @@ export const router = createRouter({
     {
       component: Layout,
       path: '/',
+      redirect: '/repos',
       children: routes
     }
   ],

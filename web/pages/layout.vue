@@ -80,7 +80,7 @@ watch(
   transform: translate3d(-80px, 0, 0);
 }
 
-/* .m-table-pro__tool {
+/* .u-table__tool {
   border-radius: 1.5rem !important;
   overflow: hidden;
 }

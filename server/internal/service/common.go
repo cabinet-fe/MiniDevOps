@@ -12,6 +12,7 @@ type IService[T any] interface {
 	GetAll(c *fiber.Ctx) ([]T, error)
 	Update(c *fiber.Ctx, id uint, model *T) error
 	Delete(c *fiber.Ctx, id uint) error
+	GetPage(c *fiber.Ctx, page, pageSize int) ([]T, int64, error)
 }
 
 // CrudService provides a generic implementation for CRUD operations.
@@ -45,6 +46,27 @@ func (s *CrudService[T]) GetAll(c *fiber.Ctx) ([]T, error) {
 		return nil, err
 	}
 	return models, nil
+}
+
+func (s *CrudService[T]) GetPage(c *fiber.Ctx, page, pageSize int) ([]T, int64, error) {
+	var models []T
+	var total int64
+
+	// 获取总数
+	var zeroValue T
+	if err := s.DB.Model(&zeroValue).Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	// 计算偏移量
+	offset := (page - 1) * pageSize
+
+	// 获取分页数据
+	if err := s.DB.Offset(offset).Limit(pageSize).Find(&models).Error; err != nil {
+		return nil, 0, err
+	}
+
+	return models, total, nil
 }
 
 // Update updates an existing record by its ID.

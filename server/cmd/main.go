@@ -54,6 +54,5 @@ func main() {
 	router.SetupRoutes(app, database)
 
 	// 启动服务器
-	app.Listen(":8080")
-	// log.Fatal(app.Listen(":8080"))
+	log.Fatal(app.Listen(":8080"))
 }

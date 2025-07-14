@@ -35,19 +35,20 @@ func SeedData(db *gorm.DB) error {
 // seedPermissions 创建默认权限
 func seedPermissions(db *gorm.DB) error {
 	permissions := []models.Permission{
-		{Name: "系统管理", Type: models.PermissionTypeMenu, Code: "system", Sort: 1},
-		{Name: "用户管理", Type: models.PermissionTypeMenu, Code: "user", Sort: 2},
-		{Name: "角色管理", Type: models.PermissionTypeMenu, Code: "role", Sort: 3},
-		{Name: "权限管理", Type: models.PermissionTypeMenu, Code: "permission", Sort: 4},
-		{Name: "仓库管理", Type: models.PermissionTypeMenu, Code: "repository", Sort: 5},
-		{Name: "任务管理", Type: models.PermissionTypeMenu, Code: "task", Sort: 6},
-		{Name: "远程服务器", Type: models.PermissionTypeMenu, Code: "remote", Sort: 7},
-		{Name: "系统配置", Type: models.PermissionTypeMenu, Code: "config", Sort: 8},
+		{Name: "系统管理", Type: models.PermissionTypeMenu, Code: "/system", Sort: 1},
+		{Name: "用户管理", Type: models.PermissionTypeMenu, Code: "/user", Sort: 2},
+		{Name: "角色管理", Type: models.PermissionTypeMenu, Code: "/role", Sort: 3},
+		{Name: "权限管理", Type: models.PermissionTypeMenu, Code: "/permission", Sort: 4},
+		{Name: "仓库管理", Type: models.PermissionTypeMenu, Code: "/repository", Sort: 5},
+		{Name: "任务管理", Type: models.PermissionTypeMenu, Code: "/task", Sort: 6},
+		{Name: "远程服务器", Type: models.PermissionTypeMenu, Code: "/remote", Sort: 7},
+		{Name: "系统配置", Type: models.PermissionTypeMenu, Code: "/config", Sort: 8},
 	}
 
 	for _, permission := range permissions {
 		var existingPermission models.Permission
 		if err := db.Where("code = ?", permission.Code).First(&existingPermission).Error; err == gorm.ErrRecordNotFound {
+
 			if err := db.Create(&permission).Error; err != nil {
 				return err
 			}

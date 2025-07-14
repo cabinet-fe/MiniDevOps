@@ -17,7 +17,7 @@ type Claims struct {
 	jwt.RegisteredClaims
 }
 
-// HashPassword 加密密码
+// 加密密码
 func HashPassword(password string) (string, error) {
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
@@ -26,12 +26,12 @@ func HashPassword(password string) (string, error) {
 	return string(hashedPassword), nil
 }
 
-// VerifyPassword 验证密码
+// 验证密码
 func VerifyPassword(hashedPassword, password string) error {
 	return bcrypt.CompareHashAndPassword([]byte(hashedPassword), []byte(password))
 }
 
-// GenerateToken 生成JWT令牌
+// 生成JWT令牌
 func GenerateToken(userID uint, username string) (string, error) {
 	expirationTime := time.Now().Add(24 * time.Hour) // 24小时过期
 

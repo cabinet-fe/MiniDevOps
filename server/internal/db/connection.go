@@ -9,7 +9,7 @@ import (
 // InitDB 初始化数据库连接
 func InitDB() (*gorm.DB, error) {
 	db, err := gorm.Open(sqlite.Open("minidevops.db"), &gorm.Config{
-		Logger: logger.Default.LogMode(logger.Info),
+		Logger: logger.Default.LogMode(logger.Error),
 	})
 	if err != nil {
 		return nil, err

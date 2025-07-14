@@ -4,16 +4,16 @@
     "": {
       "name": "@mini-devops/web",
       "dependencies": {
-        "icon-ultra": "^3.0.18",
+        "icon-ultra": "^3.0.20",
         "pinia": "^3.0.3",
         "ultra-ui": "^0.3.58",
         "vue": "^3.5.17",
-        "vue-router": "^4.5.0",
+        "vue-router": "^4.5.1",
       },
       "devDependencies": {
-        "@builder/vite": "^2.0.1",
+        "@builder/vite": "^2.0.2",
         "@types/bun": "^1.2.18",
-        "cat-kit": "^3.7.12",
+        "cat-kit": "^3.7.13",
         "fast-glob": "^3.3.3",
         "sass-embedded": "^1.89.2",
         "ts-conf-base": "^2.4.2",

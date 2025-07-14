@@ -15,7 +15,6 @@ func SetupRoutes(app *fiber.App, db *gorm.DB) {
 	// 登录路由（无需认证）
 	SetupLoginRoutes(api, db)
 
-	// 需要认证的路由组
 	protected := api.Group("", utils.JWTMiddleware())
 
 	// 认证相关路由
