@@ -8,8 +8,13 @@
     row-key="id"
     ref="tableRef"
   >
-    <template #column:action="{ row }">
-      <u-button type="primary" @click="handleEdit(row)">编辑</u-button>
+    <template #column:action="{ rowData }">
+      <u-action-group>
+        <u-action type="primary" @run="handleEdit(rowData)">编辑</u-action>
+        <u-action type="danger" need-confirm @run="handleDelete(rowData.id)">
+          删除
+        </u-action>
+      </u-action-group>
     </template>
   </u-table>
 
@@ -17,7 +22,7 @@
     :title="dialogType === 'edit' ? '编辑仓库' : '新增仓库'"
     v-model="visible"
   >
-    <u-form :model="formModel">
+    <u-form :model="model">
       <u-input label="仓库名称" field="name" />
       <u-input label="仓库地址" field="url" />
     </u-form>
@@ -26,12 +31,17 @@
 
 <script setup lang="ts">
 import { repoService } from '@/apis/repo'
-import type { Repo } from '@/types'
-import { useTable, useDialog } from '@/hooks'
-import { defineTableColumns, FormModel, type TableRow } from 'ultra-ui'
+import { useTable, useFormDialog } from '@/hooks'
+import { defineTableColumns } from 'ultra-ui'
 
 const { tableRef, reload } = useTable()
-const { open, visible, dialogType } = useDialog()
+const { open, visible, dialogType, model } = useFormDialog({
+  name: {
+    value: '',
+    required: true
+  },
+  url: { value: '' }
+})
 
 const columns = defineTableColumns([
   { key: 'name', name: '仓库名称' },
@@ -40,21 +50,11 @@ const columns = defineTableColumns([
   { key: 'actions', name: '操作', width: 180 }
 ])
 
-const formModel = new FormModel({
-  name: {
-    value: '',
-    required: true
-  },
-  url: {
-    value: ''
-  }
-})
-
 function handleAdd() {
   open('create')
 }
 
-function handleEdit(row: TableRow) {
+function handleEdit(row: Record<string, any>) {
   open('edit', { data: row })
 }
 
@@ -65,9 +65,9 @@ async function handleDelete(id: number) {
 
 async function handleSubmit() {
   if (dialogType.value === 'edit') {
-    await repoService.updateRepo(formModel.data)
+    await repoService.updateRepo(model.data)
   } else {
-    await repoService.createRepo(formModel.data)
+    await repoService.createRepo(model.data)
   }
   reload()
 }

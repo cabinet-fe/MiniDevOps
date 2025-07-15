@@ -32,7 +32,7 @@
 <script setup lang="ts">
 import { remoteService } from '@/apis/remote'
 import type { Remote } from '@/types'
-import { useTable, useDialog, useForm } from '@/hooks'
+import { useTable, useFormDialog } from '@/hooks'
 
 const { tableRef, reload } = useTable()
 const { dialogRef, open, isEdit } = useDialog()
