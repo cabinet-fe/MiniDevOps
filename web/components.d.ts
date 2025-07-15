@@ -17,6 +17,7 @@ declare module 'vue' {
     UActionGroup: typeof import('ultra-ui')['UActionGroup']
     UActions: typeof import('ultra-ui')['UActions']
     UButton: typeof import('ultra-ui')['UButton']
+    UDialog: typeof import('ultra-ui')['UDialog']
     UForm: typeof import('ultra-ui')['UForm']
     UFormItem: typeof import('ultra-ui')['UFormItem']
     UIcon: typeof import('ultra-ui')['UIcon']

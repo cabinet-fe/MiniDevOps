@@ -1,32 +1,38 @@
 <template>
+  <div>
+    <u-button type="primary" @click="handleAdd()">新增</u-button>
+  </div>
   <u-table
     :columns="columns"
     :request="taskService.getTasks"
     row-key="id"
     ref="tableRef"
   >
-    <template #tool>
-      <u-button type="primary" @click="handleAdd">新增</u-button>
+    <template #column:action="{ rowData }">
+      <u-action-group>
+        <u-action @run="handleRun(rowData.id)">运行</u-action>
+        <u-action type="primary" @run="handleEdit(rowData)">编辑</u-action>
+        <u-action type="danger" need-confirm @run="handleDelete(rowData.id)">
+          删除
+        </u-action>
+      </u-action-group>
     </template>
   </u-table>
 
   <u-dialog
-    :title="isEdit ? '编辑任务' : '新增任务'"
-    ref="dialogRef"
+    :title="dialogType === 'edit' ? '编辑任务' : '新增任务'"
+    v-model="visible"
     @confirm="handleSubmit"
   >
     <u-form :model="model">
-      <u-form-item label="任务名称" field="name">
-        <u-input field="name" />
-      </u-form-item>
-      <u-form-item label="关联仓库" field="repoId">
-        <u-select
-          :request="repoService.getRepos"
-          field="repoId"
-          value-key="id"
-          label-key="name"
-        />
-      </u-form-item>
+      <u-input label="任务名称" field="name" />
+      <u-select
+        label="关联仓库"
+        field="repoId"
+        :request="repoService.getRepos"
+        value-key="id"
+        label-key="name"
+      />
     </u-form>
   </u-dialog>
 </template>
@@ -34,46 +40,32 @@
 <script setup lang="ts">
 import { taskService } from '@/apis/task'
 import { repoService } from '@/apis/repo'
-import type { Task } from '@/types'
-import { useTable, useDialog, useForm } from '@/hooks'
+import { useTable, useFormDialog } from '@/hooks'
+import { defineTableColumns } from 'ultra-ui'
 
 const { tableRef, reload } = useTable()
-const { dialogRef, open, isEdit } = useDialog()
-const { model, create, update } = useForm<Task>({ name: '', repoId: null })
+const { open, visible, dialogType, model } = useFormDialog({
+  name: {
+    value: '',
+    required: true
+  },
+  repoId: { value: undefined }
+})
 
-const columns = [
-  { prop: 'name', label: '任务名称' },
-  { prop: 'repo.name', label: '关联仓库' },
-  { prop: 'status', label: '状态' },
-  { prop: 'createdAt', label: '创建时间' },
-  {
-    prop: 'actions',
-    label: '操作',
-    width: 240,
-    render: (_: any, row: Task) => {
-      return (
-        <u-action-group>
-          <u-action @click="handleRun(row.id)">运行</u-action>
-          <u-action @click="handleEdit(row)">编辑</u-action>
-          <u-action type="danger" @click="handleDelete(row.id)">
-            删除
-          </u-action>
-        </u-action-group>
-      )
-    }
-  }
-]
+const columns = defineTableColumns([
+  { key: 'name', name: '任务名称' },
+  { key: 'repo.name', name: '关联仓库' },
+  { key: 'status', name: '状态' },
+  { key: 'createdAt', name: '创建时间' },
+  { key: 'actions', name: '操作', width: 240 }
+])
 
 function handleAdd() {
-  create()
-  isEdit.value = false
-  open()
+  open('create')
 }
 
-function handleEdit(row: Task) {
-  update(row)
-  isEdit.value = true
-  open()
+function handleEdit(row: Record<string, any>) {
+  open('edit', { data: row })
 }
 
 async function handleRun(id: number) {
@@ -87,7 +79,7 @@ async function handleDelete(id: number) {
 }
 
 async function handleSubmit() {
-  if (isEdit.value) {
+  if (dialogType.value === 'edit') {
     await taskService.updateTask(model.data)
   } else {
     await taskService.createTask(model.data)

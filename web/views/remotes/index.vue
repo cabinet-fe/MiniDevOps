@@ -1,79 +1,65 @@
 <template>
+  <div>
+    <u-button type="primary" @click="handleAdd()">新增</u-button>
+  </div>
   <u-table
     :columns="columns"
     :request="remoteService.getRemotes"
     row-key="id"
     ref="tableRef"
   >
-    <template #tool>
-      <u-button type="primary" @click="handleAdd">新增</u-button>
+    <template #column:action="{ rowData }">
+      <u-action-group>
+        <u-action type="primary" @run="handleEdit(rowData)">编辑</u-action>
+        <u-action type="danger" need-confirm @run="handleDelete(rowData.id)">
+          删除
+        </u-action>
+      </u-action-group>
     </template>
   </u-table>
 
   <u-dialog
-    :title="isEdit ? '编辑远程目录' : '新增远程目录'"
-    ref="dialogRef"
+    :title="dialogType === 'edit' ? '编辑远程目录' : '新增远程目录'"
+    v-model="visible"
     @confirm="handleSubmit"
   >
     <u-form :model="model">
-      <u-form-item label="名称" field="name">
-        <u-input field="name" />
-      </u-form-item>
-      <u-form-item label="用户" field="user">
-        <u-input field="user" />
-      </u-form-item>
-      <u-form-item label="地址" field="addr">
-        <u-input field="addr" />
-      </u-form-item>
+      <u-input label="名称" field="name" />
+      <u-input label="用户" field="user" />
+      <u-input label="地址" field="addr" />
     </u-form>
   </u-dialog>
 </template>
 
 <script setup lang="ts">
 import { remoteService } from '@/apis/remote'
-import type { Remote } from '@/types'
 import { useTable, useFormDialog } from '@/hooks'
+import { defineTableColumns } from 'ultra-ui'
 
 const { tableRef, reload } = useTable()
-const { dialogRef, open, isEdit } = useDialog()
-const { model, create, update } = useForm<Remote>({
-  name: '',
-  user: '',
-  addr: ''
+const { open, visible, dialogType, model } = useFormDialog({
+  name: {
+    value: '',
+    required: true
+  },
+  user: { value: '' },
+  addr: { value: '' }
 })
 
-const columns = [
-  { prop: 'name', label: '名称' },
-  { prop: 'user', label: '用户' },
-  { prop: 'addr', label: '地址' },
-  { prop: 'createdAt', label: '创建时间' },
-  {
-    prop: 'actions',
-    label: '操作',
-    width: 180,
-    render: (_: any, row: Remote) => {
-      return (
-        <u-action-group>
-          <u-action @click="handleEdit(row)">编辑</u-action>
-          <u-action type="danger" @click="handleDelete(row.id)">
-            删除
-          </u-action>
-        </u-action-group>
-      )
-    }
-  }
-]
+const columns = defineTableColumns([
+  { key: 'name', name: '名称' },
+  { key: 'user', name: '用户' },
+  { key: 'addr', name: '地址' },
+  { key: 'createdAt', name: '创建时间' },
+  { key: 'actions', name: '操作', width: 180 }
+])
 
 function handleAdd() {
-  create()
-  isEdit.value = false
-  open()
+  open('create')
 }
 
-function handleEdit(row: Remote) {
-  update(row)
-  isEdit.value = true
-  open()
+function handleEdit(row: Record<string, any>) {
+  open('edit', { data: row })
 }
 
 async function handleDelete(id: number) {
@@ -82,7 +68,7 @@ async function handleDelete(id: number) {
 }
 
 async function handleSubmit() {
-  if (isEdit.value) {
+  if (dialogType.value === 'edit') {
     await remoteService.updateRemote(model.data)
   } else {
     await remoteService.createRemote(model.data)
