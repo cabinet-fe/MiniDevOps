@@ -1,8 +1,6 @@
 package models
 
 import (
-	"time"
-
 	"gorm.io/gorm"
 )
 
@@ -16,10 +14,7 @@ const (
 
 // RemoteServer 远程服务器模型
 type RemoteServer struct {
-	ID        uint           `json:"id" gorm:"primarykey"`
-	CreatedAt time.Time      `json:"created_at"`
-	UpdatedAt time.Time      `json:"updated_at"`
-	DeletedAt gorm.DeletedAt `json:"-" gorm:"index"`
+	gorm.Model
 
 	Name     string   `json:"name" gorm:"not null" validate:"required"`                            // 服务器名称（必填）
 	Host     string   `json:"host" gorm:"not null;index:idx_host_port,unique" validate:"required"` // 主机地址（必填）

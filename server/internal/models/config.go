@@ -1,17 +1,12 @@
 package models
 
 import (
-	"time"
-
 	"gorm.io/gorm"
 )
 
 // SystemConfig 系统配置模型
 type SystemConfig struct {
-	ID        uint           `json:"id" gorm:"primarykey"`
-	CreatedAt time.Time      `json:"created_at"`
-	UpdatedAt time.Time      `json:"updated_at"`
-	DeletedAt gorm.DeletedAt `json:"-" gorm:"index"`
+	gorm.Model
 
 	Key         string `json:"key" gorm:"uniqueIndex;not null;index" validate:"required"` // 配置键
 	Value       string `json:"value" gorm:"type:text"`                                    // 配置值

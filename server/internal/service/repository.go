@@ -17,7 +17,7 @@ type RepositoryService struct {
 
 // NewRepositoryService 创建代码仓库服务实例
 func NewRepositoryService(db *gorm.DB) *RepositoryService {
-	return &RepositoryService{CrudService: NewCrudService[models.Repository](db)}
+	return &RepositoryService{NewCrudService[models.Repository](db)}
 }
 
 // CreateRepositoryRequest 创建仓库请求结构
@@ -68,39 +68,27 @@ func (s *RepositoryService) GetRepositories(c *fiber.Ctx) error {
 		Items: repositories,
 	}
 
-	return utils.SuccessWithData(c, "获取仓库列表成功", response)
+	return utils.SuccessWithData(c, response)
 }
 
-// CreateRepository 创建仓库
-func (s *RepositoryService) CreateRepository(c *fiber.Ctx) error {
-	var req CreateRepositoryRequest
-	if err := c.BodyParser(&req); err != nil {
-		return utils.Error(c, fiber.StatusBadRequest, "请求参数解析失败", err)
+// 创建仓库
+func (s *RepositoryService) Create(c *fiber.Ctx) error {
+	var repository models.Repository
+	if err := c.BodyParser(&repository); err != nil {
+		return utils.Error(c, fiber.StatusBadRequest, err)
 	}
 
 	// 检查仓库地址是否已存在
 	var existRepository models.Repository
-	if err := s.DB.Where("url = ?", req.URL).First(&existRepository).Error; err == nil {
-		return utils.Error(c, fiber.StatusBadRequest, "仓库地址已存在", nil)
+	if err := s.DB.Where("url = ?", repository.URL).First(&existRepository).Error; err == nil {
+		return utils.Error(c, fiber.StatusBadRequest, nil)
 	}
 
-	// 设置默认分支
-	if req.Branch == "" {
-		req.Branch = "main"
+	if err := s.Create(c); err != nil {
+		return utils.Error(c, fiber.StatusInternalServerError, err)
 	}
 
-	// 创建仓库
-	repository := models.Repository{
-		Name:   req.Name,
-		URL:    req.URL,
-		Branch: req.Branch,
-	}
-
-	if err := s.Create(c, &repository); err != nil {
-		return utils.Error(c, fiber.StatusInternalServerError, "创建仓库失败", err)
-	}
-
-	return utils.SuccessWithData(c, "创建仓库成功", repository)
+	return utils.SuccessWithData(c, repository)
 }
 
 func (s *RepositoryService) GetRepositoryPage(c *fiber.Ctx) error {

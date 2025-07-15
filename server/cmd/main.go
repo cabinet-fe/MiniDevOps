@@ -17,16 +17,6 @@ func main() {
 		log.Fatal("数据库初始化失败:", err)
 	}
 
-	// 运行数据库迁移
-	if err := db.RunMigrations(database); err != nil {
-		log.Fatal("数据库迁移失败:", err)
-	}
-
-	// 初始化种子数据
-	if err := db.SeedData(database); err != nil {
-		log.Fatal("种子数据初始化失败:", err)
-	}
-
 	// 初始化默认配置
 	configService := service.NewConfigService(database)
 	if err := configService.InitDefaultConfigs(); err != nil {

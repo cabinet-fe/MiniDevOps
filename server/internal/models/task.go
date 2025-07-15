@@ -1,17 +1,12 @@
 package models
 
 import (
-	"time"
-
 	"gorm.io/gorm"
 )
 
 // Task 任务模型
 type Task struct {
-	ID        uint           `json:"id" gorm:"primarykey"`
-	CreatedAt time.Time      `json:"created_at"`
-	UpdatedAt time.Time      `json:"updated_at"`
-	DeletedAt gorm.DeletedAt `json:"-" gorm:"index"`
+	gorm.Model
 
 	Name         string `json:"name" gorm:"not null" validate:"required"`                   // 任务名称（必填）
 	RepositoryID uint   `json:"repository_id" gorm:"not null;index" validate:"required"`    // 所属仓库（必填）

@@ -1,17 +1,12 @@
 package models
 
 import (
-	"time"
-
 	"gorm.io/gorm"
 )
 
 // Role 角色模型
 type Role struct {
-	ID        uint           `json:"id" gorm:"primarykey"`
-	CreatedAt time.Time      `json:"created_at"`
-	UpdatedAt time.Time      `json:"updated_at"`
-	DeletedAt gorm.DeletedAt `json:"-" gorm:"index"`
+	gorm.Model
 
 	Name        string `json:"name" gorm:"not null" validate:"required"`                   // 角色名称（必填）
 	Code        string `json:"code" gorm:"uniqueIndex;not null;index" validate:"required"` // 角色标识（必填）

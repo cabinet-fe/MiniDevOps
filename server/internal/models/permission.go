@@ -1,8 +1,6 @@
 package models
 
 import (
-	"time"
-
 	"gorm.io/gorm"
 )
 
@@ -16,10 +14,7 @@ const (
 
 // Permission 权限模型
 type Permission struct {
-	ID        uint           `json:"id" gorm:"primarykey"`
-	CreatedAt time.Time      `json:"created_at"`
-	UpdatedAt time.Time      `json:"updated_at"`
-	DeletedAt gorm.DeletedAt `json:"-" gorm:"index"`
+	gorm.Model
 
 	Name     string         `json:"name" gorm:"not null" validate:"required"`                   // 权限名称（必填）
 	Type     PermissionType `json:"type" gorm:"not null" validate:"required"`                   // 类型（菜单、按钮）

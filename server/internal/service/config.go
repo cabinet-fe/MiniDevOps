@@ -18,7 +18,7 @@ type ConfigService struct {
 
 // NewConfigService 创建系统配置服务实例
 func NewConfigService(db *gorm.DB) *ConfigService {
-	return &ConfigService{CrudService: NewCrudService[models.SystemConfig](db)}
+	return &ConfigService{NewCrudService[models.SystemConfig](db)}
 }
 
 // ConfigRequest 配置请求结构
@@ -38,7 +38,7 @@ type ConfigListResponse struct {
 func (s *ConfigService) GetConfigs(c *fiber.Ctx) error {
 	var configs []models.SystemConfig
 	if err := s.DB.Order("created_at ASC").Find(&configs).Error; err != nil {
-		return utils.Error(c, fiber.StatusInternalServerError, "查询配置列表失败", err)
+		return utils.Error(c, fiber.StatusInternalServerError, err)
 	}
 
 	response := ConfigListResponse{
@@ -46,25 +46,25 @@ func (s *ConfigService) GetConfigs(c *fiber.Ctx) error {
 		Items: configs,
 	}
 
-	return utils.SuccessWithData(c, "获取配置列表成功", response)
+	return utils.SuccessWithData(c, response)
 }
 
 // GetConfig 获取指定配置
 func (s *ConfigService) GetConfig(c *fiber.Ctx) error {
 	key := c.Params("key")
 	if key == "" {
-		return utils.Error(c, fiber.StatusBadRequest, "配置键不能为空", nil)
+		return utils.Error(c, fiber.StatusBadRequest, nil)
 	}
 
 	var config models.SystemConfig
 	if err := s.DB.Where("key = ?", key).First(&config).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
-			return utils.Error(c, fiber.StatusNotFound, "配置不存在", nil)
+			return utils.Error(c, fiber.StatusNotFound, nil)
 		}
-		return utils.Error(c, fiber.StatusInternalServerError, "查询配置失败", err)
+		return utils.Error(c, fiber.StatusInternalServerError, err)
 	}
 
-	return utils.SuccessWithData(c, "获取配置成功", config)
+	return utils.SuccessWithData(c, config)
 }
 
 // UpdateConfig 更新配置
@@ -141,7 +141,7 @@ func (s *ConfigService) DeleteConfig(c *fiber.Ctx) error {
 	return utils.Success(c, "删除配置成功")
 }
 
-// GetMountPath 获取挂载路径配置
+// 获取挂载路径配置
 func (s *ConfigService) GetMountPath(c *fiber.Ctx) error {
 	var config models.SystemConfig
 	err := s.DB.Where("key = ?", models.ConfigKeyMountPath).First(&config).Error
@@ -157,9 +157,9 @@ func (s *ConfigService) GetMountPath(c *fiber.Ctx) error {
 			"description": "任务挂载路径",
 			"is_default":  true,
 		}
-		return utils.SuccessWithData(c, "获取挂载路径成功", response)
+		return utils.SuccessWithData(c, response)
 	} else if err != nil {
-		return utils.Error(c, fiber.StatusInternalServerError, "查询挂载路径失败", err)
+		return utils.Error(c, fiber.StatusInternalServerError, err)
 	}
 
 	response := map[string]interface{}{
