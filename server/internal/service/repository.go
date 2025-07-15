@@ -42,18 +42,6 @@ type RepositoryListResponse struct {
 
 // GetRepositories 获取仓库列表
 func (s *RepositoryService) GetRepositories(c *fiber.Ctx) error {
-	page, _ := strconv.Atoi(c.Query("page", "1"))
-	pageSize, _ := strconv.Atoi(c.Query("page_size", "10"))
-	keyword := c.Query("keyword", "")
-
-	if page <= 0 {
-		page = 1
-	}
-	if pageSize <= 0 || pageSize > 100 {
-		pageSize = 10
-	}
-
-	offset := (page - 1) * pageSize
 
 	query := s.DB.Model(&models.Repository{}).Preload("Tasks")
 
@@ -115,22 +103,13 @@ func (s *RepositoryService) CreateRepository(c *fiber.Ctx) error {
 	return utils.SuccessWithData(c, "创建仓库成功", repository)
 }
 
+func (s *RepositoryService) GetRepositoryPage(c *fiber.Ctx) error {
+	return s.GetPage(c)
+}
+
 // GetRepository 获取仓库详情
 func (s *RepositoryService) GetRepository(c *fiber.Ctx) error {
-	id, err := strconv.ParseUint(c.Params("id"), 10, 32)
-	if err != nil {
-		return utils.Error(c, fiber.StatusBadRequest, "仓库ID格式错误", err)
-	}
-
-	var repository models.Repository
-	if err := s.DB.Preload("Tasks").First(&repository, uint(id)).Error; err != nil {
-		if err == gorm.ErrRecordNotFound {
-			return utils.Error(c, fiber.StatusNotFound, "仓库不存在", nil)
-		}
-		return utils.Error(c, fiber.StatusInternalServerError, "查询仓库失败", err)
-	}
-
-	return utils.SuccessWithData(c, "获取仓库成功", repository)
+	return s.GetByID(c)
 }
 
 // UpdateRepository 更新仓库
@@ -146,7 +125,7 @@ func (s *RepositoryService) UpdateRepository(c *fiber.Ctx) error {
 	}
 
 	// 检查仓库是否存在
-	repository, err := s.GetByID(c, uint(id))
+	repository, err := s.GetByID(c)
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return utils.Error(c, fiber.StatusNotFound, "仓库不存在", nil)
@@ -196,7 +175,7 @@ func (s *RepositoryService) DeleteRepository(c *fiber.Ctx) error {
 	}
 
 	// 检查仓库是否存在
-	repository, err := s.GetByID(c, uint(id))
+	repository, err := s.GetByID(c)
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return utils.Error(c, fiber.StatusNotFound, "仓库不存在", nil)

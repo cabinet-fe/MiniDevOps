@@ -1,5 +1,10 @@
 import { defineConfig } from 'vite'
-import { pluginPresets, createServer } from '@builder/vite'
+import {
+  pluginPresets,
+  createServer,
+  autoResolveComponent,
+  UltraUIResolver
+} from '@builder/vite'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import UnoCSS from 'unocss/vite'
@@ -16,7 +21,15 @@ export default defineConfig(async () => {
     plugins: [
       ...pluginPresets(['vue', 'vue-jsx', 'unplugin-components'], {
         'unplugin-components': {
-          dts: './components.d.ts'
+          dts: true,
+          resolvers: [
+            UltraUIResolver,
+            autoResolveComponent({
+              lib: '@/components',
+              prefix: 'M',
+              sideEffects: () => undefined
+            })
+          ]
         }
       }),
 

@@ -1,11 +1,22 @@
-import { ref } from 'vue'
+import type { TableColumn } from 'ultra-ui'
 
-export function useTable() {
-  const tableRef = ref()
+export type PageParams = {
+  page: number
+  pageSize: number
+} & Record<string, any>
 
-  function reload() {
-    tableRef.value.reload()
-  }
+interface TableOptions {
+  columns: TableColumn[]
+  getData: (params?: PageParams) => Promise<{
+    data: Record<string, any>[]
+    total: number
+  }>
+}
 
-  return { tableRef, reload }
+export type PageTableCtx = TableOptions
+
+export function useTable(options: TableOptions): PageTableCtx {
+  const { columns, getData } = options
+
+  return { columns, getData }
 }

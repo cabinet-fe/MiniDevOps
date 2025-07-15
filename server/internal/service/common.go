@@ -1,6 +1,9 @@
 package service
 
 import (
+	"server/internal/utils"
+	"strconv"
+
 	"github.com/gofiber/fiber/v2"
 	"gorm.io/gorm"
 )
@@ -8,11 +11,11 @@ import (
 // IService defines the interface for a generic CRUD service.
 type IService[T any] interface {
 	Create(c *fiber.Ctx, model *T) error
-	GetByID(c *fiber.Ctx, id uint) (*T, error)
-	GetAll(c *fiber.Ctx) ([]T, error)
+	GetByID(c *fiber.Ctx) error
+	GetList(c *fiber.Ctx) error
 	Update(c *fiber.Ctx, id uint, model *T) error
 	Delete(c *fiber.Ctx, id uint) error
-	GetPage(c *fiber.Ctx, page, pageSize int) ([]T, int64, error)
+	GetPage(c *fiber.Ctx) error
 }
 
 // CrudService provides a generic implementation for CRUD operations.
@@ -31,31 +34,40 @@ func (s *CrudService[T]) Create(c *fiber.Ctx, model *T) error {
 }
 
 // GetByID retrieves a record by its ID.
-func (s *CrudService[T]) GetByID(c *fiber.Ctx, id uint) (*T, error) {
+func (s *CrudService[T]) GetByID(c *fiber.Ctx) error {
+
+	id, err := strconv.ParseUint(c.Params("id"), 10, 32)
+	if err != nil {
+		return utils.Error(c, fiber.StatusBadRequest, err)
+	}
+
 	var model T
 	if err := s.DB.First(&model, id).Error; err != nil {
-		return nil, err
+		return utils.Error(c, fiber.StatusNotFound, err)
 	}
-	return &model, nil
+	return utils.SuccessWithData(c, &model)
 }
 
-// GetAll retrieves all records.
-func (s *CrudService[T]) GetAll(c *fiber.Ctx) ([]T, error) {
+// 获取列表
+func (s *CrudService[T]) GetList(c *fiber.Ctx) error {
 	var models []T
 	if err := s.DB.Find(&models).Error; err != nil {
-		return nil, err
+		return utils.Error(c, fiber.StatusInternalServerError, err)
 	}
-	return models, nil
+	return utils.SuccessWithData(c, &models)
 }
 
-func (s *CrudService[T]) GetPage(c *fiber.Ctx, page, pageSize int) ([]T, int64, error) {
+func (s *CrudService[T]) GetPage(c *fiber.Ctx) error {
 	var models []T
 	var total int64
+
+	page, _ := strconv.Atoi(c.Query("page", "1"))
+	pageSize, _ := strconv.Atoi(c.Query("pageSize", "10"))
 
 	// 获取总数
 	var zeroValue T
 	if err := s.DB.Model(&zeroValue).Count(&total).Error; err != nil {
-		return nil, 0, err
+		return utils.Error(c, fiber.StatusInternalServerError, err)
 	}
 
 	// 计算偏移量
@@ -63,10 +75,13 @@ func (s *CrudService[T]) GetPage(c *fiber.Ctx, page, pageSize int) ([]T, int64, 
 
 	// 获取分页数据
 	if err := s.DB.Offset(offset).Limit(pageSize).Find(&models).Error; err != nil {
-		return nil, 0, err
+		return utils.Error(c, fiber.StatusInternalServerError, err)
 	}
 
-	return models, total, nil
+	return utils.SuccessWithData(c, map[string]any{
+		"data":  models,
+		"total": total,
+	})
 }
 
 // Update updates an existing record by its ID.

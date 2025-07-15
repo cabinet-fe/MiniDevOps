@@ -26,11 +26,24 @@ type PaginationResponse struct {
 	Limit   int         `json:"limit"`
 }
 
+var ErrorMap2Msg map[int]string = map[int]string{
+	400: "请求参数错误",
+	401: "未授权",
+	403: "禁止访问",
+	404: "未找到资源",
+	500: "服务器错误",
+}
+
 // SuccessWithData 返回包含数据的成功响应
-func SuccessWithData(c *fiber.Ctx, message string, data interface{}) error {
+func SuccessWithData(c *fiber.Ctx, data interface{}, message ...string) error {
+	msg := "操作成功"
+	if len(message) > 0 && message[0] != "" {
+		msg = message[0]
+	}
+
 	return c.JSON(SuccessResponse{
 		Success: true,
-		Message: message,
+		Message: msg,
 		Data:    data,
 	})
 }
@@ -44,10 +57,14 @@ func Success(c *fiber.Ctx, message string) error {
 }
 
 // Error 返回错误响应
-func Error(c *fiber.Ctx, statusCode int, message string, err error) error {
+func Error(c *fiber.Ctx, statusCode int, err error, message ...string) error {
+	msg := ErrorMap2Msg[statusCode]
+	if len(message) > 0 && message[0] != "" {
+		msg = message[0]
+	}
 	response := ErrorResponse{
 		Success: false,
-		Message: message,
+		Message: msg,
 	}
 
 	if err != nil {

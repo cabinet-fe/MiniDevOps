@@ -8,25 +8,18 @@ export {}
 /* prettier-ignore */
 declare module 'vue' {
   export interface GlobalComponents {
-    MCodeEditor: typeof import('@meta/components')['MCodeEditor']
-    MDialogPro: typeof import('@meta/components')['MDialogPro']
-    MTablePro: typeof import('@meta/components')['MTablePro']
+    MDialog: typeof import('@/components')['MDialog']
+    MPageTable: typeof import('@/components')['MPageTable']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
     UAction: typeof import('ultra-ui')['UAction']
     UActionGroup: typeof import('ultra-ui')['UActionGroup']
-    UActions: typeof import('ultra-ui')['UActions']
     UButton: typeof import('ultra-ui')['UButton']
     UDialog: typeof import('ultra-ui')['UDialog']
     UForm: typeof import('ultra-ui')['UForm']
-    UFormItem: typeof import('ultra-ui')['UFormItem']
-    UIcon: typeof import('ultra-ui')['UIcon']
     UInput: typeof import('ultra-ui')['UInput']
-    UMultiSelect: typeof import('ultra-ui')['UMultiSelect']
-    UPassword: typeof import('ultra-ui')['UPassword']
+    UPaginator: typeof import('ultra-ui')['UPaginator']
     UPasswordInput: typeof import('ultra-ui')['UPasswordInput']
-    USelect: typeof import('ultra-ui')['USelect']
     UTable: typeof import('ultra-ui')['UTable']
-    UTag: typeof import('ultra-ui')['UTag']
   }
 }

@@ -14,6 +14,7 @@ func SetupRepositoryRoutes(router fiber.Router, db *gorm.DB) {
 
 	repoGroup.Get("/", repositoryService.GetRepositories)
 	repoGroup.Post("/", repositoryService.CreateRepository)
+	repoGroup.Get("/page", repositoryService.GetRepositoryPage)
 	repoGroup.Get("/:id", repositoryService.GetRepository)
 	repoGroup.Put("/:id", repositoryService.UpdateRepository)
 	repoGroup.Delete("/:id", repositoryService.DeleteRepository)

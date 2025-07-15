@@ -1,13 +1,16 @@
 <template>
-  <div>
-    <u-button type="primary" @click="handleAdd()">新增</u-button>
-  </div>
-  <u-table
-    :columns="columns"
-    :request="repoService.getRepos"
-    row-key="id"
-    ref="tableRef"
-  >
+  <m-page-table :ctx="ctx">
+    <template #dialog>
+      <m-dialog
+        :visible="visible"
+        :title="dialogType === 'edit' ? '编辑仓库' : '新增仓库'"
+        :model="model"
+      >
+        <u-input label="仓库名称" field="name" />
+        <u-input label="仓库地址" field="url" />
+      </m-dialog>
+    </template>
+
     <template #column:action="{ rowData }">
       <u-action-group>
         <u-action type="primary" @run="handleEdit(rowData)">编辑</u-action>
@@ -16,25 +19,13 @@
         </u-action>
       </u-action-group>
     </template>
-  </u-table>
-
-  <u-dialog
-    :title="dialogType === 'edit' ? '编辑仓库' : '新增仓库'"
-    v-model="visible"
-  >
-    <u-form :model="model">
-      <u-input label="仓库名称" field="name" />
-      <u-input label="仓库地址" field="url" />
-    </u-form>
-  </u-dialog>
+  </m-page-table>
 </template>
 
 <script setup lang="ts">
 import { repoService } from '@/apis/repo'
 import { useTable, useFormDialog } from '@/hooks'
-import { defineTableColumns } from 'ultra-ui'
 
-const { tableRef, reload } = useTable()
 const { open, visible, dialogType, model } = useFormDialog({
   name: {
     value: '',
@@ -43,12 +34,15 @@ const { open, visible, dialogType, model } = useFormDialog({
   url: { value: '' }
 })
 
-const columns = defineTableColumns([
-  { key: 'name', name: '仓库名称' },
-  { key: 'url', name: '仓库地址' },
-  { key: 'createdAt', name: '创建时间' },
-  { key: 'actions', name: '操作', width: 180 }
-])
+const ctx = useTable({
+  columns: [
+    { key: 'name', name: '仓库名称' },
+    { key: 'url', name: '仓库地址' },
+    { key: 'createdAt', name: '创建时间' },
+    { key: 'actions', name: '操作', width: 180 }
+  ],
+  getData: repoService.getRepoPage
+})
 
 function handleAdd() {
   open('create')
