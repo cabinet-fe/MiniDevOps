@@ -12,24 +12,24 @@ func JWTMiddleware() fiber.Handler {
 		// 获取Authorization头
 		authHeader := c.Get("Authorization")
 		if authHeader == "" {
-			return Error(c, fiber.StatusUnauthorized, "缺少认证令牌", nil)
+			return Error(c, fiber.StatusUnauthorized, "缺少认证令牌")
 		}
 
 		// 检查是否以"Bearer "开头
 		if !strings.HasPrefix(authHeader, "Bearer ") {
-			return Error(c, fiber.StatusUnauthorized, "认证令牌格式错误", nil)
+			return Error(c, fiber.StatusUnauthorized, "认证令牌格式错误")
 		}
 
 		// 提取令牌
 		token := strings.TrimPrefix(authHeader, "Bearer ")
 		if token == "" {
-			return Error(c, fiber.StatusUnauthorized, "认证令牌为空", nil)
+			return Error(c, fiber.StatusUnauthorized, "认证令牌为空")
 		}
 
 		// 解析令牌
 		claims, err := ParseToken(token)
 		if err != nil {
-			return Error(c, fiber.StatusUnauthorized, "认证令牌无效", err)
+			return Error(c, fiber.StatusUnauthorized, "认证令牌无效")
 		}
 
 		// 将用户信息存储到上下文中

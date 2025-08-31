@@ -57,7 +57,7 @@ func Success(c *fiber.Ctx, message string) error {
 }
 
 // Error 返回错误响应
-func Error(c *fiber.Ctx, statusCode int, err error, message ...string) error {
+func Error(c *fiber.Ctx, statusCode int, message ...string) error {
 	msg := ErrorMap2Msg[statusCode]
 	if len(message) > 0 && message[0] != "" {
 		msg = message[0]
@@ -65,10 +65,6 @@ func Error(c *fiber.Ctx, statusCode int, err error, message ...string) error {
 	response := ErrorResponse{
 		Success: false,
 		Message: msg,
-	}
-
-	if err != nil {
-		response.Error = err.Error()
 	}
 
 	return c.Status(statusCode).JSON(response)

@@ -4,10 +4,10 @@
 
 ## 技术栈
 
-- **Go**: v1.24.4
+- **Go**: v1.25.0
 - **Fiber**: v2 (Web 框架)
 - **GORM**: ORM 数据库操作
-- **SQLite**: 数据库
+- **SQLite3**: 数据库
 - **JWT**: 用户认证
 
 ## 项目结构
@@ -42,6 +42,7 @@ server/
 │   │   └── seed.go         # 种子数据
 │   └── utils/              # 工具函数
 │       ├── auth.go         # 认证工具
+│       ├── middleware.go         # 中间件
 │       └── response.go     # 响应工具
 ├── configs/                # 配置文件
 │   └── config.go
@@ -96,7 +97,7 @@ server/
 
 ### 前置要求
 
-- Go 1.24.4 或更高版本
+- Go 1.25.0 或更高版本
 
 ### 安装依赖
 

@@ -1,7 +1,6 @@
 package service
 
 import (
-	"fmt"
 	"server/internal/models"
 	"server/internal/utils"
 
@@ -37,7 +36,6 @@ func (s *AuthService) Login(c *fiber.Ctx) error {
 	if err := c.BodyParser(&req); err != nil {
 		return utils.Error(c, fiber.StatusBadRequest, "请求参数解析失败", err)
 	}
-	fmt.Println(req)
 
 	// 查找用户
 	var user models.User
