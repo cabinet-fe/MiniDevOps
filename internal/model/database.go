@@ -1,0 +1,73 @@
+package model
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+
+	"buildflow/internal/config"
+	"golang.org/x/crypto/bcrypt"
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
+)
+
+func InitDB() (*gorm.DB, error) {
+	if config.C == nil {
+		return nil, fmt.Errorf("config not loaded: call config.Load before InitDB")
+	}
+
+	dbPath := config.C.Database.Path
+	if err := os.MkdirAll(filepath.Dir(dbPath), 0755); err != nil {
+		return nil, fmt.Errorf("creating database directory: %w", err)
+	}
+
+	dsn := dbPath + "?_journal_mode=WAL&_busy_timeout=5000"
+	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
+	if err != nil {
+		return nil, fmt.Errorf("opening database: %w", err)
+	}
+
+	sqlDB, err := db.DB()
+	if err != nil {
+		return nil, fmt.Errorf("getting underlying db: %w", err)
+	}
+
+	if err := sqlDB.Ping(); err != nil {
+		return nil, fmt.Errorf("pinging database: %w", err)
+	}
+
+	if err := db.AutoMigrate(
+		&User{},
+		&Server{},
+		&Project{},
+		&Environment{},
+		&Build{},
+		&Notification{},
+		&AuditLog{},
+	); err != nil {
+		return nil, fmt.Errorf("auto migrating: %w", err)
+	}
+
+	var count int64
+	if err := db.Model(&User{}).Count(&count).Error; err != nil {
+		return nil, fmt.Errorf("counting users: %w", err)
+	}
+	if count == 0 {
+		hash, err := bcrypt.GenerateFromPassword([]byte("admin123"), bcrypt.DefaultCost)
+		if err != nil {
+			return nil, fmt.Errorf("hashing admin password: %w", err)
+		}
+		admin := User{
+			Username:     "admin",
+			PasswordHash: string(hash),
+			DisplayName:  "Administrator",
+			Role:         "admin",
+			IsActive:     true,
+		}
+		if err := db.Create(&admin).Error; err != nil {
+			return nil, fmt.Errorf("creating admin user: %w", err)
+		}
+	}
+
+	return db, nil
+}

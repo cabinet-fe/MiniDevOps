@@ -1,0 +1,20 @@
+server:
+  port: 8080
+  host: "0.0.0.0"
+
+database:
+  path: "./data/db.sqlite"
+
+jwt:
+  secret: "buildflow-dev-secret-change-in-production"
+  access_ttl: "2h"
+  refresh_ttl: "168h"
+
+build:
+  max_concurrent: 3
+  workspace_dir: "./data/workspaces"
+  artifact_dir: "./data/artifacts"
+  log_dir: "./data/logs"
+
+encryption:
+  key: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
