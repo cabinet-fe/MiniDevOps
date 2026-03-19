@@ -114,12 +114,12 @@ export function AuditLogsPage() {
           <div className="mt-4 flex flex-wrap gap-4">
             <div>
               <label className="text-xs text-zinc-500">操作类型</label>
-              <Select value={actionFilter} onValueChange={setActionFilter}>
+              <Select value={actionFilter || 'all'} onValueChange={(v) => setActionFilter(v === 'all' ? '' : v)}>
                 <SelectTrigger className="mt-1 w-[180px]">
                   <SelectValue placeholder="全部" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">全部</SelectItem>
+                  <SelectItem value="all">全部</SelectItem>
                   <SelectItem value="create">创建</SelectItem>
                   <SelectItem value="update">更新</SelectItem>
                   <SelectItem value="delete">删除</SelectItem>
