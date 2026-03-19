@@ -1,1 +1,7 @@
-./data
+data/
+.DS_Store
+*.log
+cmd/server/dist/
+web/dist/
+buildflow
+buildflow-linux

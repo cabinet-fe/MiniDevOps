@@ -15,6 +15,7 @@ build:
   workspace_dir: "./data/workspaces"
   artifact_dir: "./data/artifacts"
   log_dir: "./data/logs"
+  cache_dir: "./data/caches"
 
 encryption:
   key: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"

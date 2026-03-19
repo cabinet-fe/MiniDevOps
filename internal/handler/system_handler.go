@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -179,4 +180,121 @@ func (h *SystemHandler) Restore(c *gin.Context) {
 		}
 	}
 	pkg.Success(c, gin.H{"message": "恢复完成，请重启服务"})
+}
+
+// WorkspaceInfo represents disk usage for a project's workspace and cache.
+type WorkspaceInfo struct {
+	ProjectID     uint   `json:"project_id"`
+	ProjectName   string `json:"project_name"`
+	WorkspaceSize int64  `json:"workspace_size"`
+	CacheSize     int64  `json:"cache_size"`
+}
+
+// GET /api/v1/system/workspaces - list workspace and cache disk usage per project
+func (h *SystemHandler) ListWorkspaces(c *gin.Context) {
+	if config.C == nil {
+		pkg.Error(c, http.StatusInternalServerError, "配置未加载")
+		return
+	}
+
+	workspaceDir := config.C.Build.WorkspaceDir
+	cacheDir := config.C.Build.CacheDir
+
+	// Collect project directories from workspace
+	projectMap := make(map[uint]*WorkspaceInfo)
+
+	// Scan workspace directory
+	if entries, err := os.ReadDir(workspaceDir); err == nil {
+		for _, entry := range entries {
+			if !entry.IsDir() {
+				continue
+			}
+			var pid uint
+			if _, err := fmt.Sscanf(entry.Name(), "project-%d", &pid); err != nil || pid == 0 {
+				continue
+			}
+			info := &WorkspaceInfo{ProjectID: pid}
+			info.WorkspaceSize = dirSize(filepath.Join(workspaceDir, entry.Name()))
+			projectMap[pid] = info
+		}
+	}
+
+	// Scan cache directory
+	if cacheDir != "" {
+		if entries, err := os.ReadDir(cacheDir); err == nil {
+			for _, entry := range entries {
+				if !entry.IsDir() {
+					continue
+				}
+				var pid uint
+				if _, err := fmt.Sscanf(entry.Name(), "project-%d", &pid); err != nil || pid == 0 {
+					continue
+				}
+				if _, ok := projectMap[pid]; !ok {
+					projectMap[pid] = &WorkspaceInfo{ProjectID: pid}
+				}
+				projectMap[pid].CacheSize = dirSize(filepath.Join(cacheDir, entry.Name()))
+			}
+		}
+	}
+
+	var result []WorkspaceInfo
+	for _, info := range projectMap {
+		result = append(result, *info)
+	}
+
+	pkg.Success(c, result)
+}
+
+// DELETE /api/v1/system/workspaces/:projectId - clean project workspace
+func (h *SystemHandler) CleanWorkspace(c *gin.Context) {
+	if config.C == nil {
+		pkg.Error(c, http.StatusInternalServerError, "配置未加载")
+		return
+	}
+	projectID, err := strconv.ParseUint(c.Param("projectId"), 10, 32)
+	if err != nil {
+		pkg.Error(c, http.StatusBadRequest, "参数错误")
+		return
+	}
+	workspaceDir := filepath.Join(config.C.Build.WorkspaceDir, fmt.Sprintf("project-%d", projectID))
+	if err := os.RemoveAll(workspaceDir); err != nil {
+		pkg.Error(c, http.StatusInternalServerError, "清理工作空间失败: "+err.Error())
+		return
+	}
+	pkg.Success(c, gin.H{"message": "工作空间已清理"})
+}
+
+// DELETE /api/v1/system/caches/:projectId - clean project build cache
+func (h *SystemHandler) CleanCache(c *gin.Context) {
+	if config.C == nil {
+		pkg.Error(c, http.StatusInternalServerError, "配置未加载")
+		return
+	}
+	projectID, err := strconv.ParseUint(c.Param("projectId"), 10, 32)
+	if err != nil {
+		pkg.Error(c, http.StatusBadRequest, "参数错误")
+		return
+	}
+	cacheDir := filepath.Join(config.C.Build.CacheDir, fmt.Sprintf("project-%d", projectID))
+	if err := os.RemoveAll(cacheDir); err != nil {
+		pkg.Error(c, http.StatusInternalServerError, "清理缓存失败: "+err.Error())
+		return
+	}
+	pkg.Success(c, gin.H{"message": "构建缓存已清理"})
+}
+
+// dirSize calculates the total size of a directory in bytes.
+func dirSize(path string) int64 {
+	var size int64
+	filepath.Walk(path, func(_ string, info os.FileInfo, err error) error {
+		if err != nil {
+			return nil
+		}
+		if !info.IsDir() {
+			size += info.Size()
+		}
+		return nil
+	})
+	return size
 }

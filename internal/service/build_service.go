@@ -3,6 +3,7 @@ package service
 import (
 	"buildflow/internal/model"
 	"buildflow/internal/repository"
+	"sort"
 )
 
 type BuildService struct {
@@ -109,10 +110,17 @@ func (s *BuildService) Cancel(id uint) error {
 
 // DashboardStats holds dashboard statistics.
 type DashboardStats struct {
-	TotalProjects int64   `json:"total_projects"`
-	TodayBuilds   int64   `json:"today_builds"`
-	SuccessRate   float64 `json:"success_rate"`
-	ActiveCount   int     `json:"active_count"`
+	TotalProjects int64                 `json:"total_projects"`
+	TodayBuilds   int64                 `json:"today_builds"`
+	SuccessRate   float64               `json:"success_rate"`
+	ActiveCount   int                   `json:"active_count"`
+	GroupSummary  []ProjectGroupSummary `json:"group_summary"`
+}
+
+type ProjectGroupSummary struct {
+	GroupName        string `json:"group_name"`
+	ProjectCount     int    `json:"project_count"`
+	EnvironmentCount int    `json:"environment_count"`
 }
 
 func (s *BuildService) GetDashboardStats() (*DashboardStats, error) {
@@ -145,11 +153,35 @@ func (s *BuildService) GetDashboardStats() (*DashboardStats, error) {
 			successRate = float64(success) / float64(total) * 100
 		}
 	}
+	projects, err := s.projectRepo.ListAll(nil)
+	if err != nil {
+		return nil, err
+	}
+	groupStats := make(map[string]*ProjectGroupSummary)
+	for _, project := range projects {
+		groupName := project.GroupName
+		if groupName == "" {
+			groupName = "未分组"
+		}
+		if _, exists := groupStats[groupName]; !exists {
+			groupStats[groupName] = &ProjectGroupSummary{GroupName: groupName}
+		}
+		groupStats[groupName].ProjectCount++
+		groupStats[groupName].EnvironmentCount += len(project.Environments)
+	}
+	groupSummary := make([]ProjectGroupSummary, 0, len(groupStats))
+	for _, item := range groupStats {
+		groupSummary = append(groupSummary, *item)
+	}
+	sort.Slice(groupSummary, func(i, j int) bool {
+		return groupSummary[i].GroupName < groupSummary[j].GroupName
+	})
 	return &DashboardStats{
 		TotalProjects: totalProjects,
 		TodayBuilds:   todayBuilds,
 		SuccessRate:   successRate,
 		ActiveCount:   len(activeBuilds),
+		GroupSummary:  groupSummary,
 	}, nil
 }
 

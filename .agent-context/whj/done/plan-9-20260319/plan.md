@@ -1,6 +1,6 @@
 # Windows 部署支持
 
-> 状态: 未执行
+> 状态: 已执行
 
 ## 目标
 
@@ -52,5 +52,21 @@
 - 部署后脚本在 Windows 上正确执行（PowerShell/cmd）。
 
 ## 影响范围
+
+- `cmd/agent/main.go`
+- `internal/model/server.go`
+- `internal/service/server_service.go`
+- `internal/handler/server_handler.go`
+- `internal/deployer/deployer.go`
+- `internal/deployer/path.go`
+- `internal/deployer/ssh.go`
+- `internal/deployer/sftp.go`
+- `internal/deployer/scp.go`
+- `internal/deployer/rsync.go`
+- `internal/deployer/agent.go`
+- `internal/engine/pipeline.go`
+- `web/src/lib/constants.ts`
+- `web/src/pages/servers/form.tsx`
+- `web/src/pages/projects/environment-form.tsx`
 
 ## 历史补丁

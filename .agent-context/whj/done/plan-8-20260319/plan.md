@@ -1,6 +1,6 @@
 # 构建缓存与工作空间优化
 
-> 状态: 未执行
+> 状态: 已执行
 
 ## 目标
 
@@ -34,5 +34,16 @@
 - 清理缓存/工作空间后再次构建正常。
 
 ## 影响范围
+
+- `config.yaml` — 新增 `build.cache_dir` 配置项
+- `internal/config/config.go` — BuildConfig 新增 CacheDir 字段及路径解析
+- `internal/model/environment.go` — Environment 新增 CachePaths 字段
+- `internal/engine/pipeline.go` — 新增缓存恢复/保存逻辑 + parseCachePaths/copyDir/copyFile 辅助函数
+- `internal/handler/project_handler.go` — 环境创建/更新请求结构新增 CachePaths 字段
+- `internal/handler/system_handler.go` — 新增 ListWorkspaces/CleanWorkspace/CleanCache 接口
+- `internal/service/project_service.go` — EnvironmentExport 新增 CachePaths 字段
+- `cmd/server/main.go` — Pipeline 构造传递 cacheDir、创建缓存目录、注册新路由
+- `web/src/pages/projects/environment-form.tsx` — 新增「构建缓存路径」配置项
+- `web/src/pages/settings.tsx` — 新增「存储管理」区域
 
 ## 历史补丁

@@ -5,6 +5,7 @@ import (
 	"bufio"
 	"compress/gzip"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -26,6 +27,8 @@ type Pipeline struct {
 	buildRepo    *repository.BuildRepository
 	projectRepo  *repository.ProjectRepository
 	envRepo      *repository.EnvironmentRepository
+	envVarRepo   *repository.EnvVarRepository
+	varGroupRepo *repository.VarGroupRepository
 	serverRepo   *repository.ServerRepository
 	notifRepo    *repository.NotificationRepository
 	hub          *ws.Hub
@@ -33,23 +36,28 @@ type Pipeline struct {
 	workspaceDir string
 	artifactDir  string
 	logDir       string
+	cacheDir     string
 }
 
 func NewPipeline(
 	buildRepo *repository.BuildRepository,
 	projectRepo *repository.ProjectRepository,
 	envRepo *repository.EnvironmentRepository,
+	envVarRepo *repository.EnvVarRepository,
+	varGroupRepo *repository.VarGroupRepository,
 	serverRepo *repository.ServerRepository,
 	notifRepo *repository.NotificationRepository,
 	hub *ws.Hub,
 	logger *zap.Logger,
-	workspaceDir, artifactDir, logDir string,
+	workspaceDir, artifactDir, logDir, cacheDir string,
 ) *Pipeline {
 	return &Pipeline{
-		buildRepo:    buildRepo, projectRepo: projectRepo, envRepo: envRepo,
+		buildRepo: buildRepo, projectRepo: projectRepo, envRepo: envRepo,
+		envVarRepo: envVarRepo, varGroupRepo: varGroupRepo,
 		serverRepo: serverRepo, notifRepo: notifRepo,
 		hub: hub, logger: logger,
 		workspaceDir: workspaceDir, artifactDir: artifactDir, logDir: logDir,
+		cacheDir: cacheDir,
 	}
 }
 
@@ -133,6 +141,32 @@ func (p *Pipeline) Execute(ctx context.Context, buildID uint) {
 		}
 	}
 
+	// Stage 1.5: Restore cache
+	cachePaths := parseCachePaths(env.CachePaths)
+	if len(cachePaths) > 0 && p.cacheDir != "" {
+		writeLine("=== Stage: Restoring Cache ===")
+		envCacheDir := filepath.Join(p.cacheDir, fmt.Sprintf("project-%d", project.ID), fmt.Sprintf("env-%d", env.ID))
+		restoredCount := 0
+		for _, cp := range cachePaths {
+			src := filepath.Join(envCacheDir, cp)
+			dst := filepath.Join(workDir, cp)
+			if _, err := os.Stat(src); err == nil {
+				os.MkdirAll(filepath.Dir(dst), 0755)
+				if err := copyDir(src, dst); err != nil {
+					writeLine(fmt.Sprintf("WARNING: 恢复缓存 %s 失败: %s", cp, err.Error()))
+				} else {
+					restoredCount++
+					writeLine(fmt.Sprintf("Restored cache: %s", cp))
+				}
+			}
+		}
+		if restoredCount == 0 {
+			writeLine("No cache found (first build or cache cleared)")
+		} else {
+			writeLine(fmt.Sprintf("Restored %d cache entries", restoredCount))
+		}
+	}
+
 	// Stage 2: Build
 	if ctx.Err() != nil {
 		p.cancelBuild(build)
@@ -143,8 +177,14 @@ func (p *Pipeline) Execute(ctx context.Context, buildID uint) {
 
 	// Inject env vars
 	envVars := os.Environ()
-	if env.EnvVars != "" {
-		envVars = append(envVars, parseEnvVars(env.EnvVars)...)
+	resolvedEnvVars, err := p.resolveEnvironmentVars(env.ID)
+	if err != nil {
+		p.failBuild(build, "解析环境变量失败: "+err.Error())
+		writeLine("ERROR: " + err.Error())
+		return
+	}
+	if len(resolvedEnvVars) > 0 {
+		envVars = append(envVars, resolvedEnvVars...)
 	}
 
 	// Select interpreter based on build script type
@@ -189,6 +229,31 @@ func (p *Pipeline) Execute(ctx context.Context, buildID uint) {
 	}
 
 	writeLine("=== Build completed successfully ===")
+
+	// Stage 2.5: Save cache
+	if len(cachePaths) > 0 && p.cacheDir != "" {
+		writeLine("=== Stage: Saving Cache ===")
+		envCacheDir := filepath.Join(p.cacheDir, fmt.Sprintf("project-%d", project.ID), fmt.Sprintf("env-%d", env.ID))
+		savedCount := 0
+		for _, cp := range cachePaths {
+			src := filepath.Join(workDir, cp)
+			dst := filepath.Join(envCacheDir, cp)
+			if info, err := os.Stat(src); err == nil && info.IsDir() {
+				os.MkdirAll(filepath.Dir(dst), 0755)
+				// Remove old cache entry first to avoid stale files
+				os.RemoveAll(dst)
+				if err := copyDir(src, dst); err != nil {
+					writeLine(fmt.Sprintf("WARNING: 保存缓存 %s 失败: %s", cp, err.Error()))
+				} else {
+					savedCount++
+					writeLine(fmt.Sprintf("Saved cache: %s", cp))
+				}
+			}
+		}
+		if savedCount > 0 {
+			writeLine(fmt.Sprintf("Saved %d cache entries", savedCount))
+		}
+	}
 
 	// Stage 3: Collect artifact
 	if env.BuildOutputDir != "" {
@@ -246,10 +311,13 @@ func (p *Pipeline) Execute(ctx context.Context, buildID uint) {
 			Server: deployer.ServerInfo{
 				Host:       server.Host,
 				Port:       server.Port,
+				OSType:     server.OSType,
 				Username:   server.Username,
 				AuthType:   server.AuthType,
 				Password:   password,
 				PrivateKey: privateKey,
+				AgentURL:   server.AgentURL,
+				AgentToken: server.AgentToken,
 			},
 			RemotePath: env.DeployPath,
 			Logger:     writeLine,
@@ -269,7 +337,7 @@ func (p *Pipeline) Execute(ctx context.Context, buildID uint) {
 		// Post-deploy script
 		if env.PostDeployScript != "" {
 			writeLine("=== Executing post-deploy script ===")
-			if err := deployer.ExecuteRemoteScript(ctx, deployOpts.Server, env.PostDeployScript, writeLine); err != nil {
+			if err := deployer.ExecuteRemoteScriptInDir(ctx, deployOpts.Server, deployOpts.RemotePath, env.PostDeployScript, writeLine); err != nil {
 				if ctx.Err() != nil {
 					p.cancelBuild(build)
 					return
@@ -373,24 +441,49 @@ func scanLines(r io.Reader, fn func(string)) {
 	}
 }
 
-// parseEnvVars parses JSON env vars to KEY=VALUE format
-func parseEnvVars(jsonStr string) []string {
-	var result []string
-	jsonStr = strings.TrimSpace(jsonStr)
-	if jsonStr == "" || jsonStr == "{}" {
-		return result
+func (p *Pipeline) resolveEnvironmentVars(environmentID uint) ([]string, error) {
+	groupItems, err := p.varGroupRepo.ListItemsByEnvironmentID(environmentID)
+	if err != nil {
+		return nil, err
 	}
-	jsonStr = strings.Trim(jsonStr, "{}")
-	parts := strings.Split(jsonStr, ",")
-	for _, part := range parts {
-		kv := strings.SplitN(part, ":", 2)
-		if len(kv) == 2 {
-			key := strings.Trim(strings.TrimSpace(kv[0]), `"`)
-			val := strings.Trim(strings.TrimSpace(kv[1]), `"`)
-			result = append(result, key+"="+val)
+	envVars, err := p.envVarRepo.ListByEnvironmentID(environmentID)
+	if err != nil {
+		return nil, err
+	}
+	merged := make(map[string]string)
+	order := make([]string, 0, len(groupItems)+len(envVars))
+	for _, item := range groupItems {
+		value, err := decryptPipelineValue(item.Value, item.IsSecret)
+		if err != nil {
+			return nil, err
 		}
+		if _, exists := merged[item.Key]; !exists {
+			order = append(order, item.Key)
+		}
+		merged[item.Key] = value
 	}
-	return result
+	for _, item := range envVars {
+		value, err := decryptPipelineValue(item.Value, item.IsSecret)
+		if err != nil {
+			return nil, err
+		}
+		if _, exists := merged[item.Key]; !exists {
+			order = append(order, item.Key)
+		}
+		merged[item.Key] = value
+	}
+	result := make([]string, 0, len(order))
+	for _, key := range order {
+		result = append(result, key+"="+merged[key])
+	}
+	return result, nil
+}
+
+func decryptPipelineValue(value string, isSecret bool) (string, error) {
+	if !isSecret {
+		return value, nil
+	}
+	return pkg.Decrypt(value)
 }
 
 // createTarGz creates a tar.gz archive from a directory
@@ -433,4 +526,76 @@ func createTarGz(targetPath, sourceDir string) error {
 		_, err = io.Copy(tw, f)
 		return err
 	})
+}
+
+// parseCachePaths parses a JSON array string into a list of paths.
+// Supports both JSON array format (["node_modules", ".npm"]) and
+// newline-separated format.
+func parseCachePaths(raw string) []string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil
+	}
+	// Try JSON array first
+	var paths []string
+	if err := json.Unmarshal([]byte(raw), &paths); err == nil {
+		var result []string
+		for _, p := range paths {
+			p = strings.TrimSpace(p)
+			if p != "" {
+				result = append(result, p)
+			}
+		}
+		return result
+	}
+	// Fallback: newline-separated
+	var result []string
+	for _, line := range strings.Split(raw, "\n") {
+		line = strings.TrimSpace(line)
+		if line != "" {
+			result = append(result, line)
+		}
+	}
+	return result
+}
+
+// copyDir recursively copies a directory from src to dst.
+func copyDir(src, dst string) error {
+	srcInfo, err := os.Stat(src)
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(dst, srcInfo.Mode()); err != nil {
+		return err
+	}
+	return filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		relPath, err := filepath.Rel(src, path)
+		if err != nil {
+			return err
+		}
+		dstPath := filepath.Join(dst, relPath)
+		if info.IsDir() {
+			return os.MkdirAll(dstPath, info.Mode())
+		}
+		return copyFile(path, dstPath, info.Mode())
+	})
+}
+
+// copyFile copies a single file from src to dst.
+func copyFile(src, dst string, mode os.FileMode) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+	out, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, mode)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+	_, err = io.Copy(out, in)
+	return err
 }

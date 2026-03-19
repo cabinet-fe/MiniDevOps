@@ -38,8 +38,18 @@ func (r *ProjectRepository) List(page, pageSize int, createdBy *uint) ([]model.P
 		query = query.Where("created_by = ?", *createdBy)
 	}
 	query.Count(&total)
-	err := query.Offset((page-1)*pageSize).Limit(pageSize).Order("id DESC").Find(&projects).Error
+	err := query.Preload("Environments").Offset((page - 1) * pageSize).Limit(pageSize).Order("id DESC").Find(&projects).Error
 	return projects, total, err
+}
+
+func (r *ProjectRepository) ListAll(createdBy *uint) ([]model.Project, error) {
+	var projects []model.Project
+	query := r.db.Preload("Environments").Order("group_name ASC, name ASC")
+	if createdBy != nil {
+		query = query.Where("created_by = ?", *createdBy)
+	}
+	err := query.Find(&projects).Error
+	return projects, err
 }
 
 func (r *ProjectRepository) Update(project *model.Project) error {

@@ -63,18 +63,24 @@ interface Environment {
   deploy_method: string
   deploy_path: string
   post_deploy_script: string
-  env_vars: string
   cron_expression: string
   cron_enabled: boolean
   sort_order: number
+  var_group_ids: number[]
 }
 
 interface Project {
   id: number
   name: string
   description: string
+  group_name: string
+  tags: string
   repo_url: string
   webhook_secret?: string
+  webhook_type: string
+  webhook_ref_path: string
+  webhook_commit_path: string
+  webhook_message_path: string
   environments: Environment[]
 }
 
@@ -88,6 +94,39 @@ interface Build {
   commit_message: string
   duration_ms: number
   created_at: string
+}
+
+const WEBHOOK_GUIDES: Record<string, { title: string; headers: string[]; sample: string }> = {
+  auto: {
+    title: '自动识别',
+    headers: ['GitHub: `X-GitHub-Event: push`', 'GitLab: `X-Gitlab-Event: Push Hook`', 'Gitea: `X-Gitea-Event: push`', 'Bitbucket: `X-Event-Key: repo:push`'],
+    sample: '服务端会按请求头自动识别平台并解析 push payload。',
+  },
+  github: {
+    title: 'GitHub',
+    headers: ['Header: `X-GitHub-Event: push`'],
+    sample: '仓库 Webhook 选择 JSON，触发事件勾选 push。',
+  },
+  gitlab: {
+    title: 'GitLab',
+    headers: ['Header: `X-Gitlab-Event: Push Hook`'],
+    sample: 'GitLab 项目集成里启用 Push events 即可。',
+  },
+  gitea: {
+    title: 'Gitea',
+    headers: ['Header: `X-Gitea-Event: push`'],
+    sample: 'Gitea Webhook 选择 Gitea/GitHub 风格 JSON，触发 push。',
+  },
+  bitbucket: {
+    title: 'Bitbucket',
+    headers: ['Header: `X-Event-Key: repo:push`'],
+    sample: 'Bitbucket Cloud/Server 推送事件会使用 `push.changes[0]` 结构。',
+  },
+  generic: {
+    title: '通用 JSON',
+    headers: ['自定义 JSONPath: `$.ref`、`$.head_commit.id`、`$.head_commit.message`'],
+    sample: '支持 `$.field` 与 `$.list[0].field` 形式的路径。',
+  },
 }
 
 export function ProjectDetailPage() {
@@ -168,6 +207,8 @@ export function ProjectDetailPage() {
   const webhookUrl = project.webhook_secret
     ? `${window.location.origin}/api/v1/webhook/${project.id}/${project.webhook_secret}`
     : ''
+  const tagList = (project.tags || '').split(',').map((item) => item.trim()).filter(Boolean)
+  const webhookGuide = WEBHOOK_GUIDES[project.webhook_type || 'auto'] ?? WEBHOOK_GUIDES.auto
 
   return (
     <div className="space-y-6">
@@ -175,6 +216,14 @@ export function ProjectDetailPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight">{project.name}</h1>
           <p className="mt-1 text-sm text-zinc-500">{project.description || '暂无描述'}</p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Badge variant="outline">{project.group_name || '未分组'}</Badge>
+            {tagList.map((tag) => (
+              <Badge key={tag} variant="secondary">
+                {tag}
+              </Badge>
+            ))}
+          </div>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" onClick={() => setEditDialogOpen(true)}>编辑</Button>
@@ -207,6 +256,31 @@ export function ProjectDetailPage() {
               </div>
             </div>
           )}
+          <div className="rounded-xl border border-zinc-200 bg-zinc-50/80 p-4 dark:border-zinc-800 dark:bg-zinc-900/50">
+            <p className="text-sm font-medium">{webhookGuide.title} 配置指引</p>
+            <div className="mt-2 space-y-1 text-sm text-zinc-500">
+              {webhookGuide.headers.map((header) => (
+                <p key={header}>{header}</p>
+              ))}
+            </div>
+            <p className="mt-3 text-sm text-zinc-600 dark:text-zinc-300">{webhookGuide.sample}</p>
+            {project.webhook_type === 'generic' && (
+              <div className="mt-3 grid gap-2 text-xs text-zinc-500 sm:grid-cols-3">
+                <div>
+                  <p className="font-medium text-zinc-700 dark:text-zinc-200">Ref</p>
+                  <p className="font-mono">{project.webhook_ref_path || '-'}</p>
+                </div>
+                <div>
+                  <p className="font-medium text-zinc-700 dark:text-zinc-200">Commit</p>
+                  <p className="font-mono">{project.webhook_commit_path || '-'}</p>
+                </div>
+                <div>
+                  <p className="font-medium text-zinc-700 dark:text-zinc-200">Message</p>
+                  <p className="font-mono">{project.webhook_message_path || '-'}</p>
+                </div>
+              </div>
+            )}
+          </div>
         </CardContent>
       </Card>
 
@@ -256,6 +330,10 @@ export function ProjectDetailPage() {
                     <div>
                       <p className="text-xs text-zinc-500">部署方式</p>
                       <p className="font-medium">{env.deploy_method || '-'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-zinc-500">变量组</p>
+                      <p className="font-medium">{env.var_group_ids?.length ?? 0} 个</p>
                     </div>
                     <div>
                       <p className="text-xs text-zinc-500">部署路径</p>

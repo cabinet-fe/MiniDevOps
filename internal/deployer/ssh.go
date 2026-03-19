@@ -4,10 +4,15 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"strings"
+	"time"
 
 	"golang.org/x/crypto/ssh"
 )
@@ -55,6 +60,10 @@ func parsePrivateKey(pem string) (ssh.Signer, error) {
 
 // ExecuteRemoteScript connects via SSH and executes a script, streaming output to logFn
 func ExecuteRemoteScript(ctx context.Context, server ServerInfo, script string, logFn func(string)) error {
+	if server.AuthType == "agent" {
+		return executeAgentScript(ctx, server, "", script, logFn)
+	}
+
 	config, err := CreateSSHClientConfig(server)
 	if err != nil {
 		return err
@@ -81,7 +90,70 @@ func ExecuteRemoteScript(ctx context.Context, server ServerInfo, script string, 
 	session.Stdout = &stdout
 	session.Stderr = &stderr
 
-	if err := session.Run(script); err != nil {
+	command := wrapRemoteScript(server, "", script)
+	if err := session.Run(command); err != nil {
+		if stdout.Len() > 0 {
+			for _, line := range strings.Split(strings.TrimSpace(stdout.String()), "\n") {
+				logFn(line)
+			}
+		}
+		if stderr.Len() > 0 {
+			for _, line := range strings.Split(strings.TrimSpace(stderr.String()), "\n") {
+				logFn("stderr: " + line)
+			}
+		}
+		return fmt.Errorf("script execution: %w", err)
+	}
+
+	if stdout.Len() > 0 {
+		for _, line := range strings.Split(strings.TrimSpace(stdout.String()), "\n") {
+			logFn(line)
+		}
+	}
+	if stderr.Len() > 0 {
+		for _, line := range strings.Split(strings.TrimSpace(stderr.String()), "\n") {
+			logFn("stderr: " + line)
+		}
+	}
+	return nil
+}
+
+func ExecuteRemoteScriptInDir(ctx context.Context, server ServerInfo, workDir, script string, logFn func(string)) error {
+	if strings.TrimSpace(script) == "" {
+		return nil
+	}
+	if server.AuthType == "agent" {
+		return executeAgentScript(ctx, server, workDir, script, logFn)
+	}
+
+	config, err := CreateSSHClientConfig(server)
+	if err != nil {
+		return err
+	}
+
+	addr := fmt.Sprintf("%s:%d", server.Host, server.Port)
+	if server.Port == 0 {
+		addr = server.Host + ":22"
+	}
+
+	client, err := ssh.Dial("tcp", addr, config)
+	if err != nil {
+		return fmt.Errorf("ssh dial: %w", err)
+	}
+	defer client.Close()
+
+	session, err := client.NewSession()
+	if err != nil {
+		return fmt.Errorf("new session: %w", err)
+	}
+	defer session.Close()
+
+	var stdout, stderr bytes.Buffer
+	session.Stdout = &stdout
+	session.Stderr = &stderr
+
+	command := wrapRemoteScript(server, workDir, script)
+	if err := session.Run(command); err != nil {
 		if stdout.Len() > 0 {
 			for _, line := range strings.Split(strings.TrimSpace(stdout.String()), "\n") {
 				logFn(line)
@@ -159,4 +231,89 @@ func runAndLog(cmd *exec.Cmd, logFn func(string)) error {
 		logFn(scanner.Text())
 	}
 	return cmd.Wait()
+}
+
+func wrapRemoteScript(server ServerInfo, workDir, script string) string {
+	trimmedScript := strings.TrimSpace(script)
+	if trimmedScript == "" {
+		return ""
+	}
+
+	remoteDir := normalizeRemotePath(server, workDir)
+	if isWindowsServer(server) {
+		if remoteDir == "" {
+			return fmt.Sprintf("powershell -NoProfile -NonInteractive -Command %s", quoteForPowershell(trimmedScript))
+		}
+		psScript := fmt.Sprintf("Set-Location -Path %s; %s", quoteForPowershell(remoteDir), trimmedScript)
+		return fmt.Sprintf("powershell -NoProfile -NonInteractive -Command %s", quoteForPowershell(psScript))
+	}
+
+	if remoteDir == "" {
+		return fmt.Sprintf("sh -lc %s", quoteForShell(trimmedScript))
+	}
+	shScript := fmt.Sprintf("cd %s && %s", quoteForShell(remoteDir), trimmedScript)
+	return fmt.Sprintf("sh -lc %s", quoteForShell(shScript))
+}
+
+func quoteForShell(value string) string {
+	return "'" + strings.ReplaceAll(value, "'", `'\''`) + "'"
+}
+
+func quoteForPowershell(value string) string {
+	return "'" + strings.ReplaceAll(value, "'", "''") + "'"
+}
+
+func executeAgentScript(ctx context.Context, server ServerInfo, workDir, script string, logFn func(string)) error {
+	execURL, err := joinAgentURL(server.AgentURL, "exec")
+	if err != nil {
+		return err
+	}
+
+	payload := map[string]string{
+		"script":   script,
+		"work_dir": normalizeRemotePath(server, workDir),
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, execURL, bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "Bearer "+server.AgentToken)
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{Timeout: 60 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("agent exec failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 2*1024*1024))
+	if len(respBody) > 0 && logFn != nil {
+		for _, line := range strings.Split(strings.TrimSpace(string(respBody)), "\n") {
+			if line != "" {
+				logFn(line)
+			}
+		}
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("agent exec failed: %s", strings.TrimSpace(string(respBody)))
+	}
+	return nil
+}
+
+func joinAgentURL(baseURL, path string) (string, error) {
+	parsed, err := url.Parse(strings.TrimSpace(baseURL))
+	if err != nil {
+		return "", fmt.Errorf("parse agent url: %w", err)
+	}
+	joined, err := url.JoinPath(parsed.String(), path)
+	if err != nil {
+		return "", fmt.Errorf("join agent url: %w", err)
+	}
+	return joined, nil
 }

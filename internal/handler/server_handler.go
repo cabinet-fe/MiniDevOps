@@ -37,12 +37,15 @@ func (h *ServerHandler) List(c *gin.Context) {
 func (h *ServerHandler) Create(c *gin.Context) {
 	var req struct {
 		Name        string `json:"name" binding:"required"`
-		Host        string `json:"host" binding:"required"`
+		Host        string `json:"host"`
 		Port        int    `json:"port"`
-		Username    string `json:"username" binding:"required"`
+		OSType      string `json:"os_type"`
+		Username    string `json:"username"`
 		AuthType    string `json:"auth_type" binding:"required"`
 		Password    string `json:"password"`
 		PrivateKey  string `json:"private_key"`
+		AgentURL    string `json:"agent_url"`
+		AgentToken  string `json:"agent_token"`
 		Description string `json:"description"`
 		Tags        string `json:"tags"`
 	}
@@ -50,17 +53,20 @@ func (h *ServerHandler) Create(c *gin.Context) {
 		pkg.Error(c, http.StatusBadRequest, "参数错误")
 		return
 	}
-	if req.Port == 0 {
+	if req.Port == 0 && req.AuthType != "agent" {
 		req.Port = 22
 	}
 	server := &model.Server{
 		Name:        req.Name,
 		Host:        req.Host,
 		Port:        req.Port,
+		OSType:      req.OSType,
 		Username:    req.Username,
 		AuthType:    req.AuthType,
 		Password:    req.Password,
 		PrivateKey:  req.PrivateKey,
+		AgentURL:    req.AgentURL,
+		AgentToken:  req.AgentToken,
 		Description: req.Description,
 		Tags:        req.Tags,
 		CreatedBy:   middleware.GetUserID(c),
@@ -108,10 +114,13 @@ func (h *ServerHandler) Update(c *gin.Context) {
 		Name        *string `json:"name"`
 		Host        *string `json:"host"`
 		Port        *int    `json:"port"`
+		OSType      *string `json:"os_type"`
 		Username    *string `json:"username"`
 		AuthType    *string `json:"auth_type"`
 		Password    *string `json:"password"`
 		PrivateKey  *string `json:"private_key"`
+		AgentURL    *string `json:"agent_url"`
+		AgentToken  *string `json:"agent_token"`
 		Description *string `json:"description"`
 		Tags        *string `json:"tags"`
 	}
@@ -128,6 +137,9 @@ func (h *ServerHandler) Update(c *gin.Context) {
 	if req.Port != nil {
 		server.Port = *req.Port
 	}
+	if req.OSType != nil {
+		server.OSType = *req.OSType
+	}
 	if req.Username != nil {
 		server.Username = *req.Username
 	}
@@ -139,6 +151,12 @@ func (h *ServerHandler) Update(c *gin.Context) {
 	}
 	if req.PrivateKey != nil {
 		server.PrivateKey = *req.PrivateKey
+	}
+	if req.AgentURL != nil {
+		server.AgentURL = *req.AgentURL
+	}
+	if req.AgentToken != nil {
+		server.AgentToken = *req.AgentToken
 	}
 	if req.Description != nil {
 		server.Description = *req.Description

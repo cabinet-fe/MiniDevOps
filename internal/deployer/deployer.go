@@ -5,10 +5,13 @@ import "context"
 type ServerInfo struct {
 	Host       string
 	Port       int
+	OSType     string
 	Username   string
 	AuthType   string
 	Password   string
 	PrivateKey string
+	AgentURL   string
+	AgentToken string
 }
 
 type DeployOptions struct {
@@ -30,6 +33,8 @@ func NewDeployer(method string) Deployer {
 		return &SFTPDeployer{}
 	case "scp":
 		return &SCPDeployer{}
+	case "agent":
+		return &AgentDeployer{}
 	default:
 		return &RsyncDeployer{}
 	}

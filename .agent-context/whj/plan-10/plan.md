@@ -1,6 +1,6 @@
 # 环境变量增强、项目分组与多平台 Webhook
 
-> 状态: 未执行
+> 状态: 已执行
 
 ## 目标
 
@@ -55,5 +55,26 @@
 - Gitea/Bitbucket Webhook 可正确触发构建。
 
 ## 影响范围
+
+- `cmd/server/main.go`
+- `internal/engine/pipeline.go`
+- `internal/handler/project_handler.go`
+- `internal/handler/webhook_handler.go`
+- `internal/model/database.go`
+- `internal/model/environment.go`
+- `internal/model/project.go`
+- `internal/model/variable.go`
+- `internal/repository/env_var_repo.go`
+- `internal/repository/project_repo.go`
+- `internal/repository/var_group_repo.go`
+- `internal/service/build_service.go`
+- `internal/service/project_service.go`
+- `web/src/lib/constants.ts`
+- `web/src/pages/dashboard.tsx`
+- `web/src/pages/projects/detail.tsx`
+- `web/src/pages/projects/environment-form.tsx`
+- `web/src/pages/projects/form.tsx`
+- `web/src/pages/projects/list.tsx`
+- `web/src/pages/settings.tsx`
 
 ## 历史补丁

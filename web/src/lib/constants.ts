@@ -18,11 +18,18 @@ export const DEPLOY_METHODS = [
   { value: 'rsync', label: 'Rsync' },
   { value: 'sftp', label: 'SFTP' },
   { value: 'scp', label: 'SCP' },
+  { value: 'agent', label: 'Agent' },
 ]
 
 export const AUTH_TYPES = [
   { value: 'password', label: '密码' },
   { value: 'key', label: 'SSH密钥' },
+  { value: 'agent', label: 'Agent' },
+]
+
+export const OS_TYPES = [
+  { value: 'linux', label: 'Linux' },
+  { value: 'windows', label: 'Windows' },
 ]
 
 export const REPO_AUTH_TYPES = [
@@ -35,4 +42,13 @@ export const BUILD_SCRIPT_TYPES = [
   { value: 'bash', label: 'Bash', placeholder: 'npm install && npm run build' },
   { value: 'node', label: 'Node.js', placeholder: "const { execSync } = require('child_process');\nexecSync('npm install && npm run build', { stdio: 'inherit' });" },
   { value: 'python', label: 'Python', placeholder: "import subprocess\nsubprocess.run(['npm', 'install'], check=True)\nsubprocess.run(['npm', 'run', 'build'], check=True)" },
+]
+
+export const WEBHOOK_TYPES = [
+  { value: 'auto', label: '自动识别' },
+  { value: 'github', label: 'GitHub' },
+  { value: 'gitlab', label: 'GitLab' },
+  { value: 'gitea', label: 'Gitea' },
+  { value: 'bitbucket', label: 'Bitbucket' },
+  { value: 'generic', label: '通用 JSON' },
 ]

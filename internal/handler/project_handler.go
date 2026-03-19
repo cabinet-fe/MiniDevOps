@@ -46,13 +46,19 @@ func (h *ProjectHandler) List(c *gin.Context) {
 // POST /api/v1/projects - create (set created_by)
 func (h *ProjectHandler) Create(c *gin.Context) {
 	var req struct {
-		Name          string `json:"name" binding:"required"`
-		Description   string `json:"description"`
-		RepoURL       string `json:"repo_url" binding:"required"`
-		RepoAuthType  string `json:"repo_auth_type"`
-		RepoUsername  string `json:"repo_username"`
-		RepoPassword  string `json:"repo_password"`
-		MaxArtifacts  int    `json:"max_artifacts"`
+		Name               string `json:"name" binding:"required"`
+		Description        string `json:"description"`
+		GroupName          string `json:"group_name"`
+		Tags               string `json:"tags"`
+		RepoURL            string `json:"repo_url" binding:"required"`
+		RepoAuthType       string `json:"repo_auth_type"`
+		RepoUsername       string `json:"repo_username"`
+		RepoPassword       string `json:"repo_password"`
+		MaxArtifacts       int    `json:"max_artifacts"`
+		WebhookType        string `json:"webhook_type"`
+		WebhookRefPath     string `json:"webhook_ref_path"`
+		WebhookCommitPath  string `json:"webhook_commit_path"`
+		WebhookMessagePath string `json:"webhook_message_path"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		pkg.Error(c, http.StatusBadRequest, "参数错误")
@@ -62,14 +68,20 @@ func (h *ProjectHandler) Create(c *gin.Context) {
 		req.MaxArtifacts = 5
 	}
 	project := &model.Project{
-		Name:         req.Name,
-		Description:  req.Description,
-		RepoURL:      req.RepoURL,
-		RepoAuthType: req.RepoAuthType,
-		RepoUsername: req.RepoUsername,
-		RepoPassword: req.RepoPassword,
-		MaxArtifacts: req.MaxArtifacts,
-		CreatedBy:    middleware.GetUserID(c),
+		Name:               req.Name,
+		Description:        req.Description,
+		GroupName:          req.GroupName,
+		Tags:               req.Tags,
+		RepoURL:            req.RepoURL,
+		RepoAuthType:       req.RepoAuthType,
+		RepoUsername:       req.RepoUsername,
+		RepoPassword:       req.RepoPassword,
+		MaxArtifacts:       req.MaxArtifacts,
+		WebhookType:        req.WebhookType,
+		WebhookRefPath:     req.WebhookRefPath,
+		WebhookCommitPath:  req.WebhookCommitPath,
+		WebhookMessagePath: req.WebhookMessagePath,
+		CreatedBy:          middleware.GetUserID(c),
 	}
 	if err := h.projectService.Create(project); err != nil {
 		pkg.Error(c, http.StatusBadRequest, err.Error())
@@ -106,13 +118,19 @@ func (h *ProjectHandler) Update(c *gin.Context) {
 		return
 	}
 	var req struct {
-		Name          *string `json:"name"`
-		Description   *string `json:"description"`
-		RepoURL       *string `json:"repo_url"`
-		RepoAuthType  *string `json:"repo_auth_type"`
-		RepoUsername  *string `json:"repo_username"`
-		RepoPassword  *string `json:"repo_password"`
-		MaxArtifacts  *int    `json:"max_artifacts"`
+		Name               *string `json:"name"`
+		Description        *string `json:"description"`
+		GroupName          *string `json:"group_name"`
+		Tags               *string `json:"tags"`
+		RepoURL            *string `json:"repo_url"`
+		RepoAuthType       *string `json:"repo_auth_type"`
+		RepoUsername       *string `json:"repo_username"`
+		RepoPassword       *string `json:"repo_password"`
+		MaxArtifacts       *int    `json:"max_artifacts"`
+		WebhookType        *string `json:"webhook_type"`
+		WebhookRefPath     *string `json:"webhook_ref_path"`
+		WebhookCommitPath  *string `json:"webhook_commit_path"`
+		WebhookMessagePath *string `json:"webhook_message_path"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		pkg.Error(c, http.StatusBadRequest, "参数错误")
@@ -123,6 +141,12 @@ func (h *ProjectHandler) Update(c *gin.Context) {
 	}
 	if req.Description != nil {
 		project.Description = *req.Description
+	}
+	if req.GroupName != nil {
+		project.GroupName = *req.GroupName
+	}
+	if req.Tags != nil {
+		project.Tags = *req.Tags
 	}
 	if req.RepoURL != nil {
 		project.RepoURL = *req.RepoURL
@@ -138,6 +162,18 @@ func (h *ProjectHandler) Update(c *gin.Context) {
 	}
 	if req.MaxArtifacts != nil {
 		project.MaxArtifacts = *req.MaxArtifacts
+	}
+	if req.WebhookType != nil {
+		project.WebhookType = *req.WebhookType
+	}
+	if req.WebhookRefPath != nil {
+		project.WebhookRefPath = *req.WebhookRefPath
+	}
+	if req.WebhookCommitPath != nil {
+		project.WebhookCommitPath = *req.WebhookCommitPath
+	}
+	if req.WebhookMessagePath != nil {
+		project.WebhookMessagePath = *req.WebhookMessagePath
 	}
 	if err := h.projectService.Update(project); err != nil {
 		pkg.Error(c, http.StatusInternalServerError, "更新失败")
@@ -231,10 +267,11 @@ func (h *ProjectHandler) CreateEnvironment(c *gin.Context) {
 		DeployPath       string `json:"deploy_path"`
 		DeployMethod     string `json:"deploy_method"`
 		PostDeployScript string `json:"post_deploy_script"`
-		EnvVars          string `json:"env_vars"`
+		CachePaths       string `json:"cache_paths"`
 		CronExpression   string `json:"cron_expression"`
 		CronEnabled      bool   `json:"cron_enabled"`
 		SortOrder        int    `json:"sort_order"`
+		VarGroupIDs      []uint `json:"var_group_ids"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		pkg.Error(c, http.StatusBadRequest, "参数错误")
@@ -263,12 +300,12 @@ func (h *ProjectHandler) CreateEnvironment(c *gin.Context) {
 		DeployPath:       req.DeployPath,
 		DeployMethod:     req.DeployMethod,
 		PostDeployScript: req.PostDeployScript,
-		EnvVars:          req.EnvVars,
+		CachePaths:       req.CachePaths,
 		CronExpression:   req.CronExpression,
 		CronEnabled:      req.CronEnabled,
 		SortOrder:        req.SortOrder,
 	}
-	if err := h.projectService.CreateEnvironment(env); err != nil {
+	if err := h.projectService.CreateEnvironment(env, req.VarGroupIDs); err != nil {
 		pkg.Error(c, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -316,10 +353,11 @@ func (h *ProjectHandler) UpdateEnvironment(c *gin.Context) {
 		DeployPath       *string `json:"deploy_path"`
 		DeployMethod     *string `json:"deploy_method"`
 		PostDeployScript *string `json:"post_deploy_script"`
-		EnvVars          *string `json:"env_vars"`
+		CachePaths       *string `json:"cache_paths"`
 		CronExpression   *string `json:"cron_expression"`
 		CronEnabled      *bool   `json:"cron_enabled"`
 		SortOrder        *int    `json:"sort_order"`
+		VarGroupIDs      []uint  `json:"var_group_ids"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		pkg.Error(c, http.StatusBadRequest, "参数错误")
@@ -352,8 +390,8 @@ func (h *ProjectHandler) UpdateEnvironment(c *gin.Context) {
 	if req.PostDeployScript != nil {
 		env.PostDeployScript = *req.PostDeployScript
 	}
-	if req.EnvVars != nil {
-		env.EnvVars = *req.EnvVars
+	if req.CachePaths != nil {
+		env.CachePaths = *req.CachePaths
 	}
 	if req.CronExpression != nil {
 		env.CronExpression = *req.CronExpression
@@ -371,7 +409,7 @@ func (h *ProjectHandler) UpdateEnvironment(c *gin.Context) {
 	if req.SortOrder != nil {
 		env.SortOrder = *req.SortOrder
 	}
-	if err := h.projectService.UpdateEnvironment(env); err != nil {
+	if err := h.projectService.UpdateEnvironment(env, req.VarGroupIDs, req.VarGroupIDs != nil); err != nil {
 		pkg.Error(c, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -405,6 +443,150 @@ func (h *ProjectHandler) DeleteEnvironment(c *gin.Context) {
 	pkg.Success(c, nil)
 }
 
+// GET /api/v1/projects/:id/envs/:envId/vars
+func (h *ProjectHandler) ListEnvVars(c *gin.Context) {
+	projectID, envID, ok := parseProjectEnvIDs(c)
+	if !ok {
+		return
+	}
+	items, err := h.projectService.ListEnvVars(projectID, envID)
+	if err != nil {
+		pkg.Error(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	pkg.Success(c, items)
+}
+
+// POST /api/v1/projects/:id/envs/:envId/vars
+func (h *ProjectHandler) CreateEnvVar(c *gin.Context) {
+	projectID, envID, ok := parseProjectEnvIDs(c)
+	if !ok {
+		return
+	}
+	var req struct {
+		Key      string `json:"key" binding:"required"`
+		Value    string `json:"value"`
+		IsSecret bool   `json:"is_secret"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		pkg.Error(c, http.StatusBadRequest, "参数错误")
+		return
+	}
+	if err := h.projectService.CreateEnvVar(projectID, envID, req.Key, req.Value, req.IsSecret); err != nil {
+		pkg.Error(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	items, err := h.projectService.ListEnvVars(projectID, envID)
+	if err != nil {
+		pkg.Error(c, http.StatusInternalServerError, "查询失败")
+		return
+	}
+	pkg.Created(c, items)
+}
+
+// PUT /api/v1/projects/:id/envs/:envId/vars/:varId
+func (h *ProjectHandler) UpdateEnvVar(c *gin.Context) {
+	projectID, envID, ok := parseProjectEnvIDs(c)
+	if !ok {
+		return
+	}
+	varID, err := strconv.ParseUint(c.Param("varId"), 10, 32)
+	if err != nil {
+		pkg.Error(c, http.StatusBadRequest, "参数错误")
+		return
+	}
+	var req struct {
+		Key       string `json:"key" binding:"required"`
+		Value     string `json:"value"`
+		IsSecret  bool   `json:"is_secret"`
+		KeepValue bool   `json:"keep_value"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		pkg.Error(c, http.StatusBadRequest, "参数错误")
+		return
+	}
+	item, err := h.projectService.UpdateEnvVar(projectID, envID, uint(varID), req.Key, req.Value, req.IsSecret, req.KeepValue)
+	if err != nil {
+		pkg.Error(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	pkg.Success(c, item)
+}
+
+// DELETE /api/v1/projects/:id/envs/:envId/vars/:varId
+func (h *ProjectHandler) DeleteEnvVar(c *gin.Context) {
+	projectID, envID, ok := parseProjectEnvIDs(c)
+	if !ok {
+		return
+	}
+	varID, err := strconv.ParseUint(c.Param("varId"), 10, 32)
+	if err != nil {
+		pkg.Error(c, http.StatusBadRequest, "参数错误")
+		return
+	}
+	if err := h.projectService.DeleteEnvVar(projectID, envID, uint(varID)); err != nil {
+		pkg.Error(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	pkg.Success(c, nil)
+}
+
+// GET /api/v1/var-groups
+func (h *ProjectHandler) ListVarGroups(c *gin.Context) {
+	groups, err := h.projectService.ListVarGroups()
+	if err != nil {
+		pkg.Error(c, http.StatusInternalServerError, "查询失败")
+		return
+	}
+	pkg.Success(c, groups)
+}
+
+// POST /api/v1/var-groups
+func (h *ProjectHandler) CreateVarGroup(c *gin.Context) {
+	group, ok := bindVarGroupPayload(c)
+	if !ok {
+		return
+	}
+	if err := h.projectService.CreateVarGroup(group); err != nil {
+		pkg.Error(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	pkg.Created(c, group)
+}
+
+// PUT /api/v1/var-groups/:groupId
+func (h *ProjectHandler) UpdateVarGroup(c *gin.Context) {
+	groupID, err := strconv.ParseUint(c.Param("groupId"), 10, 32)
+	if err != nil {
+		pkg.Error(c, http.StatusBadRequest, "参数错误")
+		return
+	}
+	group, ok := bindVarGroupPayload(c)
+	if !ok {
+		return
+	}
+	group.ID = uint(groupID)
+	if err := h.projectService.UpdateVarGroup(group); err != nil {
+		pkg.Error(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	pkg.Success(c, group)
+}
+
+// DELETE /api/v1/var-groups/:groupId
+func (h *ProjectHandler) DeleteVarGroup(c *gin.Context) {
+	groupID, err := strconv.ParseUint(c.Param("groupId"), 10, 32)
+	if err != nil {
+		pkg.Error(c, http.StatusBadRequest, "参数错误")
+		return
+	}
+	if err := h.projectService.DeleteVarGroup(uint(groupID)); err != nil {
+		pkg.Error(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	pkg.Success(c, nil)
+}
+
 // GET /api/v1/projects/:id/branches - list remote branches
 func (h *ProjectHandler) ListBranches(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
@@ -427,4 +609,51 @@ func (h *ProjectHandler) ListBranches(c *gin.Context) {
 		return
 	}
 	pkg.Success(c, branches)
+}
+
+func parseProjectEnvIDs(c *gin.Context) (uint, uint, bool) {
+	projectID, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		pkg.Error(c, http.StatusBadRequest, "参数错误")
+		return 0, 0, false
+	}
+	envID, err := strconv.ParseUint(c.Param("envId"), 10, 32)
+	if err != nil {
+		pkg.Error(c, http.StatusBadRequest, "参数错误")
+		return 0, 0, false
+	}
+	return uint(projectID), uint(envID), true
+}
+
+func bindVarGroupPayload(c *gin.Context) (*model.VarGroup, bool) {
+	var req struct {
+		Name        string `json:"name" binding:"required"`
+		Description string `json:"description"`
+		Items       []struct {
+			ID        uint   `json:"id"`
+			Key       string `json:"key" binding:"required"`
+			Value     string `json:"value"`
+			IsSecret  bool   `json:"is_secret"`
+			KeepValue bool   `json:"keep_value"`
+		} `json:"items"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		pkg.Error(c, http.StatusBadRequest, "参数错误")
+		return nil, false
+	}
+	group := &model.VarGroup{
+		Name:        req.Name,
+		Description: req.Description,
+		Items:       make([]model.VarGroupItem, 0, len(req.Items)),
+	}
+	for _, item := range req.Items {
+		group.Items = append(group.Items, model.VarGroupItem{
+			ID:       item.ID,
+			Key:      item.Key,
+			Value:    item.Value,
+			IsSecret: item.IsSecret,
+			HasValue: item.KeepValue,
+		})
+	}
+	return group, true
 }

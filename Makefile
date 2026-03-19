@@ -3,11 +3,13 @@
 # Development
 dev:
 	@trap 'kill 0' INT TERM; \
+	mkdir -p cmd/server/dist && touch cmd/server/dist/.gitkeep; \
 	(cd cmd/server && go run . --config ../../config.yaml) & \
 	(cd web && bun run dev) & \
 	wait
 
 dev-backend:
+	@mkdir -p cmd/server/dist && touch cmd/server/dist/.gitkeep
 	cd cmd/server && go run . --config ../../config.yaml
 
 dev-frontend:

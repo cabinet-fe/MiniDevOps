@@ -27,6 +27,7 @@ type BuildConfig struct {
 	WorkspaceDir  string `mapstructure:"workspace_dir"`
 	ArtifactDir   string `mapstructure:"artifact_dir"`
 	LogDir        string `mapstructure:"log_dir"`
+	CacheDir      string `mapstructure:"cache_dir"`
 }
 
 type EncryptionConfig struct {
@@ -91,6 +92,7 @@ func Load(configPath string) (*Config, error) {
 	cfg.Build.WorkspaceDir = resolvePath(configDir, cfg.Build.WorkspaceDir)
 	cfg.Build.ArtifactDir = resolvePath(configDir, cfg.Build.ArtifactDir)
 	cfg.Build.LogDir = resolvePath(configDir, cfg.Build.LogDir)
+	cfg.Build.CacheDir = resolvePath(configDir, cfg.Build.CacheDir)
 
 	C = &cfg
 	return &cfg, nil

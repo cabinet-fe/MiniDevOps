@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/pkg/sftp"
@@ -37,7 +38,7 @@ func (d *SFTPDeployer) Deploy(ctx context.Context, opts DeployOptions) error {
 	}
 	defer sftpClient.Close()
 
-	remotePath := opts.RemotePath
+	remotePath := normalizeRemotePath(opts.Server, opts.RemotePath)
 	if err := mkdirRecursive(sftpClient, remotePath); err != nil {
 		return fmt.Errorf("create remote dir: %w", err)
 	}
@@ -56,30 +57,39 @@ func (d *SFTPDeployer) Deploy(ctx context.Context, opts DeployOptions) error {
 		if err != nil {
 			return err
 		}
-		remoteFile := filepath.Join(remotePath, filepath.ToSlash(relPath))
+		remoteFile := joinRemotePath(opts.Server, remotePath, relPath)
 
 		if info.IsDir() {
 			return mkdirRecursive(sftpClient, remoteFile)
 		}
 
-		return uploadFile(sftpClient, localPath, remoteFile, opts.Logger)
+		return uploadFile(sftpClient, opts.Server, localPath, remoteFile, opts.Logger)
 	})
 }
 
 func mkdirRecursive(c *sftp.Client, path string) error {
-	path = filepath.ToSlash(path)
-	path = strings.Trim(path, "/")
+	path = strings.TrimSpace(path)
 	if path == "" {
 		return nil
 	}
-	parts := strings.Split(path, "/")
-	cur := ""
+	parts, cur := splitRemotePath(path)
+	if cur != "" && !isWindowsDrive(cur) {
+		if err := c.Mkdir(cur); err != nil {
+			if _, statErr := c.Stat(cur); statErr != nil {
+				return err
+			}
+		}
+	}
 	for _, p := range parts {
 		if p == "" {
 			continue
 		}
 		if cur == "" {
 			cur = p
+		} else if strings.HasSuffix(cur, ":") {
+			cur = cur + `\` + p
+		} else if strings.Contains(cur, `\`) || isWindowsDrive(cur) {
+			cur = cur + `\` + p
 		} else {
 			cur = cur + "/" + p
 		}
@@ -93,7 +103,24 @@ func mkdirRecursive(c *sftp.Client, path string) error {
 	return nil
 }
 
-func uploadFile(c *sftp.Client, localPath, remotePath string, logFn func(string)) error {
+func splitRemotePath(path string) ([]string, string) {
+	root := ""
+	trimmed := path
+	if isWindowsDrive(trimmed) {
+		root = trimmed[:2]
+		trimmed = strings.TrimLeft(trimmed[2:], `\/`)
+	}
+	parts := strings.FieldsFunc(trimmed, func(r rune) bool {
+		return r == '/' || r == '\\'
+	})
+	return parts, root
+}
+
+func isWindowsDrive(path string) bool {
+	return regexp.MustCompile(`^[A-Za-z]:`).MatchString(path)
+}
+
+func uploadFile(c *sftp.Client, server ServerInfo, localPath, remotePath string, logFn func(string)) error {
 	if logFn != nil {
 		logFn("Uploading: " + remotePath)
 	}
@@ -103,7 +130,7 @@ func uploadFile(c *sftp.Client, localPath, remotePath string, logFn func(string)
 	}
 	defer src.Close()
 
-	if err := mkdirRecursive(c, filepath.Dir(remotePath)); err != nil {
+	if err := mkdirRecursive(c, remoteDir(server, remotePath)); err != nil {
 		return err
 	}
 

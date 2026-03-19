@@ -35,6 +35,11 @@ interface DashboardStats {
   today_builds: number
   success_rate: number
   active_count: number
+  group_summary: {
+    group_name: string
+    project_count: number
+    environment_count: number
+  }[]
 }
 
 interface Build {
@@ -298,6 +303,30 @@ export function DashboardPage() {
           </CardContent>
         </Card>
       </div>
+
+      <Card className="border-zinc-200 dark:border-zinc-800">
+        <CardHeader>
+          <CardTitle>项目分组概览</CardTitle>
+          <CardDescription>按分组查看项目与环境规模</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {!stats?.group_summary?.length ? (
+            <div className="text-sm text-zinc-500">暂无分组数据</div>
+          ) : (
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+              {stats.group_summary.map((group) => (
+                <div key={group.group_name} className="rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
+                  <p className="font-medium">{group.group_name}</p>
+                  <div className="mt-3 flex items-center gap-3 text-sm text-zinc-500">
+                    <span>{group.project_count} 个项目</span>
+                    <span>{group.environment_count} 个环境</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Recent builds table */}
       <Card className="border-zinc-200 dark:border-zinc-800">

@@ -69,6 +69,8 @@ func main() {
 	serverRepo := repository.NewServerRepository(db)
 	projectRepo := repository.NewProjectRepository(db)
 	envRepo := repository.NewEnvironmentRepository(db)
+	envVarRepo := repository.NewEnvVarRepository(db)
+	varGroupRepo := repository.NewVarGroupRepository(db)
 	buildRepo := repository.NewBuildRepository(db)
 	notifRepo := repository.NewNotificationRepository(db)
 	auditRepo := repository.NewAuditRepository(db)
@@ -80,7 +82,7 @@ func main() {
 	}
 	userService := service.NewUserService(userRepo)
 	serverService := service.NewServerService(serverRepo, envRepo)
-	projectService := service.NewProjectService(projectRepo, envRepo, buildRepo)
+	projectService := service.NewProjectService(projectRepo, envRepo, buildRepo, envVarRepo, varGroupRepo)
 	buildService := service.NewBuildService(buildRepo, projectRepo, envRepo, userRepo)
 	notifService := service.NewNotificationService(notifRepo)
 	auditService := service.NewAuditService(auditRepo)
@@ -90,9 +92,9 @@ func main() {
 
 	// Init build pipeline and scheduler
 	pipeline := engine.NewPipeline(
-		buildRepo, projectRepo, envRepo, serverRepo, notifRepo,
+		buildRepo, projectRepo, envRepo, envVarRepo, varGroupRepo, serverRepo, notifRepo,
 		hub, logger,
-		cfg.Build.WorkspaceDir, cfg.Build.ArtifactDir, cfg.Build.LogDir,
+		cfg.Build.WorkspaceDir, cfg.Build.ArtifactDir, cfg.Build.LogDir, cfg.Build.CacheDir,
 	)
 	scheduler := engine.NewScheduler(cfg.Build.MaxConcurrent, pipeline, logger)
 	scheduler.Start()
@@ -167,7 +169,15 @@ func main() {
 			auth.POST("/projects/:id/envs", projectHandler.CreateEnvironment)
 			auth.PUT("/projects/:id/envs/:envId", projectHandler.UpdateEnvironment)
 			auth.DELETE("/projects/:id/envs/:envId", projectHandler.DeleteEnvironment)
+			auth.GET("/projects/:id/envs/:envId/vars", projectHandler.ListEnvVars)
+			auth.POST("/projects/:id/envs/:envId/vars", projectHandler.CreateEnvVar)
+			auth.PUT("/projects/:id/envs/:envId/vars/:varId", projectHandler.UpdateEnvVar)
+			auth.DELETE("/projects/:id/envs/:envId/vars/:varId", projectHandler.DeleteEnvVar)
 			auth.GET("/projects/:id/branches", projectHandler.ListBranches)
+			auth.GET("/var-groups", projectHandler.ListVarGroups)
+			auth.POST("/var-groups", middleware.RequireRole("admin"), projectHandler.CreateVarGroup)
+			auth.PUT("/var-groups/:groupId", middleware.RequireRole("admin"), projectHandler.UpdateVarGroup)
+			auth.DELETE("/var-groups/:groupId", middleware.RequireRole("admin"), projectHandler.DeleteVarGroup)
 
 			// Builds
 			auth.GET("/builds", buildHandler.ListAll)
@@ -196,6 +206,9 @@ func main() {
 			auth.GET("/system/audit-logs", middleware.RequireRole("admin", "ops"), systemHandler.AuditLogs)
 			auth.POST("/system/backup", middleware.RequireRole("admin"), systemHandler.Backup)
 			auth.POST("/system/restore", middleware.RequireRole("admin"), systemHandler.Restore)
+			auth.GET("/system/workspaces", middleware.RequireRole("admin", "ops"), systemHandler.ListWorkspaces)
+			auth.DELETE("/system/workspaces/:projectId", middleware.RequireRole("admin", "ops"), systemHandler.CleanWorkspace)
+			auth.DELETE("/system/caches/:projectId", middleware.RequireRole("admin", "ops"), systemHandler.CleanCache)
 		}
 
 		// Webhook (public, secret-verified)
@@ -216,6 +229,7 @@ func main() {
 	os.MkdirAll(cfg.Build.WorkspaceDir, 0755)
 	os.MkdirAll(cfg.Build.ArtifactDir, 0755)
 	os.MkdirAll(cfg.Build.LogDir, 0755)
+	os.MkdirAll(cfg.Build.CacheDir, 0755)
 
 	// Start server
 	addr := fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port)

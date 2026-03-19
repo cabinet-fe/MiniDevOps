@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
-import { Loader2 } from 'lucide-react'
+import { Loader2, Plus, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -11,7 +11,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-
 import { Switch } from '@/components/ui/switch'
 import {
   Dialog,
@@ -22,6 +21,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { api } from '@/lib/api'
+import type { PaginatedData } from '@/lib/api'
 import { DEPLOY_METHODS, BUILD_SCRIPT_TYPES } from '@/lib/constants'
 import {
   Popover,
@@ -38,11 +38,24 @@ import {
 } from '@/components/ui/command'
 import { useTheme } from 'next-themes'
 import CodeMirror from '@uiw/react-codemirror'
-import { json } from '@codemirror/lang-json'
 import { javascript } from '@codemirror/lang-javascript'
 import { python } from '@codemirror/lang-python'
 import { StreamLanguage } from '@codemirror/language'
 import { shell } from '@codemirror/legacy-modes/mode/shell'
+
+interface EnvVarRow {
+  id?: number
+  key: string
+  value: string
+  is_secret: boolean
+  keep_value?: boolean
+}
+
+interface VarGroup {
+  id: number
+  name: string
+  description: string
+}
 
 interface EnvironmentPayload {
   name: string
@@ -54,10 +67,11 @@ interface EnvironmentPayload {
   deploy_path: string
   deploy_method: string
   post_deploy_script: string
-  env_vars: string
+  cache_paths: string
   cron_expression: string
   cron_enabled: boolean
   sort_order: number
+  var_group_ids: number[]
 }
 
 interface EnvironmentDetail extends EnvironmentPayload {
@@ -81,13 +95,13 @@ const DEFAULT_FORM: EnvironmentPayload = {
   deploy_path: '',
   deploy_method: 'rsync',
   post_deploy_script: '',
-  env_vars: '',
+  cache_paths: '',
   cron_expression: '',
   cron_enabled: false,
   sort_order: 0,
+  var_group_ids: [],
 }
 
-// Common cron presets for easy selection
 const CRON_PRESETS = [
   { label: '每小时', value: '0 * * * *' },
   { label: '每天 02:00', value: '0 2 * * *' },
@@ -124,23 +138,33 @@ export function EnvironmentFormDialog({
   const [branches, setBranches] = useState<string[]>([])
   const [branchesLoading, setBranchesLoading] = useState(false)
   const [branchPopoverOpen, setBranchPopoverOpen] = useState(false)
+  const [varGroups, setVarGroups] = useState<VarGroup[]>([])
+  const [envVars, setEnvVars] = useState<EnvVarRow[]>([])
+  const [initialEnvVars, setInitialEnvVars] = useState<EnvVarRow[]>([])
 
   useEffect(() => {
     if (!open) {
       setForm(DEFAULT_FORM)
       setError('')
       setBranches([])
+      setEnvVars([])
+      setInitialEnvVars([])
+      setVarGroups([])
       return
     }
 
-    // Load servers
-    api.get<Server[]>('/servers').then((res) => {
+    api.get<PaginatedData<Server>>('/servers?page=1&page_size=100').then((res) => {
       if (res.code === 0 && res.data) {
-        setServers(Array.isArray(res.data) ? res.data : [])
+        setServers(Array.isArray(res.data.items) ? res.data.items : [])
       }
     })
 
-    // Load branches
+    api.get<VarGroup[]>('/var-groups').then((res) => {
+      if (res.code === 0 && res.data) {
+        setVarGroups(Array.isArray(res.data) ? res.data : [])
+      }
+    })
+
     setBranchesLoading(true)
     api.get<string[]>(`/projects/${projectId}/branches`).then((res) => {
       if (res.code === 0 && res.data) {
@@ -159,11 +183,28 @@ export function EnvironmentFormDialog({
         deploy_path: editEnv.deploy_path || '',
         deploy_method: editEnv.deploy_method || 'rsync',
         post_deploy_script: editEnv.post_deploy_script || '',
-        env_vars: editEnv.env_vars || '',
+        cache_paths: editEnv.cache_paths || '',
         cron_expression: editEnv.cron_expression || '',
         cron_enabled: editEnv.cron_enabled || false,
         sort_order: editEnv.sort_order || 0,
+        var_group_ids: editEnv.var_group_ids || [],
       })
+
+      api.get<EnvVarRow[]>(`/projects/${projectId}/envs/${editEnv.id}/vars`).then((res) => {
+        if (res.code !== 0 || !res.data) return
+        const rows = (Array.isArray(res.data) ? res.data : []).map((item) => ({
+          id: item.id,
+          key: item.key,
+          value: '',
+          is_secret: item.is_secret,
+          keep_value: item.is_secret,
+        }))
+        setEnvVars(rows)
+        setInitialEnvVars(rows)
+      })
+    } else {
+      setEnvVars([])
+      setInitialEnvVars([])
     }
   }, [open, editEnv, isEdit, projectId])
 
@@ -171,10 +212,60 @@ export function EnvironmentFormDialog({
     setForm((prev) => ({ ...prev, [key]: value }))
   }
 
+  const updateEnvVar = (index: number, patch: Partial<EnvVarRow>) => {
+    setEnvVars((prev) => prev.map((item, current) => {
+      if (current !== index) return item
+      return { ...item, ...patch }
+    }))
+  }
+
   const validate = () => {
     if (!form.name.trim()) return '请输入环境名称'
     if (form.cron_enabled && !form.cron_expression.trim()) return '启用定时构建时必须填写 Cron 表达式'
+    if (envVars.some((item) => !item.key.trim())) return '环境变量 key 不能为空'
     return ''
+  }
+
+  const syncEnvVars = async (envId: number) => {
+    const current = envVars.filter((item) => item.key.trim())
+    const initialIds = new Set(initialEnvVars.map((item) => item.id).filter(Boolean))
+    const currentIds = new Set(current.map((item) => item.id).filter(Boolean))
+
+    for (const initial of initialEnvVars) {
+      if (initial.id && !currentIds.has(initial.id)) {
+        await api.delete(`/projects/${projectId}/envs/${envId}/vars/${initial.id}`)
+      }
+    }
+
+    for (const item of current) {
+      if (item.id) {
+        const res = await api.put(
+          `/projects/${projectId}/envs/${envId}/vars/${item.id}`,
+          {
+            key: item.key.trim(),
+            value: item.value,
+            is_secret: item.is_secret,
+            keep_value: item.keep_value ?? false,
+          },
+        )
+        if (res.code !== 0) {
+          throw new Error(res.message || `更新变量 ${item.key} 失败`)
+        }
+        initialIds.delete(item.id)
+      } else {
+        const res = await api.post(
+          `/projects/${projectId}/envs/${envId}/vars`,
+          {
+            key: item.key.trim(),
+            value: item.value,
+            is_secret: item.is_secret,
+          },
+        )
+        if (res.code !== 0) {
+          throw new Error(res.message || `创建变量 ${item.key} 失败`)
+        }
+      }
+    }
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -189,25 +280,43 @@ export function EnvironmentFormDialog({
     setSubmitting(true)
 
     try {
+      const payload = {
+        ...form,
+        name: form.name.trim(),
+        branch: form.branch.trim(),
+        build_output_dir: form.build_output_dir.trim(),
+        deploy_path: form.deploy_path.trim(),
+        cache_paths: form.cache_paths.trim(),
+      }
+
+      let envId = editEnv?.id
+
       if (isEdit && editEnv) {
         const res = await api.put<EnvironmentDetail>(
           `/projects/${projectId}/envs/${editEnv.id}`,
-          form,
+          payload,
         )
         if (res.code !== 0) {
           throw new Error(res.message || '更新环境失败')
         }
+        envId = editEnv.id
         toast.success('环境已更新')
       } else {
         const res = await api.post<EnvironmentDetail>(
           `/projects/${projectId}/envs`,
-          form,
+          payload,
         )
-        if (res.code !== 0) {
+        if (res.code !== 0 || !res.data) {
           throw new Error(res.message || '创建环境失败')
         }
+        envId = res.data.id
         toast.success('环境已创建')
       }
+
+      if (!envId) {
+        throw new Error('环境 ID 缺失')
+      }
+      await syncEnvVars(envId)
 
       onOpenChange(false)
       onSuccess?.()
@@ -220,27 +329,28 @@ export function EnvironmentFormDialog({
     }
   }
 
-  const cronPresetValue = CRON_PRESETS.find((p) => p.value === form.cron_expression)?.value ?? ''
-
-  // Get current script type info for placeholder
-  const currentScriptType = BUILD_SCRIPT_TYPES.find((t) => t.value === form.build_script_type)
+  const cronPresetValue = CRON_PRESETS.find((item) => item.value === form.cron_expression)?.value ?? ''
+  const currentScriptType = BUILD_SCRIPT_TYPES.find((item) => item.value === form.build_script_type)
 
   const getScriptExtensions = () => {
     switch (form.build_script_type) {
-      case 'node': return [javascript()]
-      case 'python': return [python()]
+      case 'node':
+        return [javascript()]
+      case 'python':
+        return [python()]
       case 'bash':
-      default: return [StreamLanguage.define(shell)]
+      default:
+        return [StreamLanguage.define(shell)]
     }
   }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[800px] max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-[860px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{isEdit ? '编辑环境' : '新建环境'}</DialogTitle>
           <DialogDescription>
-            {isEdit ? '更新环境构建与部署配置' : '为项目创建新的构建环境'}
+            {isEdit ? '更新环境构建、部署与变量配置' : '为项目创建新的构建环境'}
           </DialogDescription>
         </DialogHeader>
 
@@ -272,7 +382,7 @@ export function EnvironmentFormDialog({
                     className="w-full justify-between font-normal"
                   >
                     {form.branch || '选择或输入分支'}
-                    {branchesLoading && <Loader2 className="size-4 animate-spin ml-2" />}
+                    {branchesLoading && <Loader2 className="ml-2 size-4 animate-spin" />}
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
@@ -280,23 +390,21 @@ export function EnvironmentFormDialog({
                     <CommandInput
                       placeholder="搜索或输入分支名..."
                       value={form.branch}
-                      onValueChange={(v: string) => setField('branch', v)}
+                      onValueChange={(value: string) => setField('branch', value)}
                     />
                     <CommandList>
-                      <CommandEmpty>
-                        {branchesLoading ? '加载中...' : '无匹配分支，可直接输入'}
-                      </CommandEmpty>
+                      <CommandEmpty>{branchesLoading ? '加载中...' : '无匹配分支，可直接输入'}</CommandEmpty>
                       <CommandGroup>
-                        {branches.map((b) => (
+                        {branches.map((branch) => (
                           <CommandItem
-                            key={b}
-                            value={b}
-                            onSelect={(v: string) => {
-                              setField('branch', v)
+                            key={branch}
+                            value={branch}
+                            onSelect={(value: string) => {
+                              setField('branch', value)
                               setBranchPopoverOpen(false)
                             }}
                           >
-                            {b}
+                            {branch}
                           </CommandItem>
                         ))}
                       </CommandGroup>
@@ -319,17 +427,14 @@ export function EnvironmentFormDialog({
           <div className="grid gap-4 sm:grid-cols-[160px_1fr]">
             <div className="space-y-2">
               <Label>脚本类型</Label>
-              <Select
-                value={form.build_script_type}
-                onValueChange={(v) => setField('build_script_type', v)}
-              >
+              <Select value={form.build_script_type} onValueChange={(value) => setField('build_script_type', value)}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {BUILD_SCRIPT_TYPES.map((t) => (
-                    <SelectItem key={t.value} value={t.value}>
-                      {t.label}
+                  {BUILD_SCRIPT_TYPES.map((item) => (
+                    <SelectItem key={item.value} value={item.value}>
+                      {item.label}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -337,13 +442,13 @@ export function EnvironmentFormDialog({
             </div>
             <div className="space-y-2">
               <Label>构建脚本</Label>
-              <div className="border border-zinc-200 dark:border-zinc-800 rounded-md overflow-hidden">
+              <div className="overflow-hidden rounded-md border border-zinc-200 dark:border-zinc-800">
                 <CodeMirror
                   value={form.build_script}
                   height="160px"
                   theme={cmTheme}
                   extensions={getScriptExtensions()}
-                  onChange={(val) => setField('build_script', val)}
+                  onChange={(value) => setField('build_script', value)}
                   placeholder={currentScriptType?.placeholder || 'npm install && npm run build'}
                   className="text-sm font-mono"
                 />
@@ -354,17 +459,14 @@ export function EnvironmentFormDialog({
           <div className="grid gap-4 sm:grid-cols-3">
             <div className="space-y-2">
               <Label>部署方式</Label>
-              <Select
-                value={form.deploy_method}
-                onValueChange={(v) => setField('deploy_method', v)}
-              >
+              <Select value={form.deploy_method} onValueChange={(value) => setField('deploy_method', value)}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {DEPLOY_METHODS.map((m) => (
-                    <SelectItem key={m.value} value={m.value}>
-                      {m.label}
+                  {DEPLOY_METHODS.map((method) => (
+                    <SelectItem key={method.value} value={method.value}>
+                      {method.label}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -374,16 +476,16 @@ export function EnvironmentFormDialog({
               <Label>部署服务器</Label>
               <Select
                 value={form.deploy_server_id ? String(form.deploy_server_id) : 'none'}
-                onValueChange={(v) => setField('deploy_server_id', v === 'none' ? null : Number(v))}
+                onValueChange={(value) => setField('deploy_server_id', value === 'none' ? null : Number(value))}
               >
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">不部署</SelectItem>
-                  {servers.map((s) => (
-                    <SelectItem key={s.id} value={String(s.id)}>
-                      {s.name} ({s.host})
+                  {servers.map((server) => (
+                    <SelectItem key={server.id} value={String(server.id)}>
+                      {server.name} ({server.host})
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -400,19 +502,13 @@ export function EnvironmentFormDialog({
             </div>
           </div>
 
-          {/* Cron 定时构建 */}
-          <div className="rounded-lg border border-zinc-200 dark:border-zinc-800 p-4 space-y-4">
+          <div className="rounded-lg border border-zinc-200 p-4 space-y-4 dark:border-zinc-800">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium">定时构建</p>
-                <p className="text-xs text-zinc-500 mt-0.5">
-                  使用 Cron 表达式配置定时自动构建
-                </p>
+                <p className="mt-0.5 text-xs text-zinc-500">使用 Cron 表达式配置定时自动构建</p>
               </div>
-              <Switch
-                checked={form.cron_enabled}
-                onCheckedChange={(checked) => setField('cron_enabled', checked)}
-              />
+              <Switch checked={form.cron_enabled} onCheckedChange={(checked) => setField('cron_enabled', checked)} />
             </div>
 
             {form.cron_enabled && (
@@ -421,17 +517,17 @@ export function EnvironmentFormDialog({
                   <Label>预设</Label>
                   <Select
                     value={cronPresetValue}
-                    onValueChange={(v) => {
-                      if (v) setField('cron_expression', v)
+                    onValueChange={(value) => {
+                      if (value && value !== 'custom') setField('cron_expression', value)
                     }}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="选择预设或自定义" />
                     </SelectTrigger>
                     <SelectContent>
-                      {CRON_PRESETS.map((p) => (
-                        <SelectItem key={p.value || 'custom'} value={p.value || 'custom'}>
-                          {p.label}{p.value ? ` (${p.value})` : ''}
+                      {CRON_PRESETS.map((item) => (
+                        <SelectItem key={item.value || 'custom'} value={item.value || 'custom'}>
+                          {item.label}{item.value ? ` (${item.value})` : ''}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -446,27 +542,119 @@ export function EnvironmentFormDialog({
                     placeholder="0 2 * * *"
                     className="font-mono"
                   />
-                  <p className="text-xs text-zinc-500">
-                    标准 5 段格式：分 时 日 月 周（例如 <code className="bg-zinc-100 dark:bg-zinc-800 px-1 rounded">0 2 * * *</code> 表示每天 02:00）
-                  </p>
                 </div>
               </div>
             )}
           </div>
 
           <div className="space-y-2">
-            <Label>环境变量 (JSON)</Label>
-            <div className="border border-zinc-200 dark:border-zinc-800 rounded-md overflow-hidden">
+            <Label>变量组</Label>
+            {varGroups.length === 0 ? (
+              <div className="rounded-lg border border-dashed border-zinc-200 p-4 text-sm text-zinc-500 dark:border-zinc-800">
+                暂无可用变量组，可在系统设置中创建。
+              </div>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {varGroups.map((group) => {
+                  const selected = form.var_group_ids.includes(group.id)
+                  return (
+                    <Button
+                      key={group.id}
+                      type="button"
+                      variant={selected ? 'secondary' : 'outline'}
+                      size="sm"
+                      onClick={() => {
+                        if (selected) {
+                          setField('var_group_ids', form.var_group_ids.filter((id) => id !== group.id))
+                          return
+                        }
+                        setField('var_group_ids', [...form.var_group_ids, group.id])
+                      }}
+                    >
+                      {group.name}
+                    </Button>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+
+          <div className="space-y-3 rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
+            <div className="flex items-center justify-between">
+              <div>
+                <Label>环境变量</Label>
+                <p className="mt-1 text-xs text-zinc-500">键值对形式维护，支持按变量逐个加密。</p>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setEnvVars((prev) => [...prev, { key: '', value: '', is_secret: false }])}
+              >
+                <Plus className="size-4" />
+                添加变量
+              </Button>
+            </div>
+            {envVars.length === 0 ? (
+              <div className="rounded-lg border border-dashed border-zinc-200 p-4 text-sm text-zinc-500 dark:border-zinc-800">
+                暂未配置环境变量
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {envVars.map((item, index) => (
+                  <div key={`${item.id ?? 'new'}-${index}`} className="rounded-lg border border-zinc-200 p-3 dark:border-zinc-800">
+                    <div className="grid gap-3 sm:grid-cols-[1fr_1.4fr_auto_auto]">
+                      <Input
+                        value={item.key}
+                        onChange={(e) => updateEnvVar(index, { key: e.target.value })}
+                        placeholder="变量名，例如 NODE_ENV"
+                      />
+                      <Input
+                        type={item.is_secret ? 'password' : 'text'}
+                        value={item.value}
+                        onChange={(e) => updateEnvVar(index, { value: e.target.value, keep_value: false })}
+                        placeholder={item.keep_value ? '已存储密文，留空则保持不变' : '变量值'}
+                      />
+                      <div className="flex items-center gap-2 rounded-md border border-zinc-200 px-3 dark:border-zinc-800">
+                        <Switch
+                          checked={item.is_secret}
+                          onCheckedChange={(checked) => updateEnvVar(index, {
+                            is_secret: checked,
+                            keep_value: checked ? item.keep_value : false,
+                            value: checked ? item.value : '',
+                          })}
+                        />
+                        <span className="text-sm text-zinc-500">加密</span>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        onClick={() => setEnvVars((prev) => prev.filter((_, current) => current !== index))}
+                      >
+                        <Trash2 className="size-4" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="space-y-2">
+            <Label>构建缓存路径</Label>
+            <div className="overflow-hidden rounded-md border border-zinc-200 dark:border-zinc-800">
               <CodeMirror
-                value={form.env_vars}
-                height="100px"
+                value={form.cache_paths}
+                height="80px"
                 theme={cmTheme}
-                extensions={[json()]}
-                onChange={(val) => setField('env_vars', val)}
-                placeholder='{"NODE_ENV": "production"}'
+                extensions={[StreamLanguage.define(shell)]}
+                onChange={(value) => setField('cache_paths', value)}
+                placeholder={'node_modules\n.npm\nvendor'}
                 className="text-sm font-mono"
               />
             </div>
+            <p className="text-xs text-zinc-500">每行一个路径，构建后缓存这些目录，下次构建时恢复以加速依赖安装。</p>
           </div>
 
           <DialogFooter>
