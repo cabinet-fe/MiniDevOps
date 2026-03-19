@@ -43,18 +43,25 @@
 ## 影响范围
 
 - `go.mod` / `go.sum` — 新增 `github.com/robfig/cron/v3` 依赖
-- `internal/model/environment.go` — Environment 模型新增 CronExpression、CronEnabled 字段
+- `internal/model/environment.go` — Environment 模型新增 CronExpression、CronEnabled、BuildScriptType 字段
 - `internal/model/build.go` — Build 模型新增 Branch 字段
 - `internal/engine/cron.go` — **新建**，CronScheduler 定时构建调度器
-- `internal/engine/pipeline.go` — 支持 build-level branch 覆盖和 commit checkout
+- `internal/engine/git.go` — 新增 GitListBranches 函数
+- `internal/engine/pipeline.go` — 支持 build-level branch 覆盖和 commit checkout、工作目录按环境隔离、按脚本类型选择解释器
 - `internal/repository/environment_repo.go` — 新增 ListCronEnabled 方法
 - `internal/service/build_service.go` — TriggerBuild 增加 branch 参数
-- `internal/service/project_service.go` — EnvironmentExport 增加 cron 字段
-- `internal/handler/project_handler.go` — 环境 CRUD 支持 cron 字段、CronNotifier 接口、cron 表达式校验
+- `internal/service/project_service.go` — EnvironmentExport 增加 cron 和 build_script_type 字段
+- `internal/handler/project_handler.go` — 环境 CRUD 支持 cron、build_script_type 字段、CronNotifier 接口、cron 表达式校验、新增 ListBranches
 - `internal/handler/build_handler.go` — TriggerBuild/Retry 支持 branch/commit_hash
 - `internal/handler/webhook_handler.go` — 适配 TriggerBuild 新签名
-- `cmd/server/main.go` — 初始化 CronScheduler、传递给 ProjectHandler、优雅关闭
-- `web/src/pages/projects/detail.tsx` — 环境信息卡片展示 Cron、高级触发对话框、环境编辑按钮
-- `web/src/pages/projects/environment-form.tsx` — **新建**，环境表单对话框含 Cron UI
+- `cmd/server/main.go` — 初始化 CronScheduler、传递给 ProjectHandler、注册 branches 路由、优雅关闭
+- `web/src/components/ui/command.tsx` — **新建**，shadcn Command 组件
+- `web/src/lib/constants.ts` — 新增 BUILD_SCRIPT_TYPES 常量
+- `web/src/pages/projects/detail.tsx` — 环境信息卡片展示 Cron/脚本类型、高级触发对话框分支 Combobox、环境编辑按钮
+- `web/src/pages/projects/environment-form.tsx` — **新建**，环境表单对话框含 Cron UI、分支 Combobox、脚本类型选择、宽弹框适配和 CodeMirror 代码高亮
 - `web/src/pages/builds/detail.tsx` — 构建详情展示分支字段
+- `web/package.json` — 新增 cmdk, @uiw/react-codemirror 等 UI 及代码高亮依赖
 ## 历史补丁
+
+- patch-1: 环境配置改进：分支选择、脚本类型、工作空间隔离
+- patch-2: 优化环境弹框宽度与代码输入高亮

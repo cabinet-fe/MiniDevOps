@@ -41,6 +41,9 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Set Gin mode to release to avoid startup route logs
+	gin.SetMode(gin.ReleaseMode)
+
 	// Init logger
 	var logger *zap.Logger
 	if gin.Mode() == gin.ReleaseMode {
@@ -164,6 +167,7 @@ func main() {
 			auth.POST("/projects/:id/envs", projectHandler.CreateEnvironment)
 			auth.PUT("/projects/:id/envs/:envId", projectHandler.UpdateEnvironment)
 			auth.DELETE("/projects/:id/envs/:envId", projectHandler.DeleteEnvironment)
+			auth.GET("/projects/:id/branches", projectHandler.ListBranches)
 
 			// Builds
 			auth.GET("/builds", buildHandler.ListAll)
@@ -221,7 +225,6 @@ func main() {
 	}
 
 	go func() {
-		logger.Info("BuildFlow starting", zap.String("addr", addr))
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			logger.Fatal("Server failed", zap.Error(err))
 		}
@@ -232,7 +235,6 @@ func main() {
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 
-	logger.Info("Shutting down...")
 	cronScheduler.Stop()
 	scheduler.Shutdown()
 
@@ -241,7 +243,6 @@ func main() {
 	if err := srv.Shutdown(ctx); err != nil {
 		logger.Error("Server forced shutdown", zap.Error(err))
 	}
-	logger.Info("BuildFlow stopped")
 }
 
 func serveSPA(r *gin.Engine) {

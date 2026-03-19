@@ -30,3 +30,9 @@ export const REPO_AUTH_TYPES = [
   { value: 'password', label: '用户名/密码' },
   { value: 'token', label: 'Token' },
 ]
+
+export const BUILD_SCRIPT_TYPES = [
+  { value: 'bash', label: 'Bash', placeholder: 'npm install && npm run build' },
+  { value: 'node', label: 'Node.js', placeholder: "const { execSync } = require('child_process');\nexecSync('npm install && npm run build', { stdio: 'inherit' });" },
+  { value: 'python', label: 'Python', placeholder: "import subprocess\nsubprocess.run(['npm', 'install'], check=True)\nsubprocess.run(['npm', 'run', 'build'], check=True)" },
+]

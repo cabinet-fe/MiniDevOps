@@ -8,6 +8,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/robfig/cron/v3"
 
+	"buildflow/internal/engine"
 	"buildflow/internal/middleware"
 	"buildflow/internal/model"
 	"buildflow/internal/pkg"
@@ -224,6 +225,7 @@ func (h *ProjectHandler) CreateEnvironment(c *gin.Context) {
 		Name             string `json:"name" binding:"required"`
 		Branch           string `json:"branch"`
 		BuildScript      string `json:"build_script"`
+		BuildScriptType  string `json:"build_script_type"`
 		BuildOutputDir   string `json:"build_output_dir"`
 		DeployServerID   *uint  `json:"deploy_server_id"`
 		DeployPath       string `json:"deploy_path"`
@@ -241,6 +243,9 @@ func (h *ProjectHandler) CreateEnvironment(c *gin.Context) {
 	if req.Branch == "" {
 		req.Branch = "main"
 	}
+	if req.BuildScriptType == "" {
+		req.BuildScriptType = "bash"
+	}
 	if req.CronEnabled && req.CronExpression != "" {
 		if _, err := cron.ParseStandard(req.CronExpression); err != nil {
 			pkg.Error(c, http.StatusBadRequest, "Cron 表达式不合法: "+err.Error())
@@ -252,6 +257,7 @@ func (h *ProjectHandler) CreateEnvironment(c *gin.Context) {
 		Name:             req.Name,
 		Branch:           req.Branch,
 		BuildScript:      req.BuildScript,
+		BuildScriptType:  req.BuildScriptType,
 		BuildOutputDir:   req.BuildOutputDir,
 		DeployServerID:   req.DeployServerID,
 		DeployPath:       req.DeployPath,
@@ -304,6 +310,7 @@ func (h *ProjectHandler) UpdateEnvironment(c *gin.Context) {
 		Name             *string `json:"name"`
 		Branch           *string `json:"branch"`
 		BuildScript      *string `json:"build_script"`
+		BuildScriptType  *string `json:"build_script_type"`
 		BuildOutputDir   *string `json:"build_output_dir"`
 		DeployServerID   *uint   `json:"deploy_server_id"`
 		DeployPath       *string `json:"deploy_path"`
@@ -326,6 +333,9 @@ func (h *ProjectHandler) UpdateEnvironment(c *gin.Context) {
 	}
 	if req.BuildScript != nil {
 		env.BuildScript = *req.BuildScript
+	}
+	if req.BuildScriptType != nil {
+		env.BuildScriptType = *req.BuildScriptType
 	}
 	if req.BuildOutputDir != nil {
 		env.BuildOutputDir = *req.BuildOutputDir
@@ -393,4 +403,28 @@ func (h *ProjectHandler) DeleteEnvironment(c *gin.Context) {
 		return
 	}
 	pkg.Success(c, nil)
+}
+
+// GET /api/v1/projects/:id/branches - list remote branches
+func (h *ProjectHandler) ListBranches(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		pkg.Error(c, http.StatusBadRequest, "参数错误")
+		return
+	}
+	project, err := h.projectService.GetByID(uint(id))
+	if err != nil {
+		pkg.Error(c, http.StatusNotFound, "项目不存在")
+		return
+	}
+	repoPassword := ""
+	if project.RepoPassword != "" {
+		repoPassword, _ = pkg.Decrypt(project.RepoPassword)
+	}
+	branches, err := engine.GitListBranches(project.RepoURL, project.RepoAuthType, project.RepoUsername, repoPassword)
+	if err != nil {
+		pkg.Error(c, http.StatusInternalServerError, "获取分支列表失败: "+err.Error())
+		return
+	}
+	pkg.Success(c, branches)
 }

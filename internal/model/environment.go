@@ -8,6 +8,7 @@ type Environment struct {
 	Name             string    `json:"name" gorm:"uniqueIndex:idx_proj_env_name;size:50;not null"`
 	Branch           string    `json:"branch" gorm:"size:200;default:main"`
 	BuildScript      string    `json:"build_script" gorm:"type:text"`
+	BuildScriptType  string    `json:"build_script_type" gorm:"size:20;default:bash"`
 	BuildOutputDir   string    `json:"build_output_dir" gorm:"size:300"`
 	DeployServerID   *uint     `json:"deploy_server_id"`
 	DeployPath       string    `json:"deploy_path" gorm:"size:500"`

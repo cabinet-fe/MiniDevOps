@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useParams, Link } from 'react-router'
-import { Copy, Play, ExternalLink, Clock, Settings2, Plus, Pencil } from 'lucide-react'
+import { Copy, Play, ExternalLink, Clock, Settings2, Plus, Pencil, Loader2 } from 'lucide-react'
 import {
   useReactTable,
   getCoreRowModel,
@@ -36,6 +36,20 @@ import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { ProjectFormDialog } from '@/pages/projects/form'
 import { EnvironmentFormDialog } from '@/pages/projects/environment-form'
+import { BUILD_SCRIPT_TYPES } from '@/lib/constants'
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover'
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@/components/ui/command'
 
 interface Environment {
   id: number
@@ -43,6 +57,7 @@ interface Environment {
   name: string
   branch: string
   build_script: string
+  build_script_type: string
   build_output_dir: string
   deploy_server_id: number | null
   deploy_method: string
@@ -227,7 +242,12 @@ export function ProjectDetailPage() {
                     </div>
                     <div>
                       <p className="text-xs text-zinc-500">构建脚本</p>
-                      <p className="font-medium font-mono text-sm">{env.build_script || '-'}</p>
+                      <div className="flex items-center gap-1.5">
+                        <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                          {BUILD_SCRIPT_TYPES.find((t) => t.value === env.build_script_type)?.label || 'Bash'}
+                        </Badge>
+                        <p className="font-medium font-mono text-sm">{env.build_script || '-'}</p>
+                      </div>
                     </div>
                     <div>
                       <p className="text-xs text-zinc-500">产物目录</p>
@@ -315,6 +335,7 @@ export function ProjectDetailPage() {
           triggerBuild(envId, branch, commitHash)
         }}
         triggering={triggering}
+        projectId={Number(id)}
       />
     </div>
   )
@@ -326,22 +347,35 @@ function TriggerBuildDialog({
   onOpenChange,
   onTrigger,
   triggering,
+  projectId,
 }: {
   env: Environment | null
   open: boolean
   onOpenChange: (open: boolean) => void
   onTrigger: (envId: number, branch?: string, commitHash?: string) => void
   triggering: number | null
+  projectId: number
 }) {
   const [branch, setBranch] = useState('')
   const [commitHash, setCommitHash] = useState('')
+  const [branches, setBranches] = useState<string[]>([])
+  const [branchesLoading, setBranchesLoading] = useState(false)
+  const [branchPopoverOpen, setBranchPopoverOpen] = useState(false)
 
   useEffect(() => {
     if (!open) {
       setBranch('')
       setCommitHash('')
+      setBranches([])
+      return
     }
-  }, [open])
+    setBranchesLoading(true)
+    api.get<string[]>(`/projects/${projectId}/branches`).then((res) => {
+      if (res.code === 0 && res.data) {
+        setBranches(Array.isArray(res.data) ? res.data : [])
+      }
+    }).finally(() => setBranchesLoading(false))
+  }, [open, projectId])
 
   if (!env) return null
 
@@ -357,12 +391,47 @@ function TriggerBuildDialog({
         <div className="space-y-4 py-2">
           <div className="space-y-2">
             <Label htmlFor="trigger-branch">分支（可选）</Label>
-            <Input
-              id="trigger-branch"
-              value={branch}
-              onChange={(e) => setBranch(e.target.value)}
-              placeholder={`默认: ${env.branch}`}
-            />
+            <Popover open={branchPopoverOpen} onOpenChange={setBranchPopoverOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  role="combobox"
+                  aria-expanded={branchPopoverOpen}
+                  className="w-full justify-between font-normal"
+                >
+                  {branch || `默认: ${env.branch}`}
+                  {branchesLoading && <Loader2 className="size-4 animate-spin ml-2" />}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                <Command>
+                  <CommandInput
+                    placeholder="搜索或输入分支名..."
+                    value={branch}
+                    onValueChange={(v: string) => setBranch(v)}
+                  />
+                  <CommandList>
+                    <CommandEmpty>
+                      {branchesLoading ? '加载中...' : '无匹配分支，可直接输入'}
+                    </CommandEmpty>
+                    <CommandGroup>
+                      {branches.map((b) => (
+                        <CommandItem
+                          key={b}
+                          value={b}
+                          onSelect={(v: string) => {
+                            setBranch(v)
+                            setBranchPopoverOpen(false)
+                          }}
+                        >
+                          {b}
+                        </CommandItem>
+                      ))}
+                    </CommandGroup>
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
           </div>
           <div className="space-y-2">
             <Label htmlFor="trigger-commit">Commit Hash（可选）</Label>

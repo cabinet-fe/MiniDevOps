@@ -95,7 +95,7 @@ func (p *Pipeline) Execute(ctx context.Context, buildID uint) {
 
 	// Stage 1: Git clone/pull
 	writeLine("=== Stage: Cloning ===")
-	workDir := filepath.Join(p.workspaceDir, fmt.Sprintf("project-%d", project.ID))
+	workDir := filepath.Join(p.workspaceDir, fmt.Sprintf("project-%d", project.ID), fmt.Sprintf("env-%d", env.ID))
 
 	repoPassword := ""
 	if project.RepoPassword != "" {
@@ -147,7 +147,21 @@ func (p *Pipeline) Execute(ctx context.Context, buildID uint) {
 		envVars = append(envVars, parseEnvVars(env.EnvVars)...)
 	}
 
-	cmd := exec.CommandContext(ctx, "sh", "-c", env.BuildScript)
+	// Select interpreter based on build script type
+	interpreter := "sh"
+	interpreterArgs := []string{"-c", env.BuildScript}
+	switch env.BuildScriptType {
+	case "node":
+		interpreter = "node"
+		interpreterArgs = []string{"-e", env.BuildScript}
+	case "python":
+		interpreter = "python3"
+		interpreterArgs = []string{"-c", env.BuildScript}
+	default: // "bash" or empty
+		interpreter = "sh"
+		interpreterArgs = []string{"-c", env.BuildScript}
+	}
+	cmd := exec.CommandContext(ctx, interpreter, interpreterArgs...)
 	cmd.Dir = workDir
 	cmd.Env = envVars
 

@@ -111,6 +111,7 @@ type EnvironmentExport struct {
 	Name             string `json:"name"`
 	Branch           string `json:"branch"`
 	BuildScript      string `json:"build_script"`
+	BuildScriptType  string `json:"build_script_type"`
 	BuildOutputDir   string `json:"build_output_dir"`
 	DeployPath       string `json:"deploy_path"`
 	DeployMethod     string `json:"deploy_method"`
@@ -140,6 +141,7 @@ func (s *ProjectService) Export(id uint) ([]byte, error) {
 			Name:             e.Name,
 			Branch:           e.Branch,
 			BuildScript:      e.BuildScript,
+			BuildScriptType:  e.BuildScriptType,
 			BuildOutputDir:   e.BuildOutputDir,
 			DeployPath:       e.DeployPath,
 			DeployMethod:     e.DeployMethod,
@@ -187,6 +189,7 @@ func (s *ProjectService) Import(data []byte, createdBy uint) (*model.Project, er
 			Name:             ee.Name,
 			Branch:           ee.Branch,
 			BuildScript:      ee.BuildScript,
+			BuildScriptType:  ee.BuildScriptType,
 			BuildOutputDir:   ee.BuildOutputDir,
 			DeployPath:       ee.DeployPath,
 			DeployMethod:     ee.DeployMethod,

@@ -78,6 +78,27 @@ func Load(configPath string) (*Config, error) {
 		return nil, fmt.Errorf("unmarshaling config: %w", err)
 	}
 
+	// Resolve relative paths based on config file location
+	configFile := v.ConfigFileUsed()
+	configDir := filepath.Dir(configFile)
+	if !filepath.IsAbs(configDir) {
+		if abs, err := filepath.Abs(configDir); err == nil {
+			configDir = abs
+		}
+	}
+
+	cfg.Database.Path = resolvePath(configDir, cfg.Database.Path)
+	cfg.Build.WorkspaceDir = resolvePath(configDir, cfg.Build.WorkspaceDir)
+	cfg.Build.ArtifactDir = resolvePath(configDir, cfg.Build.ArtifactDir)
+	cfg.Build.LogDir = resolvePath(configDir, cfg.Build.LogDir)
+
 	C = &cfg
 	return &cfg, nil
+}
+
+func resolvePath(baseDir, targetPath string) string {
+	if targetPath == "" || filepath.IsAbs(targetPath) {
+		return targetPath
+	}
+	return filepath.Join(baseDir, targetPath)
 }

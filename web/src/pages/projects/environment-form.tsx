@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
+import { Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -10,7 +11,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Textarea } from '@/components/ui/textarea'
+
 import { Switch } from '@/components/ui/switch'
 import {
   Dialog,
@@ -21,12 +22,33 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { api } from '@/lib/api'
-import { DEPLOY_METHODS } from '@/lib/constants'
+import { DEPLOY_METHODS, BUILD_SCRIPT_TYPES } from '@/lib/constants'
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover'
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@/components/ui/command'
+import { useTheme } from 'next-themes'
+import CodeMirror from '@uiw/react-codemirror'
+import { json } from '@codemirror/lang-json'
+import { javascript } from '@codemirror/lang-javascript'
+import { python } from '@codemirror/lang-python'
+import { StreamLanguage } from '@codemirror/language'
+import { shell } from '@codemirror/legacy-modes/mode/shell'
 
 interface EnvironmentPayload {
   name: string
   branch: string
   build_script: string
+  build_script_type: string
   build_output_dir: string
   deploy_server_id: number | null
   deploy_path: string
@@ -51,8 +73,9 @@ interface Server {
 
 const DEFAULT_FORM: EnvironmentPayload = {
   name: '',
-  branch: 'main',
+  branch: '',
   build_script: '',
+  build_script_type: 'bash',
   build_output_dir: '',
   deploy_server_id: null,
   deploy_path: '',
@@ -90,16 +113,23 @@ export function EnvironmentFormDialog({
   onSuccess,
 }: EnvironmentFormDialogProps) {
   const isEdit = !!editEnv
+  const { theme, systemTheme } = useTheme()
+  const currentTheme = theme === 'system' ? systemTheme : theme
+  const cmTheme = currentTheme === 'dark' ? 'dark' : 'light'
 
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
   const [form, setForm] = useState<EnvironmentPayload>(DEFAULT_FORM)
   const [servers, setServers] = useState<Server[]>([])
+  const [branches, setBranches] = useState<string[]>([])
+  const [branchesLoading, setBranchesLoading] = useState(false)
+  const [branchPopoverOpen, setBranchPopoverOpen] = useState(false)
 
   useEffect(() => {
     if (!open) {
       setForm(DEFAULT_FORM)
       setError('')
+      setBranches([])
       return
     }
 
@@ -110,11 +140,20 @@ export function EnvironmentFormDialog({
       }
     })
 
+    // Load branches
+    setBranchesLoading(true)
+    api.get<string[]>(`/projects/${projectId}/branches`).then((res) => {
+      if (res.code === 0 && res.data) {
+        setBranches(Array.isArray(res.data) ? res.data : [])
+      }
+    }).finally(() => setBranchesLoading(false))
+
     if (isEdit && editEnv) {
       setForm({
         name: editEnv.name || '',
-        branch: editEnv.branch || 'main',
+        branch: editEnv.branch || '',
         build_script: editEnv.build_script || '',
+        build_script_type: editEnv.build_script_type || 'bash',
         build_output_dir: editEnv.build_output_dir || '',
         deploy_server_id: editEnv.deploy_server_id,
         deploy_path: editEnv.deploy_path || '',
@@ -126,7 +165,7 @@ export function EnvironmentFormDialog({
         sort_order: editEnv.sort_order || 0,
       })
     }
-  }, [open, editEnv, isEdit])
+  }, [open, editEnv, isEdit, projectId])
 
   const setField = <K extends keyof EnvironmentPayload>(key: K, value: EnvironmentPayload[K]) => {
     setForm((prev) => ({ ...prev, [key]: value }))
@@ -183,9 +222,21 @@ export function EnvironmentFormDialog({
 
   const cronPresetValue = CRON_PRESETS.find((p) => p.value === form.cron_expression)?.value ?? ''
 
+  // Get current script type info for placeholder
+  const currentScriptType = BUILD_SCRIPT_TYPES.find((t) => t.value === form.build_script_type)
+
+  const getScriptExtensions = () => {
+    switch (form.build_script_type) {
+      case 'node': return [javascript()]
+      case 'python': return [python()]
+      case 'bash':
+      default: return [StreamLanguage.define(shell)]
+    }
+  }
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[560px] max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-[800px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{isEdit ? '编辑环境' : '新建环境'}</DialogTitle>
           <DialogDescription>
@@ -200,7 +251,7 @@ export function EnvironmentFormDialog({
             </div>
           )}
 
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-4 sm:grid-cols-3">
             <div className="space-y-2">
               <Label htmlFor="env-name">环境名称 *</Label>
               <Input
@@ -211,39 +262,96 @@ export function EnvironmentFormDialog({
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="env-branch">分支</Label>
+              <Label>分支</Label>
+              <Popover open={branchPopoverOpen} onOpenChange={setBranchPopoverOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    role="combobox"
+                    aria-expanded={branchPopoverOpen}
+                    className="w-full justify-between font-normal"
+                  >
+                    {form.branch || '选择或输入分支'}
+                    {branchesLoading && <Loader2 className="size-4 animate-spin ml-2" />}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                  <Command>
+                    <CommandInput
+                      placeholder="搜索或输入分支名..."
+                      value={form.branch}
+                      onValueChange={(v: string) => setField('branch', v)}
+                    />
+                    <CommandList>
+                      <CommandEmpty>
+                        {branchesLoading ? '加载中...' : '无匹配分支，可直接输入'}
+                      </CommandEmpty>
+                      <CommandGroup>
+                        {branches.map((b) => (
+                          <CommandItem
+                            key={b}
+                            value={b}
+                            onSelect={(v: string) => {
+                              setField('branch', v)
+                              setBranchPopoverOpen(false)
+                            }}
+                          >
+                            {b}
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="env-build-output">产物目录</Label>
               <Input
-                id="env-branch"
-                value={form.branch}
-                onChange={(e) => setField('branch', e.target.value)}
-                placeholder="main"
+                id="env-build-output"
+                value={form.build_output_dir}
+                onChange={(e) => setField('build_output_dir', e.target.value)}
+                placeholder="dist"
               />
             </div>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="env-build-script">构建脚本</Label>
-            <Textarea
-              id="env-build-script"
-              value={form.build_script}
-              onChange={(e) => setField('build_script', e.target.value)}
-              placeholder="npm install && npm run build"
-              rows={3}
-              className="font-mono text-sm"
-            />
+          <div className="grid gap-4 sm:grid-cols-[160px_1fr]">
+            <div className="space-y-2">
+              <Label>脚本类型</Label>
+              <Select
+                value={form.build_script_type}
+                onValueChange={(v) => setField('build_script_type', v)}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {BUILD_SCRIPT_TYPES.map((t) => (
+                    <SelectItem key={t.value} value={t.value}>
+                      {t.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>构建脚本</Label>
+              <div className="border border-zinc-200 dark:border-zinc-800 rounded-md overflow-hidden">
+                <CodeMirror
+                  value={form.build_script}
+                  height="160px"
+                  theme={cmTheme}
+                  extensions={getScriptExtensions()}
+                  onChange={(val) => setField('build_script', val)}
+                  placeholder={currentScriptType?.placeholder || 'npm install && npm run build'}
+                  className="text-sm font-mono"
+                />
+              </div>
+            </div>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="env-build-output">产物目录</Label>
-            <Input
-              id="env-build-output"
-              value={form.build_output_dir}
-              onChange={(e) => setField('build_output_dir', e.target.value)}
-              placeholder="dist"
-            />
-          </div>
-
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-4 sm:grid-cols-3">
             <div className="space-y-2">
               <Label>部署方式</Label>
               <Select
@@ -281,16 +389,15 @@ export function EnvironmentFormDialog({
                 </SelectContent>
               </Select>
             </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="env-deploy-path">部署路径</Label>
-            <Input
-              id="env-deploy-path"
-              value={form.deploy_path}
-              onChange={(e) => setField('deploy_path', e.target.value)}
-              placeholder="/var/www/html"
-            />
+            <div className="space-y-2">
+              <Label htmlFor="env-deploy-path">部署路径</Label>
+              <Input
+                id="env-deploy-path"
+                value={form.deploy_path}
+                onChange={(e) => setField('deploy_path', e.target.value)}
+                placeholder="/var/www/html"
+              />
+            </div>
           </div>
 
           {/* Cron 定时构建 */}
@@ -348,15 +455,18 @@ export function EnvironmentFormDialog({
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="env-env-vars">环境变量 (JSON)</Label>
-            <Textarea
-              id="env-env-vars"
-              value={form.env_vars}
-              onChange={(e) => setField('env_vars', e.target.value)}
-              placeholder='{"NODE_ENV": "production"}'
-              rows={2}
-              className="font-mono text-sm"
-            />
+            <Label>环境变量 (JSON)</Label>
+            <div className="border border-zinc-200 dark:border-zinc-800 rounded-md overflow-hidden">
+              <CodeMirror
+                value={form.env_vars}
+                height="100px"
+                theme={cmTheme}
+                extensions={[json()]}
+                onChange={(val) => setField('env_vars', val)}
+                placeholder='{"NODE_ENV": "production"}'
+                className="text-sm font-mono"
+              />
+            </div>
           </div>
 
           <DialogFooter>

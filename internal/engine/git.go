@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"fmt"
 	"net/url"
 	"os"
 	"os/exec"
@@ -69,4 +70,27 @@ func buildAuthURL(repoURL, authType, username, password string) string {
 		u.User = url.UserPassword(username, password)
 	}
 	return u.String()
+}
+
+// GitListBranches returns remote branch names via git ls-remote --heads.
+func GitListBranches(repoURL, authType, username, password string) ([]string, error) {
+	authURL := buildAuthURL(repoURL, authType, username, password)
+	cmd := exec.Command("git", "ls-remote", "--heads", authURL)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return nil, fmt.Errorf("git ls-remote failed: %w", err)
+	}
+	var branches []string
+	for _, line := range strings.Split(strings.TrimSpace(string(output)), "\n") {
+		if line == "" {
+			continue
+		}
+		parts := strings.Fields(line)
+		if len(parts) >= 2 {
+			ref := parts[1]
+			branch := strings.TrimPrefix(ref, "refs/heads/")
+			branches = append(branches, branch)
+		}
+	}
+	return branches, nil
 }

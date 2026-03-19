@@ -51,7 +51,6 @@ func (cs *CronScheduler) Start() error {
 		}
 	}
 	cs.cron.Start()
-	cs.logger.Info("CronScheduler started", zap.Int("entries", len(cs.entries)))
 	return nil
 }
 
@@ -127,9 +126,5 @@ func (cs *CronScheduler) addEntry(env model.Environment) error {
 	cs.entries[envID] = entryID
 	cs.mu.Unlock()
 
-	cs.logger.Info("cron entry added",
-		zap.Uint("env_id", envID),
-		zap.String("expression", expression),
-	)
 	return nil
 }

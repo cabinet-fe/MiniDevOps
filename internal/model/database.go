@@ -9,6 +9,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 )
 
 func InitDB() (*gorm.DB, error) {
@@ -22,7 +23,9 @@ func InitDB() (*gorm.DB, error) {
 	}
 
 	dsn := dbPath + "?_journal_mode=WAL&_busy_timeout=5000"
-	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
+	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{
+		Logger: logger.Default.LogMode(logger.Silent),
+	})
 	if err != nil {
 		return nil, fmt.Errorf("opening database: %w", err)
 	}
