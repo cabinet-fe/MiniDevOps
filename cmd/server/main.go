@@ -78,7 +78,7 @@ func main() {
 	userService := service.NewUserService(userRepo)
 	serverService := service.NewServerService(serverRepo, envRepo)
 	projectService := service.NewProjectService(projectRepo, envRepo, buildRepo)
-	buildService := service.NewBuildService(buildRepo, projectRepo, envRepo)
+	buildService := service.NewBuildService(buildRepo, projectRepo, envRepo, userRepo)
 	notifService := service.NewNotificationService(notifRepo)
 	auditService := service.NewAuditService(auditRepo)
 
@@ -94,11 +94,17 @@ func main() {
 	scheduler := engine.NewScheduler(cfg.Build.MaxConcurrent, pipeline, logger)
 	scheduler.Start()
 
+	// Init cron scheduler for timed builds
+	cronScheduler := engine.NewCronScheduler(envRepo, buildRepo, scheduler, logger)
+	if err := cronScheduler.Start(); err != nil {
+		logger.Error("Failed to start cron scheduler", zap.Error(err))
+	}
+
 	// Init handlers
 	authHandler := handler.NewAuthHandler(userService, authService)
 	userHandler := handler.NewUserHandler(userService)
 	serverHandler := handler.NewServerHandler(serverService)
-	projectHandler := handler.NewProjectHandler(projectService)
+	projectHandler := handler.NewProjectHandler(projectService, cronScheduler)
 	buildHandler := handler.NewBuildHandler(buildService, scheduler)
 	webhookHandler := handler.NewWebhookHandler(projectService, buildService, envRepo, scheduler)
 	notifHandler := handler.NewNotificationHandler(notifService)
@@ -160,13 +166,16 @@ func main() {
 			auth.DELETE("/projects/:id/envs/:envId", projectHandler.DeleteEnvironment)
 
 			// Builds
+			auth.GET("/builds", buildHandler.ListAll)
 			auth.GET("/projects/:id/builds", buildHandler.ListByProject)
 			auth.POST("/projects/:id/builds", buildHandler.TriggerBuild)
 			auth.GET("/builds/:id", buildHandler.GetByID)
+			auth.GET("/builds/:id/log", buildHandler.GetLog)
 			auth.POST("/builds/:id/cancel", buildHandler.Cancel)
 			auth.POST("/builds/:id/deploy", buildHandler.Deploy)
 			auth.GET("/builds/:id/artifact", buildHandler.DownloadArtifact)
 			auth.POST("/builds/:id/rollback", middleware.RequireRole("ops", "admin"), buildHandler.Rollback)
+			auth.POST("/builds/:id/retry", buildHandler.Retry)
 
 			// Dashboard
 			auth.GET("/dashboard/stats", buildHandler.DashboardStats)
@@ -224,6 +233,7 @@ func main() {
 	<-quit
 
 	logger.Info("Shutting down...")
+	cronScheduler.Stop()
 	scheduler.Shutdown()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)

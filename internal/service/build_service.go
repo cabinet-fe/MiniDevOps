@@ -9,13 +9,45 @@ type BuildService struct {
 	repo        *repository.BuildRepository
 	projectRepo *repository.ProjectRepository
 	envRepo     *repository.EnvironmentRepository
+	userRepo    *repository.UserRepository
 }
 
-func NewBuildService(repo *repository.BuildRepository, projectRepo *repository.ProjectRepository, envRepo *repository.EnvironmentRepository) *BuildService {
-	return &BuildService{repo: repo, projectRepo: projectRepo, envRepo: envRepo}
+func NewBuildService(repo *repository.BuildRepository, projectRepo *repository.ProjectRepository, envRepo *repository.EnvironmentRepository, userRepo *repository.UserRepository) *BuildService {
+	return &BuildService{repo: repo, projectRepo: projectRepo, envRepo: envRepo, userRepo: userRepo}
 }
 
-func (s *BuildService) TriggerBuild(projectID, environmentID, triggeredBy uint, triggerType, commitHash, commitMessage string) (*model.Build, error) {
+// BuildDetailResponse extends Build with associated names.
+type BuildDetailResponse struct {
+	model.Build
+	ProjectName     string `json:"project_name"`
+	EnvironmentName string `json:"environment_name"`
+	TriggeredByName string `json:"triggered_by_name"`
+}
+
+func (s *BuildService) GetBuildDetail(id uint) (*BuildDetailResponse, error) {
+	build, err := s.repo.FindByID(id)
+	if err != nil {
+		return nil, err
+	}
+	resp := &BuildDetailResponse{Build: *build}
+	if project, err := s.projectRepo.FindByID(build.ProjectID); err == nil {
+		resp.ProjectName = project.Name
+	}
+	if env, err := s.envRepo.FindByID(build.EnvironmentID); err == nil {
+		resp.EnvironmentName = env.Name
+	}
+	if build.TriggeredBy > 0 {
+		if user, err := s.userRepo.FindByID(build.TriggeredBy); err == nil {
+			resp.TriggeredByName = user.DisplayName
+			if resp.TriggeredByName == "" {
+				resp.TriggeredByName = user.Username
+			}
+		}
+	}
+	return resp, nil
+}
+
+func (s *BuildService) TriggerBuild(projectID, environmentID, triggeredBy uint, triggerType, branch, commitHash, commitMessage string) (*model.Build, error) {
 	num, err := s.repo.GetNextBuildNumber(projectID)
 	if err != nil {
 		return nil, err
@@ -27,6 +59,7 @@ func (s *BuildService) TriggerBuild(projectID, environmentID, triggeredBy uint, 
 		Status:        "pending",
 		TriggerType:   triggerType,
 		TriggeredBy:   triggeredBy,
+		Branch:        branch,
 		CommitHash:    commitHash,
 		CommitMessage: commitMessage,
 	}
@@ -42,6 +75,32 @@ func (s *BuildService) GetByID(id uint) (*model.Build, error) {
 
 func (s *BuildService) ListByProject(projectID uint, environmentID *uint, page, pageSize int) ([]model.Build, int64, error) {
 	return s.repo.List(projectID, environmentID, page, pageSize)
+}
+
+// BuildListItem extends Build with project and environment names for list display.
+type BuildListItem struct {
+	model.Build
+	ProjectName     string `json:"project_name"`
+	EnvironmentName string `json:"environment_name"`
+}
+
+func (s *BuildService) ListAll(page, pageSize int) ([]BuildListItem, int64, error) {
+	builds, total, err := s.repo.ListAll(page, pageSize)
+	if err != nil {
+		return nil, 0, err
+	}
+	items := make([]BuildListItem, 0, len(builds))
+	for _, b := range builds {
+		item := BuildListItem{Build: b}
+		if project, err := s.projectRepo.FindByID(b.ProjectID); err == nil {
+			item.ProjectName = project.Name
+		}
+		if env, err := s.envRepo.FindByID(b.EnvironmentID); err == nil {
+			item.EnvironmentName = env.Name
+		}
+		items = append(items, item)
+	}
+	return items, total, nil
 }
 
 func (s *BuildService) Cancel(id uint) error {

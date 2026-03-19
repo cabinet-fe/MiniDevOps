@@ -1,6 +1,6 @@
 # 构建详情页完善与核心构建体验优化
 
-> 状态: 未执行
+> 状态: 已执行
 
 ## 目标
 
@@ -71,4 +71,16 @@
 
 ## 影响范围
 
+- `web/src/pages/builds/detail.tsx` - 完全重写，从 27 行占位页面扩展为完整构建详情页（含信息卡片、状态时间线、操作按钮、WebSocket 实时更新）
+- `web/src/components/build-log-viewer.tsx` - 增强日志查看器（ANSI 颜色解析、搜索过滤、自动滚动控制、全屏模式、虚拟滚动）
+- `web/src/pages/projects/detail.tsx` - 修复构建历史链接（`/projects/:id/builds/:bid` → `/builds/:id`），移除未使用的 `projectId` 参数
+- `web/package.json` - 新增 `ansi-to-html` 依赖
+- `internal/service/build_service.go` - 新增 `userRepo` 依赖、`BuildDetailResponse` 结构体、`GetBuildDetail` 方法
+- `internal/handler/build_handler.go` - `GetByID` 改用 `GetBuildDetail` 返回扩展信息、新增 `GetLog` 方法（日志文本接口）、新增 `Retry` 方法（重新构建接口）
+- `cmd/server/main.go` - 更新 `BuildService` 构造函数调用、注册 `/builds/:id/log` 和 `/builds/:id/retry` 路由
+- `web/src/pages/builds/list.tsx` - 全局构建列表页面（分页、项目名跳转、状态 Badge）
+- `web/src/components/layout/sidebar.tsx` - 资源分组新增「构建」菜单项
+
 ## 历史补丁
+
+- patch-1: 侧栏菜单补全与项目构建配置展示

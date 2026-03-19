@@ -102,7 +102,13 @@ func (p *Pipeline) Execute(ctx context.Context, buildID uint) {
 		repoPassword, _ = pkg.Decrypt(project.RepoPassword)
 	}
 
-	err = GitCloneOrPull(ctx, workDir, project.RepoURL, project.RepoAuthType, project.RepoUsername, repoPassword, env.Branch, writeLine)
+	// Use build-level branch override if specified, otherwise use env default
+	branch := env.Branch
+	if build.Branch != "" {
+		branch = build.Branch
+	}
+
+	err = GitCloneOrPull(ctx, workDir, project.RepoURL, project.RepoAuthType, project.RepoUsername, repoPassword, branch, writeLine)
 	if err != nil {
 		if ctx.Err() != nil {
 			p.cancelBuild(build)
@@ -111,6 +117,20 @@ func (p *Pipeline) Execute(ctx context.Context, buildID uint) {
 		p.failBuild(build, "Git操作失败: "+err.Error())
 		writeLine("ERROR: " + err.Error())
 		return
+	}
+
+	// Checkout specific commit if specified
+	if build.CommitHash != "" {
+		writeLine("Checking out commit: " + build.CommitHash)
+		if err := runGit(ctx, workDir, writeLine, "checkout", build.CommitHash); err != nil {
+			if ctx.Err() != nil {
+				p.cancelBuild(build)
+				return
+			}
+			p.failBuild(build, "Checkout commit 失败: "+err.Error())
+			writeLine("ERROR: " + err.Error())
+			return
+		}
 	}
 
 	// Stage 2: Build

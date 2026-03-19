@@ -14,6 +14,8 @@ type Environment struct {
 	DeployMethod     string    `json:"deploy_method" gorm:"size:20"`
 	PostDeployScript string    `json:"post_deploy_script" gorm:"type:text"`
 	EnvVars          string    `json:"env_vars" gorm:"type:text"`
+	CronExpression   string    `json:"cron_expression" gorm:"size:100"`
+	CronEnabled      bool      `json:"cron_enabled" gorm:"default:false"`
 	SortOrder        int       `json:"sort_order" gorm:"default:0"`
 	CreatedAt        time.Time `json:"created_at"`
 	UpdatedAt        time.Time `json:"updated_at"`

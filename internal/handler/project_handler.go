@@ -6,6 +6,7 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+	"github.com/robfig/cron/v3"
 
 	"buildflow/internal/middleware"
 	"buildflow/internal/model"
@@ -13,12 +14,19 @@ import (
 	"buildflow/internal/service"
 )
 
-type ProjectHandler struct {
-	projectService *service.ProjectService
+// CronNotifier is called when an environment's cron settings change.
+type CronNotifier interface {
+	Add(env model.Environment) error
+	Remove(envID uint)
 }
 
-func NewProjectHandler(ps *service.ProjectService) *ProjectHandler {
-	return &ProjectHandler{projectService: ps}
+type ProjectHandler struct {
+	projectService *service.ProjectService
+	cronNotifier   CronNotifier
+}
+
+func NewProjectHandler(ps *service.ProjectService, cn CronNotifier) *ProjectHandler {
+	return &ProjectHandler{projectService: ps, cronNotifier: cn}
 }
 
 // GET /api/v1/projects - list (pass role and user_id for filtering)
@@ -222,6 +230,8 @@ func (h *ProjectHandler) CreateEnvironment(c *gin.Context) {
 		DeployMethod     string `json:"deploy_method"`
 		PostDeployScript string `json:"post_deploy_script"`
 		EnvVars          string `json:"env_vars"`
+		CronExpression   string `json:"cron_expression"`
+		CronEnabled      bool   `json:"cron_enabled"`
 		SortOrder        int    `json:"sort_order"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -230,6 +240,12 @@ func (h *ProjectHandler) CreateEnvironment(c *gin.Context) {
 	}
 	if req.Branch == "" {
 		req.Branch = "main"
+	}
+	if req.CronEnabled && req.CronExpression != "" {
+		if _, err := cron.ParseStandard(req.CronExpression); err != nil {
+			pkg.Error(c, http.StatusBadRequest, "Cron 表达式不合法: "+err.Error())
+			return
+		}
 	}
 	env := &model.Environment{
 		ProjectID:        projectID,
@@ -242,11 +258,16 @@ func (h *ProjectHandler) CreateEnvironment(c *gin.Context) {
 		DeployMethod:     req.DeployMethod,
 		PostDeployScript: req.PostDeployScript,
 		EnvVars:          req.EnvVars,
+		CronExpression:   req.CronExpression,
+		CronEnabled:      req.CronEnabled,
 		SortOrder:        req.SortOrder,
 	}
 	if err := h.projectService.CreateEnvironment(env); err != nil {
 		pkg.Error(c, http.StatusBadRequest, err.Error())
 		return
+	}
+	if h.cronNotifier != nil && env.CronEnabled {
+		_ = h.cronNotifier.Add(*env)
 	}
 	pkg.Created(c, env)
 }
@@ -289,6 +310,8 @@ func (h *ProjectHandler) UpdateEnvironment(c *gin.Context) {
 		DeployMethod     *string `json:"deploy_method"`
 		PostDeployScript *string `json:"post_deploy_script"`
 		EnvVars          *string `json:"env_vars"`
+		CronExpression   *string `json:"cron_expression"`
+		CronEnabled      *bool   `json:"cron_enabled"`
 		SortOrder        *int    `json:"sort_order"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -322,12 +345,33 @@ func (h *ProjectHandler) UpdateEnvironment(c *gin.Context) {
 	if req.EnvVars != nil {
 		env.EnvVars = *req.EnvVars
 	}
+	if req.CronExpression != nil {
+		env.CronExpression = *req.CronExpression
+	}
+	if req.CronEnabled != nil {
+		env.CronEnabled = *req.CronEnabled
+	}
+	// Validate cron expression if enabled
+	if env.CronEnabled && env.CronExpression != "" {
+		if _, err := cron.ParseStandard(env.CronExpression); err != nil {
+			pkg.Error(c, http.StatusBadRequest, "Cron 表达式不合法: "+err.Error())
+			return
+		}
+	}
 	if req.SortOrder != nil {
 		env.SortOrder = *req.SortOrder
 	}
 	if err := h.projectService.UpdateEnvironment(env); err != nil {
 		pkg.Error(c, http.StatusBadRequest, err.Error())
 		return
+	}
+	// Notify cron scheduler of changes
+	if h.cronNotifier != nil {
+		if env.CronEnabled && env.CronExpression != "" {
+			_ = h.cronNotifier.Add(*env)
+		} else {
+			h.cronNotifier.Remove(env.ID)
+		}
 	}
 	pkg.Success(c, env)
 }

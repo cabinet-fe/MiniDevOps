@@ -116,6 +116,8 @@ type EnvironmentExport struct {
 	DeployMethod     string `json:"deploy_method"`
 	PostDeployScript string `json:"post_deploy_script"`
 	EnvVars          string `json:"env_vars"`
+	CronExpression   string `json:"cron_expression"`
+	CronEnabled      bool   `json:"cron_enabled"`
 	SortOrder        int    `json:"sort_order"`
 }
 
@@ -143,6 +145,8 @@ func (s *ProjectService) Export(id uint) ([]byte, error) {
 			DeployMethod:     e.DeployMethod,
 			PostDeployScript: e.PostDeployScript,
 			EnvVars:          e.EnvVars,
+			CronExpression:   e.CronExpression,
+			CronEnabled:      e.CronEnabled,
 			SortOrder:        e.SortOrder,
 		})
 	}
@@ -188,6 +192,8 @@ func (s *ProjectService) Import(data []byte, createdBy uint) (*model.Project, er
 			DeployMethod:     ee.DeployMethod,
 			PostDeployScript: ee.PostDeployScript,
 			EnvVars:          ee.EnvVars,
+			CronExpression:   ee.CronExpression,
+			CronEnabled:      ee.CronEnabled,
 			SortOrder:        ee.SortOrder,
 		}
 		if err := s.envRepo.Create(env); err != nil {

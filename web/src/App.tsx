@@ -8,6 +8,7 @@ import { DashboardPage } from '@/pages/dashboard'
 import { ProjectListPage } from '@/pages/projects/list'
 import { ProjectDetailPage } from '@/pages/projects/detail'
 import { BuildDetailPage } from '@/pages/builds/detail'
+import { BuildListPage } from '@/pages/builds/list'
 import { ServerListPage } from '@/pages/servers/list'
 import { UserListPage } from '@/pages/users/list'
 import { AuditLogsPage } from '@/pages/audit-logs'
@@ -51,6 +52,7 @@ function AppRoutes() {
         <Route index element={<DashboardPage />} />
         <Route path="projects" element={<ProjectListPage />} />
         <Route path="projects/:id" element={<ProjectDetailPage />} />
+        <Route path="builds" element={<BuildListPage />} />
         <Route path="builds/:id" element={<BuildDetailPage />} />
         <Route path="servers" element={<ServerListPage />} />
         <Route path="users" element={<UserListPage />} />

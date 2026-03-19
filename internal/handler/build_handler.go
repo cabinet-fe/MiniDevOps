@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -26,6 +27,17 @@ type BuildHandler struct {
 
 func NewBuildHandler(bs *service.BuildService, scheduler BuildScheduler) *BuildHandler {
 	return &BuildHandler{buildService: bs, scheduler: scheduler}
+}
+
+// GET /api/v1/builds - list all builds (global)
+func (h *BuildHandler) ListAll(c *gin.Context) {
+	page, pageSize := pkg.GetPage(c)
+	builds, total, err := h.buildService.ListAll(page, pageSize)
+	if err != nil {
+		pkg.Error(c, http.StatusInternalServerError, "查询失败")
+		return
+	}
+	pkg.Paginated(c, builds, total, page, pageSize)
 }
 
 // GET /api/v1/projects/:id/builds - list builds for project
@@ -59,7 +71,9 @@ func (h *BuildHandler) TriggerBuild(c *gin.Context) {
 		return
 	}
 	var req struct {
-		EnvironmentID uint `json:"environment_id"`
+		EnvironmentID uint   `json:"environment_id"`
+		Branch        string `json:"branch"`
+		CommitHash    string `json:"commit_hash"`
 	}
 	_ = c.ShouldBindJSON(&req)
 	if req.EnvironmentID == 0 {
@@ -67,7 +81,7 @@ func (h *BuildHandler) TriggerBuild(c *gin.Context) {
 		return
 	}
 	userID := middleware.GetUserID(c)
-	build, err := h.buildService.TriggerBuild(uint(projectID), req.EnvironmentID, userID, "manual", "", "")
+	build, err := h.buildService.TriggerBuild(uint(projectID), req.EnvironmentID, userID, "manual", req.Branch, req.CommitHash, "")
 	if err != nil {
 		pkg.Error(c, http.StatusBadRequest, err.Error())
 		return
@@ -78,8 +92,23 @@ func (h *BuildHandler) TriggerBuild(c *gin.Context) {
 	pkg.Created(c, build)
 }
 
-// GET /api/v1/builds/:id - build detail
+// GET /api/v1/builds/:id - build detail with associated names
 func (h *BuildHandler) GetByID(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		pkg.Error(c, http.StatusBadRequest, "参数错误")
+		return
+	}
+	detail, err := h.buildService.GetBuildDetail(uint(id))
+	if err != nil {
+		pkg.Error(c, http.StatusNotFound, "构建不存在")
+		return
+	}
+	pkg.Success(c, detail)
+}
+
+// GET /api/v1/builds/:id/log - get build log text
+func (h *BuildHandler) GetLog(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
 		pkg.Error(c, http.StatusBadRequest, "参数错误")
@@ -90,7 +119,26 @@ func (h *BuildHandler) GetByID(c *gin.Context) {
 		pkg.Error(c, http.StatusNotFound, "构建不存在")
 		return
 	}
-	pkg.Success(c, build)
+	logPath := build.LogPath
+	if logPath == "" && config.C != nil && config.C.Build.LogDir != "" {
+		logPath = filepath.Join(config.C.Build.LogDir, fmt.Sprintf("project-%d", build.ProjectID), fmt.Sprintf("build-%03d.log", build.BuildNumber))
+	} else if logPath != "" && !filepath.IsAbs(logPath) && config.C != nil && config.C.Build.LogDir != "" {
+		logPath = filepath.Join(config.C.Build.LogDir, logPath)
+	}
+	if logPath == "" {
+		pkg.Error(c, http.StatusNotFound, "日志路径未配置")
+		return
+	}
+	data, err := os.ReadFile(logPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			pkg.Error(c, http.StatusNotFound, "日志文件不存在")
+			return
+		}
+		pkg.Error(c, http.StatusInternalServerError, "读取日志失败")
+		return
+	}
+	c.Data(http.StatusOK, "text/plain; charset=utf-8", data)
 }
 
 // POST /api/v1/builds/:id/cancel - cancel build
@@ -229,4 +277,35 @@ func (h *BuildHandler) DashboardTrend(c *gin.Context) {
 		return
 	}
 	pkg.Success(c, trend)
+}
+
+// POST /api/v1/builds/:id/retry - retry a failed build
+func (h *BuildHandler) Retry(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		pkg.Error(c, http.StatusBadRequest, "参数错误")
+		return
+	}
+	build, err := h.buildService.GetByID(uint(id))
+	if err != nil {
+		pkg.Error(c, http.StatusNotFound, "构建不存在")
+		return
+	}
+	if build.Status != "failed" && build.Status != "cancelled" {
+		pkg.Error(c, http.StatusBadRequest, "只能重试失败或已取消的构建")
+		return
+	}
+	userID := middleware.GetUserID(c)
+	newBuild, err := h.buildService.TriggerBuild(
+		build.ProjectID, build.EnvironmentID, userID,
+		"retry", build.Branch, build.CommitHash, build.CommitMessage,
+	)
+	if err != nil {
+		pkg.Error(c, http.StatusInternalServerError, "重试失败: "+err.Error())
+		return
+	}
+	if h.scheduler != nil {
+		h.scheduler.Submit(newBuild.ID)
+	}
+	pkg.Created(c, newBuild)
 }

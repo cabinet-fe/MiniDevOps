@@ -47,3 +47,9 @@ func (r *EnvironmentRepository) CountByDeployServerID(serverID uint) (int64, err
 func (r *EnvironmentRepository) Update(env *model.Environment) error {
 	return r.db.Save(env).Error
 }
+
+func (r *EnvironmentRepository) ListCronEnabled() ([]model.Environment, error) {
+	var envs []model.Environment
+	err := r.db.Where("cron_enabled = ? AND cron_expression != ''", true).Find(&envs).Error
+	return envs, err
+}

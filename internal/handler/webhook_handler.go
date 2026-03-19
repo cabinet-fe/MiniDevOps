@@ -125,7 +125,7 @@ func (h *WebhookHandler) Handle(c *gin.Context) {
 	var triggered int
 	for _, env := range envs {
 		if env.Branch == branch {
-			build, err := h.buildService.TriggerBuild(uint(projectID), env.ID, 0, "webhook", commitHash, commitMessage)
+			build, err := h.buildService.TriggerBuild(uint(projectID), env.ID, 0, "webhook", "", commitHash, commitMessage)
 			if err != nil {
 				continue
 			}

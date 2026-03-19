@@ -38,6 +38,14 @@ func (r *BuildRepository) List(projectID uint, environmentID *uint, page, pageSi
 	return builds, total, err
 }
 
+func (r *BuildRepository) ListAll(page, pageSize int) ([]model.Build, int64, error) {
+	var builds []model.Build
+	var total int64
+	r.db.Model(&model.Build{}).Count(&total)
+	err := r.db.Offset((page-1)*pageSize).Limit(pageSize).Order("created_at DESC").Find(&builds).Error
+	return builds, total, err
+}
+
 func (r *BuildRepository) GetNextBuildNumber(projectID uint) (int, error) {
 	var maxNum *int
 	err := r.db.Model(&model.Build{}).Where("project_id = ?", projectID).Select("MAX(build_number)").Scan(&maxNum).Error

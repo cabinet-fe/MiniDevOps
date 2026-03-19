@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useParams, Link } from 'react-router'
-import { Copy, Play, ExternalLink } from 'lucide-react'
+import { Copy, Play, ExternalLink, Clock, Settings2, Plus, Pencil } from 'lucide-react'
 import {
   useReactTable,
   getCoreRowModel,
@@ -19,21 +19,39 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { api } from '@/lib/api'
 import type { PaginatedData } from '@/lib/api'
 import { BUILD_STATUSES } from '@/lib/constants'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { ProjectFormDialog } from '@/pages/projects/form'
+import { EnvironmentFormDialog } from '@/pages/projects/environment-form'
 
 interface Environment {
   id: number
+  project_id: number
   name: string
   branch: string
   build_script: string
   build_output_dir: string
+  deploy_server_id: number | null
   deploy_method: string
   deploy_path: string
+  post_deploy_script: string
+  env_vars: string
+  cron_expression: string
+  cron_enabled: boolean
+  sort_order: number
 }
 
 interface Project {
@@ -50,6 +68,7 @@ interface Build {
   build_number: number
   status: string
   trigger_type: string
+  branch: string
   commit_hash: string
   commit_message: string
   duration_ms: number
@@ -63,6 +82,9 @@ export function ProjectDetailPage() {
   const [loading, setLoading] = useState(true)
   const [triggering, setTriggering] = useState<number | null>(null)
   const [editDialogOpen, setEditDialogOpen] = useState(false)
+  const [triggerDialogEnv, setTriggerDialogEnv] = useState<Environment | null>(null)
+  const [envFormOpen, setEnvFormOpen] = useState(false)
+  const [editingEnv, setEditingEnv] = useState<Environment | null>(null)
 
   const fetchProject = useCallback(async () => {
     if (!id) return
@@ -88,11 +110,14 @@ export function ProjectDetailPage() {
     fetchProject()
   }, [fetchProject])
 
-  const triggerBuild = async (envId: number) => {
+  const triggerBuild = async (envId: number, branch?: string, commitHash?: string) => {
     if (!id) return
     setTriggering(envId)
     try {
-      const res = await api.post<Build>(`/projects/${id}/builds`, { environment_id: envId })
+      const payload: Record<string, unknown> = { environment_id: envId }
+      if (branch) payload.branch = branch
+      if (commitHash) payload.commit_hash = commitHash
+      const res = await api.post<Build>(`/projects/${id}/builds`, payload)
       if (res.code === 0 && res.data) {
         toast.success('构建已触发')
         setBuildsByEnv((prev) => ({
@@ -172,8 +197,16 @@ export function ProjectDetailPage() {
 
       <Card className="border-zinc-200 dark:border-zinc-800">
         <CardHeader>
-          <CardTitle>环境</CardTitle>
-          <CardDescription>按环境查看构建历史</CardDescription>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle>环境</CardTitle>
+              <CardDescription>按环境查看构建历史</CardDescription>
+            </div>
+            <Button size="sm" onClick={() => { setEditingEnv(null); setEnvFormOpen(true) }}>
+              <Plus className="size-4" />
+              新建环境
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
           <Tabs defaultValue={project.environments?.[0]?.id?.toString() ?? '0'}>
@@ -193,6 +226,14 @@ export function ProjectDetailPage() {
                       <p className="font-medium">{env.branch}</p>
                     </div>
                     <div>
+                      <p className="text-xs text-zinc-500">构建脚本</p>
+                      <p className="font-medium font-mono text-sm">{env.build_script || '-'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-zinc-500">产物目录</p>
+                      <p className="font-medium font-mono text-sm">{env.build_output_dir || '-'}</p>
+                    </div>
+                    <div>
                       <p className="text-xs text-zinc-500">部署方式</p>
                       <p className="font-medium">{env.deploy_method || '-'}</p>
                     </div>
@@ -200,22 +241,48 @@ export function ProjectDetailPage() {
                       <p className="text-xs text-zinc-500">部署路径</p>
                       <p className="font-medium">{env.deploy_path || '-'}</p>
                     </div>
-                    <Button
-                      onClick={() => triggerBuild(env.id)}
-                      disabled={triggering === env.id}
-                    >
-                      {triggering === env.id ? '触发中...' : (
-                        <>
-                          <Play className="size-4" />
-                          触发构建
-                        </>
-                      )}
-                    </Button>
+                    {env.cron_enabled && env.cron_expression && (
+                      <div>
+                        <p className="text-xs text-zinc-500">定时构建</p>
+                        <div className="flex items-center gap-1.5">
+                          <Clock className="size-3.5 text-blue-500" />
+                          <p className="font-medium font-mono text-sm">{env.cron_expression}</p>
+                          <Badge className="bg-blue-500 text-white text-[10px] px-1.5 py-0">已启用</Badge>
+                        </div>
+                      </div>
+                    )}
+                    <div className="flex items-end gap-2 ml-auto">
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        onClick={() => { setEditingEnv(env); setEnvFormOpen(true) }}
+                      >
+                        <Pencil className="size-4" />
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setTriggerDialogEnv(env)}
+                      >
+                        <Settings2 className="size-4" />
+                        高级触发
+                      </Button>
+                      <Button
+                        onClick={() => triggerBuild(env.id)}
+                        disabled={triggering === env.id}
+                      >
+                        {triggering === env.id ? '触发中...' : (
+                          <>
+                            <Play className="size-4" />
+                            触发构建
+                          </>
+                        )}
+                      </Button>
+                    </div>
                   </div>
 
                   <BuildHistoryTable
                     builds={buildsByEnv[env.id] || []}
-                    projectId={Number(id)}
                   />
                 </div>
               </TabsContent>
@@ -230,11 +297,104 @@ export function ProjectDetailPage() {
         editId={Number(id)}
         onSuccess={() => fetchProject()}
       />
+
+      <EnvironmentFormDialog
+        open={envFormOpen}
+        onOpenChange={setEnvFormOpen}
+        projectId={Number(id)}
+        editEnv={editingEnv}
+        onSuccess={() => fetchProject()}
+      />
+
+      <TriggerBuildDialog
+        env={triggerDialogEnv}
+        open={!!triggerDialogEnv}
+        onOpenChange={(open) => { if (!open) setTriggerDialogEnv(null) }}
+        onTrigger={(envId, branch, commitHash) => {
+          setTriggerDialogEnv(null)
+          triggerBuild(envId, branch, commitHash)
+        }}
+        triggering={triggering}
+      />
     </div>
   )
 }
 
-function BuildHistoryTable({ builds, projectId }: { builds: Build[]; projectId: number }) {
+function TriggerBuildDialog({
+  env,
+  open,
+  onOpenChange,
+  onTrigger,
+  triggering,
+}: {
+  env: Environment | null
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  onTrigger: (envId: number, branch?: string, commitHash?: string) => void
+  triggering: number | null
+}) {
+  const [branch, setBranch] = useState('')
+  const [commitHash, setCommitHash] = useState('')
+
+  useEffect(() => {
+    if (!open) {
+      setBranch('')
+      setCommitHash('')
+    }
+  }, [open])
+
+  if (!env) return null
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-[420px]">
+        <DialogHeader>
+          <DialogTitle>触发构建 - {env.name}</DialogTitle>
+          <DialogDescription>
+            可指定分支或 Commit，留空则使用环境默认分支（{env.branch}）
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4 py-2">
+          <div className="space-y-2">
+            <Label htmlFor="trigger-branch">分支（可选）</Label>
+            <Input
+              id="trigger-branch"
+              value={branch}
+              onChange={(e) => setBranch(e.target.value)}
+              placeholder={`默认: ${env.branch}`}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="trigger-commit">Commit Hash（可选）</Label>
+            <Input
+              id="trigger-commit"
+              value={commitHash}
+              onChange={(e) => setCommitHash(e.target.value)}
+              placeholder="例如: a1b2c3d"
+              className="font-mono"
+            />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>取消</Button>
+          <Button
+            onClick={() => onTrigger(env.id, branch || undefined, commitHash || undefined)}
+            disabled={triggering === env.id}
+          >
+            {triggering === env.id ? '触发中...' : (
+              <>
+                <Play className="size-4" />
+                触发构建
+              </>
+            )}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function BuildHistoryTable({ builds }: { builds: Build[] }) {
   const columnHelper = createColumnHelper<Build>()
   const columns = [
     columnHelper.accessor('build_number', { header: '#', cell: ({ getValue }) => `#${getValue()}` }),
@@ -275,7 +435,7 @@ function BuildHistoryTable({ builds, projectId }: { builds: Build[]; projectId: 
         const b = row.original
         return (
           <div className="flex gap-1">
-            <Link to={`/projects/${projectId}/builds/${b.id}`}>
+            <Link to={`/builds/${b.id}`}>
               <Button variant="ghost" size="icon-sm">
                 <ExternalLink className="size-4" />
               </Button>
