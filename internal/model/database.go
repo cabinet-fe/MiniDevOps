@@ -53,14 +53,22 @@ func InitDB() (*gorm.DB, error) {
 		return nil, fmt.Errorf("counting users: %w", err)
 	}
 	if count == 0 {
-		hash, err := bcrypt.GenerateFromPassword([]byte("admin123"), bcrypt.DefaultCost)
+		adminCfg := config.C.Admin
+		if adminCfg.Username == "" || adminCfg.Password == "" {
+			return nil, fmt.Errorf("admin username and password must be set in config when no users exist")
+		}
+		displayName := adminCfg.DisplayName
+		if displayName == "" {
+			displayName = "Administrator"
+		}
+		hash, err := bcrypt.GenerateFromPassword([]byte(adminCfg.Password), bcrypt.DefaultCost)
 		if err != nil {
 			return nil, fmt.Errorf("hashing admin password: %w", err)
 		}
 		admin := User{
-			Username:     "admin",
+			Username:     adminCfg.Username,
 			PasswordHash: string(hash),
-			DisplayName:  "Administrator",
+			DisplayName:  displayName,
 			Role:         "admin",
 			IsActive:     true,
 		}

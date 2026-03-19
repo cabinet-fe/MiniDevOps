@@ -7,10 +7,8 @@ import { LoginPage } from '@/pages/login'
 import { DashboardPage } from '@/pages/dashboard'
 import { ProjectListPage } from '@/pages/projects/list'
 import { ProjectDetailPage } from '@/pages/projects/detail'
-import { ProjectFormPage } from '@/pages/projects/form'
 import { BuildDetailPage } from '@/pages/builds/detail'
 import { ServerListPage } from '@/pages/servers/list'
-import { ServerFormPage } from '@/pages/servers/form'
 import { UserListPage } from '@/pages/users/list'
 import { AuditLogsPage } from '@/pages/audit-logs'
 import { SettingsPage } from '@/pages/settings'
@@ -52,13 +50,9 @@ function AppRoutes() {
       >
         <Route index element={<DashboardPage />} />
         <Route path="projects" element={<ProjectListPage />} />
-        <Route path="projects/new" element={<ProjectFormPage />} />
-        <Route path="projects/:id/edit" element={<ProjectFormPage />} />
         <Route path="projects/:id" element={<ProjectDetailPage />} />
         <Route path="builds/:id" element={<BuildDetailPage />} />
         <Route path="servers" element={<ServerListPage />} />
-        <Route path="servers/new" element={<ServerFormPage />} />
-        <Route path="servers/:id/edit" element={<ServerFormPage />} />
         <Route path="users" element={<UserListPage />} />
         <Route path="audit-logs" element={<AuditLogsPage />} />
         <Route path="settings" element={<SettingsPage />} />

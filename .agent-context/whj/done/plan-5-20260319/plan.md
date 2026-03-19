@@ -1,6 +1,6 @@
 # 前端 UI 重构：表单弹框化与布局优化
 
-> 状态: 未执行
+> 状态: 已执行
 
 ## 目标
 
@@ -42,5 +42,15 @@
 - 各页面功能正常：列表页新建/编辑弹框流程完整、布局在桌面和移动端均表现正常
 
 ## 影响范围
+
+- `web/src/App.tsx` — 移除 4 条独立表单页面路由，移除对应导入
+- `web/src/pages/projects/form.tsx` — 从 `ProjectFormPage` 重构为 `ProjectFormDialog` 弹框组件
+- `web/src/pages/projects/list.tsx` — 集成 `ProjectFormDialog`，新建/编辑按钮改为打开弹框
+- `web/src/pages/projects/detail.tsx` — 集成 `ProjectFormDialog`，编辑按钮改为打开弹框
+- `web/src/pages/servers/form.tsx` — 从 `ServerFormPage` 重构为 `ServerFormDialog` 弹框组件
+- `web/src/pages/servers/list.tsx` — 集成 `ServerFormDialog`，编辑按钮改为打开弹框
+- `web/src/components/layout/sidebar.tsx` — 导航分组、Tooltip、渐变 Logo、活跃态蓝色图标
+- `web/src/components/layout/header.tsx` — 精简高度、ChevronRight 面包屑、毛玻璃背景、渐变头像
+- `web/src/components/layout/app-layout.tsx` — 内容区 max-w-7xl 限宽 + 响应式间距
 
 ## 历史补丁

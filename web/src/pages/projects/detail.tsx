@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useParams, Link } from 'react-router'
 import { Copy, Play, ExternalLink } from 'lucide-react'
 import {
@@ -24,6 +24,7 @@ import type { PaginatedData } from '@/lib/api'
 import { BUILD_STATUSES } from '@/lib/constants'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
+import { ProjectFormDialog } from '@/pages/projects/form'
 
 interface Environment {
   id: number
@@ -61,29 +62,31 @@ export function ProjectDetailPage() {
   const [buildsByEnv, setBuildsByEnv] = useState<Record<number, Build[]>>({})
   const [loading, setLoading] = useState(true)
   const [triggering, setTriggering] = useState<number | null>(null)
+  const [editDialogOpen, setEditDialogOpen] = useState(false)
 
-  useEffect(() => {
+  const fetchProject = useCallback(async () => {
     if (!id) return
-    const fetch = async () => {
-      try {
-        const res = await api.get<Project>(`/projects/${id}`)
-        if (res.code === 0 && res.data) {
-          setProject(res.data)
-          const envs = res.data.environments || []
-          for (const env of envs) {
-            const br = await api.get<PaginatedData<Build>>(`/projects/${id}/builds?environment_id=${env.id}&page_size=20`)
-            if (br.code === 0 && br.data) {
-              const items = (br.data as PaginatedData<Build>).items || []
-              setBuildsByEnv((prev) => ({ ...prev, [env.id]: items }))
-            }
+    try {
+      const res = await api.get<Project>(`/projects/${id}`)
+      if (res.code === 0 && res.data) {
+        setProject(res.data)
+        const envs = res.data.environments || []
+        for (const env of envs) {
+          const br = await api.get<PaginatedData<Build>>(`/projects/${id}/builds?environment_id=${env.id}&page_size=20`)
+          if (br.code === 0 && br.data) {
+            const items = (br.data as PaginatedData<Build>).items || []
+            setBuildsByEnv((prev) => ({ ...prev, [env.id]: items }))
           }
         }
-      } finally {
-        setLoading(false)
       }
+    } finally {
+      setLoading(false)
     }
-    fetch()
   }, [id])
+
+  useEffect(() => {
+    fetchProject()
+  }, [fetchProject])
 
   const triggerBuild = async (envId: number) => {
     if (!id) return
@@ -134,9 +137,7 @@ export function ProjectDetailPage() {
           <p className="mt-1 text-sm text-zinc-500">{project.description || '暂无描述'}</p>
         </div>
         <div className="flex gap-2">
-          <Link to={`/projects/${id}/edit`}>
-            <Button variant="outline">编辑</Button>
-          </Link>
+          <Button variant="outline" onClick={() => setEditDialogOpen(true)}>编辑</Button>
           <Link to="/projects">
             <Button variant="outline">返回列表</Button>
           </Link>
@@ -222,6 +223,13 @@ export function ProjectDetailPage() {
           </Tabs>
         </CardContent>
       </Card>
+
+      <ProjectFormDialog
+        open={editDialogOpen}
+        onOpenChange={setEditDialogOpen}
+        editId={Number(id)}
+        onSuccess={() => fetchProject()}
+      />
     </div>
   )
 }

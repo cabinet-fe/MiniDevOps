@@ -1,8 +1,14 @@
-.PHONY: dev-backend dev-frontend build clean
+.PHONY: dev dev-backend dev-frontend build clean
 
 # Development
+dev:
+	@trap 'kill 0' INT TERM; \
+	(cd cmd/server && go run . --config ../../config.yaml) & \
+	(cd web && bun run dev) & \
+	wait
+
 dev-backend:
-	cd cmd/server && go run .
+	cd cmd/server && go run . --config ../../config.yaml
 
 dev-frontend:
 	cd web && bun run dev

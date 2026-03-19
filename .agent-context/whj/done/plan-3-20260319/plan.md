@@ -1,6 +1,6 @@
 # 开发体验与安全改进
 
-> 状态: 未执行
+> 状态: 已执行
 
 ## 目标
 
@@ -43,4 +43,11 @@
 
 ## 影响范围
 
+- `Makefile` — 新增 `dev` 目标（一键并行启动前后端）
+- `config.yaml` — 新增 `admin` 配置块（username / password / display_name）
+- `internal/config/config.go` — 新增 `AdminConfig` 结构体，嵌入 `Config`
+- `internal/model/database.go` — 管理员初始化逻辑改为从 `config.C.Admin` 读取，空配置时报错
+
 ## 历史补丁
+
+- patch-1: 修复 make dev 配置文件路径

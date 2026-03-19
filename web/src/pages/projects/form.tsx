@@ -1,8 +1,6 @@
 import { useEffect, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -13,6 +11,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { api } from "@/lib/api";
 import { REPO_AUTH_TYPES } from "@/lib/constants";
 
@@ -40,25 +46,39 @@ const DEFAULT_FORM: ProjectPayload = {
   max_artifacts: 5,
 };
 
-export function ProjectFormPage() {
-  const { id } = useParams();
-  const navigate = useNavigate();
-  const isEdit = !!id;
+interface ProjectFormDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  editId?: number | null;
+  onSuccess?: () => void;
+}
 
-  const [loading, setLoading] = useState(isEdit);
+export function ProjectFormDialog({
+  open,
+  onOpenChange,
+  editId,
+  onSuccess,
+}: ProjectFormDialogProps) {
+  const isEdit = !!editId;
+
+  const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [form, setForm] = useState<ProjectPayload>(DEFAULT_FORM);
 
   useEffect(() => {
-    if (!isEdit || !id) {
+    if (!open) {
+      setForm(DEFAULT_FORM);
+      setError("");
       return;
     }
+
+    if (!isEdit || !editId) return;
 
     const fetchProject = async () => {
       setLoading(true);
       try {
-        const res = await api.get<ProjectDetail>(`/projects/${id}`);
+        const res = await api.get<ProjectDetail>(`/projects/${editId}`);
         if (res.code !== 0 || !res.data) {
           throw new Error(res.message || "加载项目失败");
         }
@@ -81,7 +101,7 @@ export function ProjectFormPage() {
     };
 
     fetchProject();
-  }, [id, isEdit]);
+  }, [open, editId, isEdit]);
 
   const setField = <K extends keyof ProjectPayload>(key: K, value: ProjectPayload[K]) => {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -119,22 +139,22 @@ export function ProjectFormPage() {
         max_artifacts: form.max_artifacts,
       };
 
-      if (isEdit && id) {
-        const res = await api.put<ProjectDetail>(`/projects/${id}`, payload);
+      if (isEdit && editId) {
+        const res = await api.put<ProjectDetail>(`/projects/${editId}`, payload);
         if (res.code !== 0) {
           throw new Error(res.message || "更新项目失败");
         }
         toast.success("项目已更新");
-        navigate(`/projects/${id}`, { replace: true });
-        return;
+      } else {
+        const res = await api.post<ProjectDetail>("/projects", payload);
+        if (res.code !== 0 || !res.data) {
+          throw new Error(res.message || "创建项目失败");
+        }
+        toast.success("项目创建成功");
       }
 
-      const res = await api.post<ProjectDetail>("/projects", payload);
-      if (res.code !== 0 || !res.data) {
-        throw new Error(res.message || "创建项目失败");
-      }
-      toast.success("项目创建成功");
-      navigate(`/projects/${res.data.id}`, { replace: true });
+      onOpenChange(false);
+      onSuccess?.();
     } catch (err) {
       const message = err instanceof Error ? err.message : "提交失败";
       setError(message);
@@ -144,46 +164,33 @@ export function ProjectFormPage() {
     }
   };
 
-  if (loading) {
-    return (
-      <div className="flex h-64 items-center justify-center">
-        <div className="size-8 animate-spin rounded-full border-2 border-zinc-600 border-t-zinc-300" />
-      </div>
-    );
-  }
-
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">{isEdit ? "编辑项目" : "新建项目"}</h1>
-          <p className="mt-1 text-sm text-zinc-500">
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-[560px] max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>{isEdit ? "编辑项目" : "新建项目"}</DialogTitle>
+          <DialogDescription>
             {isEdit ? "更新项目仓库与构建配置" : "创建新的构建项目并配置仓库信息"}
-          </p>
-        </div>
-        <Link to={isEdit && id ? `/projects/${id}` : "/projects"}>
-          <Button variant="outline">返回</Button>
-        </Link>
-      </div>
+          </DialogDescription>
+        </DialogHeader>
 
-      <Card className="border-zinc-200 dark:border-zinc-800">
-        <CardHeader>
-          <CardTitle>项目配置</CardTitle>
-          <CardDescription>带 * 的字段为必填项</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-5">
+        {loading ? (
+          <div className="flex h-32 items-center justify-center">
+            <div className="size-8 animate-spin rounded-full border-2 border-zinc-600 border-t-zinc-300" />
+          </div>
+        ) : (
+          <form onSubmit={handleSubmit} className="space-y-4">
             {error && (
               <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400">
                 {error}
               </div>
             )}
 
-            <div className="grid gap-5 md:grid-cols-2">
+            <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
-                <Label htmlFor="name">项目名称 *</Label>
+                <Label htmlFor="project-name">项目名称 *</Label>
                 <Input
-                  id="name"
+                  id="project-name"
                   value={form.name}
                   onChange={(e) => setField("name", e.target.value)}
                   placeholder="例如：buildflow-web"
@@ -192,9 +199,9 @@ export function ProjectFormPage() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="max-artifacts">构建产物保留数量 *</Label>
+                <Label htmlFor="project-max-artifacts">构建产物保留数量 *</Label>
                 <Input
-                  id="max-artifacts"
+                  id="project-max-artifacts"
                   type="number"
                   min={1}
                   value={form.max_artifacts}
@@ -206,9 +213,9 @@ export function ProjectFormPage() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="repo-url">仓库地址 *</Label>
+              <Label htmlFor="project-repo-url">仓库地址 *</Label>
               <Input
-                id="repo-url"
+                id="project-repo-url"
                 value={form.repo_url}
                 onChange={(e) => setField("repo_url", e.target.value)}
                 placeholder="https://github.com/org/repo.git"
@@ -216,9 +223,9 @@ export function ProjectFormPage() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="description">描述</Label>
+              <Label htmlFor="project-description">描述</Label>
               <Textarea
-                id="description"
+                id="project-description"
                 value={form.description}
                 onChange={(e) => setField("description", e.target.value)}
                 placeholder="简要描述该项目用途"
@@ -227,7 +234,7 @@ export function ProjectFormPage() {
               />
             </div>
 
-            <div className="grid gap-5 md:grid-cols-2">
+            <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label>仓库认证方式</Label>
                 <Select
@@ -260,9 +267,9 @@ export function ProjectFormPage() {
 
               {form.repo_auth_type !== "none" && (
                 <div className="space-y-2">
-                  <Label htmlFor="repo-username">仓库用户名</Label>
+                  <Label htmlFor="project-repo-username">仓库用户名</Label>
                   <Input
-                    id="repo-username"
+                    id="project-repo-username"
                     value={form.repo_username}
                     onChange={(e) => setField("repo_username", e.target.value)}
                     placeholder="可选，部分仓库类型需要"
@@ -273,11 +280,11 @@ export function ProjectFormPage() {
 
             {form.repo_auth_type !== "none" && (
               <div className="space-y-2">
-                <Label htmlFor="repo-password">
+                <Label htmlFor="project-repo-password">
                   {isEdit ? "仓库密码 / Token（留空表示不变）" : "仓库密码 / Token *"}
                 </Label>
                 <Input
-                  id="repo-password"
+                  id="project-repo-password"
                   type="password"
                   value={form.repo_password}
                   onChange={(e) => setField("repo_password", e.target.value)}
@@ -286,19 +293,17 @@ export function ProjectFormPage() {
               </div>
             )}
 
-            <div className="flex justify-end gap-2 pt-2">
-              <Link to={isEdit && id ? `/projects/${id}` : "/projects"}>
-                <Button type="button" variant="outline">
-                  取消
-                </Button>
-              </Link>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+                取消
+              </Button>
               <Button type="submit" disabled={submitting}>
                 {submitting ? (isEdit ? "保存中..." : "创建中...") : isEdit ? "保存" : "创建项目"}
               </Button>
-            </div>
+            </DialogFooter>
           </form>
-        </CardContent>
-      </Card>
-    </div>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }

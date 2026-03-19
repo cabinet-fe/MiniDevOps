@@ -33,12 +33,19 @@ type EncryptionConfig struct {
 	Key string `mapstructure:"key"`
 }
 
+type AdminConfig struct {
+	Username    string `mapstructure:"username"`
+	Password    string `mapstructure:"password"`
+	DisplayName string `mapstructure:"display_name"`
+}
+
 type Config struct {
-	Server    ServerConfig    `mapstructure:"server"`
-	Database  DatabaseConfig `mapstructure:"database"`
-	JWT       JWTConfig      `mapstructure:"jwt"`
-	Build     BuildConfig    `mapstructure:"build"`
+	Server     ServerConfig     `mapstructure:"server"`
+	Database   DatabaseConfig   `mapstructure:"database"`
+	JWT        JWTConfig        `mapstructure:"jwt"`
+	Build      BuildConfig      `mapstructure:"build"`
 	Encryption EncryptionConfig `mapstructure:"encryption"`
+	Admin      AdminConfig      `mapstructure:"admin"`
 }
 
 var C *Config

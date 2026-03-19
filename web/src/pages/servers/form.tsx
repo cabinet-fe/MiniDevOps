@@ -1,8 +1,6 @@
 import { useEffect, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
@@ -13,6 +11,14 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { api } from '@/lib/api'
 import { AUTH_TYPES } from '@/lib/constants'
 
@@ -44,23 +50,39 @@ const DEFAULT_FORM: ServerPayload = {
   tags: '',
 }
 
-export function ServerFormPage() {
-  const { id } = useParams()
-  const navigate = useNavigate()
-  const isEdit = !!id
+interface ServerFormDialogProps {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  editId?: number | null
+  onSuccess?: () => void
+}
 
-  const [loading, setLoading] = useState(isEdit)
+export function ServerFormDialog({
+  open,
+  onOpenChange,
+  editId,
+  onSuccess,
+}: ServerFormDialogProps) {
+  const isEdit = !!editId
+
+  const [loading, setLoading] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
   const [form, setForm] = useState<ServerPayload>(DEFAULT_FORM)
 
   useEffect(() => {
-    if (!isEdit || !id) return
+    if (!open) {
+      setForm(DEFAULT_FORM)
+      setError('')
+      return
+    }
+
+    if (!isEdit || !editId) return
 
     const fetchServer = async () => {
       setLoading(true)
       try {
-        const res = await api.get<ServerDetail>(`/servers/${id}`)
+        const res = await api.get<ServerDetail>(`/servers/${editId}`)
         if (res.code !== 0 || !res.data) {
           throw new Error(res.message || '加载服务器失败')
         }
@@ -85,7 +107,7 @@ export function ServerFormPage() {
     }
 
     fetchServer()
-  }, [id, isEdit])
+  }, [open, editId, isEdit])
 
   const setField = <K extends keyof ServerPayload>(key: K, value: ServerPayload[K]) => {
     setForm((prev) => ({ ...prev, [key]: value }))
@@ -127,22 +149,22 @@ export function ServerFormPage() {
         tags: form.tags.trim(),
       }
 
-      if (isEdit && id) {
-        const res = await api.put<ServerDetail>(`/servers/${id}`, payload)
+      if (isEdit && editId) {
+        const res = await api.put<ServerDetail>(`/servers/${editId}`, payload)
         if (res.code !== 0) {
           throw new Error(res.message || '更新服务器失败')
         }
         toast.success('服务器已更新')
-        navigate('/servers', { replace: true })
-        return
+      } else {
+        const res = await api.post<ServerDetail>('/servers', payload)
+        if (res.code !== 0) {
+          throw new Error(res.message || '创建服务器失败')
+        }
+        toast.success('服务器创建成功')
       }
 
-      const res = await api.post<ServerDetail>('/servers', payload)
-      if (res.code !== 0) {
-        throw new Error(res.message || '创建服务器失败')
-      }
-      toast.success('服务器创建成功')
-      navigate('/servers', { replace: true })
+      onOpenChange(false)
+      onSuccess?.()
     } catch (err) {
       const message = err instanceof Error ? err.message : '提交失败'
       setError(message)
@@ -152,48 +174,33 @@ export function ServerFormPage() {
     }
   }
 
-  if (loading) {
-    return (
-      <div className="flex h-64 items-center justify-center">
-        <div className="size-8 animate-spin rounded-full border-2 border-zinc-600 border-t-zinc-300" />
-      </div>
-    )
-  }
-
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">
-            {isEdit ? '编辑服务器' : '新建服务器'}
-          </h1>
-          <p className="mt-1 text-sm text-zinc-500">
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-[560px] max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>{isEdit ? '编辑服务器' : '新建服务器'}</DialogTitle>
+          <DialogDescription>
             {isEdit ? '更新服务器连接配置' : '添加新的部署目标服务器'}
-          </p>
-        </div>
-        <Link to="/servers">
-          <Button variant="outline">返回</Button>
-        </Link>
-      </div>
+          </DialogDescription>
+        </DialogHeader>
 
-      <Card className="border-zinc-200 dark:border-zinc-800">
-        <CardHeader>
-          <CardTitle>服务器配置</CardTitle>
-          <CardDescription>带 * 的字段为必填项</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-5">
+        {loading ? (
+          <div className="flex h-32 items-center justify-center">
+            <div className="size-8 animate-spin rounded-full border-2 border-zinc-600 border-t-zinc-300" />
+          </div>
+        ) : (
+          <form onSubmit={handleSubmit} className="space-y-4">
             {error && (
               <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400">
                 {error}
               </div>
             )}
 
-            <div className="grid gap-5 md:grid-cols-2">
+            <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
-                <Label htmlFor="name">服务器名称 *</Label>
+                <Label htmlFor="server-name">服务器名称 *</Label>
                 <Input
-                  id="name"
+                  id="server-name"
                   value={form.name}
                   onChange={(e) => setField('name', e.target.value)}
                   placeholder="例如：production-web-01"
@@ -201,9 +208,9 @@ export function ServerFormPage() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="host">主机地址 *</Label>
+                <Label htmlFor="server-host">主机地址 *</Label>
                 <Input
-                  id="host"
+                  id="server-host"
                   value={form.host}
                   onChange={(e) => setField('host', e.target.value)}
                   placeholder="IP 地址或域名"
@@ -212,11 +219,11 @@ export function ServerFormPage() {
               </div>
             </div>
 
-            <div className="grid gap-5 md:grid-cols-3">
+            <div className="grid gap-4 sm:grid-cols-3">
               <div className="space-y-2">
-                <Label htmlFor="port">SSH 端口 *</Label>
+                <Label htmlFor="server-port">SSH 端口 *</Label>
                 <Input
-                  id="port"
+                  id="server-port"
                   type="number"
                   min={1}
                   max={65535}
@@ -225,9 +232,9 @@ export function ServerFormPage() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="username">用户名 *</Label>
+                <Label htmlFor="server-username">用户名 *</Label>
                 <Input
-                  id="username"
+                  id="server-username"
                   value={form.username}
                   onChange={(e) => setField('username', e.target.value)}
                   placeholder="root"
@@ -263,11 +270,11 @@ export function ServerFormPage() {
 
             {form.auth_type === 'password' && (
               <div className="space-y-2">
-                <Label htmlFor="password">
+                <Label htmlFor="server-password">
                   {isEdit ? '密码（留空表示不变）' : '密码 *'}
                 </Label>
                 <Input
-                  id="password"
+                  id="server-password"
                   type="password"
                   value={form.password}
                   onChange={(e) => setField('password', e.target.value)}
@@ -278,24 +285,24 @@ export function ServerFormPage() {
 
             {form.auth_type === 'key' && (
               <div className="space-y-2">
-                <Label htmlFor="private-key">
+                <Label htmlFor="server-private-key">
                   {isEdit ? 'SSH 私钥（留空表示不变）' : 'SSH 私钥 *'}
                 </Label>
                 <Textarea
-                  id="private-key"
+                  id="server-private-key"
                   value={form.private_key}
                   onChange={(e) => setField('private_key', e.target.value)}
                   placeholder="-----BEGIN OPENSSH PRIVATE KEY-----"
-                  rows={6}
+                  rows={5}
                   className="font-mono text-xs"
                 />
               </div>
             )}
 
             <div className="space-y-2">
-              <Label htmlFor="description">描述</Label>
+              <Label htmlFor="server-description">描述</Label>
               <Textarea
-                id="description"
+                id="server-description"
                 value={form.description}
                 onChange={(e) => setField('description', e.target.value)}
                 placeholder="服务器用途说明"
@@ -305,9 +312,9 @@ export function ServerFormPage() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="tags">标签</Label>
+              <Label htmlFor="server-tags">标签</Label>
               <Input
-                id="tags"
+                id="server-tags"
                 value={form.tags}
                 onChange={(e) => setField('tags', e.target.value)}
                 placeholder="多个标签用逗号分隔，如：web,production"
@@ -315,21 +322,19 @@ export function ServerFormPage() {
               />
             </div>
 
-            <div className="flex justify-end gap-2 pt-2">
-              <Link to="/servers">
-                <Button type="button" variant="outline">
-                  取消
-                </Button>
-              </Link>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+                取消
+              </Button>
               <Button type="submit" disabled={submitting}>
                 {submitting
                   ? isEdit ? '保存中...' : '创建中...'
                   : isEdit ? '保存' : '创建服务器'}
               </Button>
-            </div>
+            </DialogFooter>
           </form>
-        </CardContent>
-      </Card>
-    </div>
+        )}
+      </DialogContent>
+    </Dialog>
   )
 }

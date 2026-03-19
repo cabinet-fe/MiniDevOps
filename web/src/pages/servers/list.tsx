@@ -1,5 +1,4 @@
-import { useState, useEffect } from 'react'
-import { Link } from 'react-router'
+import { useState, useEffect, useCallback } from 'react'
 import { Plus, Pencil, Trash2, Network } from 'lucide-react'
 import {
   useReactTable,
@@ -30,6 +29,7 @@ import { api } from '@/lib/api'
 import type { PaginatedData } from '@/lib/api'
 import { useAuth } from '@/hooks/use-auth'
 import { toast } from 'sonner'
+import { ServerFormDialog } from '@/pages/servers/form'
 
 interface Server {
   id: number
@@ -50,12 +50,10 @@ export function ServerListPage() {
   const [allTags, setAllTags] = useState<string[]>([])
   const [deleteId, setDeleteId] = useState<number | null>(null)
   const [deleting, setDeleting] = useState(false)
+  const [formDialogOpen, setFormDialogOpen] = useState(false)
+  const [editingId, setEditingId] = useState<number | null>(null)
 
-  useEffect(() => {
-    fetchServers()
-  }, [tagFilter])
-
-  const fetchServers = async () => {
+  const fetchServers = useCallback(async () => {
     try {
       const res = await api.get<PaginatedData<Server>>(
         `/servers?page=1&page_size=100${tagFilter ? `&tag=${tagFilter}` : ''}`
@@ -74,6 +72,20 @@ export function ServerListPage() {
     } finally {
       setLoading(false)
     }
+  }, [tagFilter])
+
+  useEffect(() => {
+    fetchServers()
+  }, [fetchServers])
+
+  const openCreate = () => {
+    setEditingId(null)
+    setFormDialogOpen(true)
+  }
+
+  const openEdit = (id: number) => {
+    setEditingId(id)
+    setFormDialogOpen(true)
   }
 
   const testConnection = async (serverId: number) => {
@@ -155,11 +167,13 @@ export function ServerListPage() {
                 >
                   <Network className="size-4" />
                 </Button>
-                <Link to={`/servers/${row.original.id}/edit`}>
-                  <Button variant="ghost" size="icon-sm">
-                    <Pencil className="size-4" />
-                  </Button>
-                </Link>
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  onClick={() => openEdit(row.original.id)}
+                >
+                  <Pencil className="size-4" />
+                </Button>
                 <Button
                   variant="ghost"
                   size="icon-sm"
@@ -196,12 +210,10 @@ export function ServerListPage() {
           <p className="mt-1 text-sm text-zinc-500">管理部署目标服务器</p>
         </div>
         {isOps() && (
-          <Link to="/servers/new">
-            <Button className="gap-2">
-              <Plus className="size-4" />
-              新建服务器
-            </Button>
-          </Link>
+          <Button className="gap-2" onClick={openCreate}>
+            <Plus className="size-4" />
+            新建服务器
+          </Button>
         )}
       </div>
 
@@ -278,6 +290,13 @@ export function ServerListPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ServerFormDialog
+        open={formDialogOpen}
+        onOpenChange={setFormDialogOpen}
+        editId={editingId}
+        onSuccess={() => fetchServers()}
+      />
     </div>
   )
 }
