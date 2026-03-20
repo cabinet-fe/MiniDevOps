@@ -2,6 +2,7 @@ package engine
 
 import (
 	"archive/tar"
+	"archive/zip"
 	"bufio"
 	"compress/gzip"
 	"context"
@@ -37,6 +38,19 @@ type Pipeline struct {
 	artifactDir  string
 	logDir       string
 	cacheDir     string
+}
+
+type notificationMessage struct {
+	ID            uint      `json:"id"`
+	Type          string    `json:"type"`
+	Title         string    `json:"title"`
+	Message       string    `json:"message"`
+	BuildID       *uint     `json:"build_id"`
+	ProjectID     uint      `json:"project_id"`
+	EnvironmentID uint      `json:"environment_id"`
+	BuildStatus   string    `json:"build_status"`
+	IsRead        bool      `json:"is_read"`
+	CreatedAt     time.Time `json:"created_at"`
 }
 
 func NewPipeline(
@@ -80,7 +94,7 @@ func (p *Pipeline) Execute(ctx context.Context, buildID uint) {
 
 	now := time.Now()
 	build.StartedAt = &now
-	p.updateStatus(build, "cloning")
+	p.updateStage(build, "cloning")
 
 	// Setup log file
 	logDir := filepath.Join(p.logDir, fmt.Sprintf("project-%d", project.ID))
@@ -93,7 +107,11 @@ func (p *Pipeline) Execute(ctx context.Context, buildID uint) {
 	}
 	defer logFile.Close()
 	build.LogPath = logPath
-	p.buildRepo.UpdateStatus(build.ID, build.Status, map[string]interface{}{"log_path": logPath, "started_at": build.StartedAt})
+	p.buildRepo.UpdateStatus(build.ID, build.Status, map[string]interface{}{
+		"log_path":      logPath,
+		"started_at":    build.StartedAt,
+		"current_stage": build.CurrentStage,
+	})
 
 	channel := fmt.Sprintf("build:%d", build.ID)
 	writeLine := func(line string) {
@@ -172,7 +190,7 @@ func (p *Pipeline) Execute(ctx context.Context, buildID uint) {
 		p.cancelBuild(build)
 		return
 	}
-	p.updateStatus(build, "building")
+	p.updateStage(build, "building")
 	writeLine("=== Stage: Building ===")
 
 	// Inject env vars
@@ -261,9 +279,10 @@ func (p *Pipeline) Execute(ctx context.Context, buildID uint) {
 		outputPath := filepath.Join(workDir, env.BuildOutputDir)
 		artifactDir := filepath.Join(p.artifactDir, fmt.Sprintf("project-%d", project.ID))
 		os.MkdirAll(artifactDir, 0755)
-		artifactPath := filepath.Join(artifactDir, fmt.Sprintf("build-%03d.tar.gz", build.BuildNumber))
+		artifactFormat := normalizeArtifactFormat(project.ArtifactFormat)
+		artifactPath := filepath.Join(artifactDir, artifactArchiveName(build.BuildNumber, artifactFormat))
 
-		if err := createTarGz(artifactPath, outputPath); err != nil {
+		if err := createArtifactArchive(artifactPath, outputPath, artifactFormat); err != nil {
 			writeLine("WARNING: 打包构建产物失败: " + err.Error())
 		} else {
 			build.ArtifactPath = artifactPath
@@ -281,7 +300,7 @@ func (p *Pipeline) Execute(ctx context.Context, buildID uint) {
 			p.cancelBuild(build)
 			return
 		}
-		p.updateStatus(build, "deploying")
+		p.updateStage(build, "deploying")
 		writeLine("=== Stage: Deploying ===")
 
 		server, err := p.serverRepo.FindByID(*env.DeployServerID)
@@ -307,7 +326,8 @@ func (p *Pipeline) Execute(ctx context.Context, buildID uint) {
 
 		d := deployer.NewDeployer(env.DeployMethod)
 		deployOpts := deployer.DeployOptions{
-			SourceDir: sourceDir,
+			SourceDir:     sourceDir,
+			ArchiveFormat: normalizeArtifactFormat(project.ArtifactFormat),
 			Server: deployer.ServerInfo{
 				Host:       server.Host,
 				Port:       server.Port,
@@ -354,10 +374,12 @@ func (p *Pipeline) Execute(ctx context.Context, buildID uint) {
 	finished := time.Now()
 	build.FinishedAt = &finished
 	build.DurationMs = finished.Sub(*build.StartedAt).Milliseconds()
-	p.updateStatus(build, "success")
+	build.Status = "success"
+	build.CurrentStage = "success"
 	p.buildRepo.UpdateStatus(build.ID, "success", map[string]interface{}{
-		"finished_at": build.FinishedAt,
-		"duration_ms": build.DurationMs,
+		"finished_at":   build.FinishedAt,
+		"duration_ms":   build.DurationMs,
+		"current_stage": build.CurrentStage,
 	})
 	writeLine(fmt.Sprintf("=== Build #%d finished in %dms ===", build.BuildNumber, build.DurationMs))
 
@@ -365,9 +387,10 @@ func (p *Pipeline) Execute(ctx context.Context, buildID uint) {
 	p.notify(build, "success")
 }
 
-func (p *Pipeline) updateStatus(build *model.Build, status string) {
-	build.Status = status
-	p.buildRepo.UpdateStatus(build.ID, status, nil)
+func (p *Pipeline) updateStage(build *model.Build, stage string) {
+	build.Status = stage
+	build.CurrentStage = stage
+	p.buildRepo.UpdateStatus(build.ID, stage, map[string]interface{}{"current_stage": stage})
 }
 
 func (p *Pipeline) failBuild(build *model.Build, errMsg string) {
@@ -382,6 +405,7 @@ func (p *Pipeline) failBuild(build *model.Build, errMsg string) {
 		"error_message": errMsg,
 		"finished_at":   build.FinishedAt,
 		"duration_ms":   build.DurationMs,
+		"current_stage": build.CurrentStage,
 	})
 	p.notify(build, "failed")
 }
@@ -394,24 +418,60 @@ func (p *Pipeline) cancelBuild(build *model.Build) {
 		build.DurationMs = finished.Sub(*build.StartedAt).Milliseconds()
 	}
 	p.buildRepo.UpdateStatus(build.ID, "cancelled", map[string]interface{}{
-		"finished_at": build.FinishedAt,
-		"duration_ms": build.DurationMs,
+		"finished_at":   build.FinishedAt,
+		"duration_ms":   build.DurationMs,
+		"current_stage": build.CurrentStage,
 	})
 }
 
 func (p *Pipeline) notify(build *model.Build, status string) {
 	notifType := "build_" + status
-	title := fmt.Sprintf("构建 #%d %s", build.BuildNumber, status)
-	p.notifRepo.Create(&model.Notification{
+	statusLabel := map[string]string{
+		"success":   "成功",
+		"failed":    "失败",
+		"cancelled": "已取消",
+	}[status]
+	if statusLabel == "" {
+		statusLabel = status
+	}
+	title := fmt.Sprintf("构建 #%d 已%s", build.BuildNumber, statusLabel)
+	message := strings.TrimSpace(build.ErrorMessage)
+	if message == "" {
+		message = fmt.Sprintf("项目 #%d / 环境 #%d", build.ProjectID, build.EnvironmentID)
+	}
+	notif := &model.Notification{
 		UserID:  build.TriggeredBy,
 		Type:    notifType,
 		Title:   title,
-		Message: build.ErrorMessage,
+		Message: message,
 		BuildID: &build.ID,
+	}
+	if err := p.notifRepo.Create(notif); err != nil {
+		if p.logger != nil {
+			p.logger.Warn("create notification failed", zap.Uint("build_id", build.ID), zap.Error(err))
+		}
+		return
+	}
+
+	msg, err := json.Marshal(notificationMessage{
+		ID:            notif.ID,
+		Type:          notif.Type,
+		Title:         notif.Title,
+		Message:       notif.Message,
+		BuildID:       notif.BuildID,
+		ProjectID:     build.ProjectID,
+		EnvironmentID: build.EnvironmentID,
+		BuildStatus:   status,
+		IsRead:        notif.IsRead,
+		CreatedAt:     notif.CreatedAt,
 	})
-	// Broadcast via WebSocket
-	msg := fmt.Sprintf(`{"type":"%s","build_id":%d,"title":"%s"}`, notifType, build.ID, title)
-	p.hub.BroadcastToUser(build.TriggeredBy, []byte(msg))
+	if err != nil {
+		if p.logger != nil {
+			p.logger.Warn("marshal notification failed", zap.Uint("build_id", build.ID), zap.Error(err))
+		}
+		return
+	}
+	p.hub.BroadcastToUser(build.TriggeredBy, msg)
 }
 
 func (p *Pipeline) cleanupArtifacts(project *model.Project) {
@@ -486,6 +546,29 @@ func decryptPipelineValue(value string, isSecret bool) (string, error) {
 	return pkg.Decrypt(value)
 }
 
+func artifactArchiveName(buildNumber int, format string) string {
+	if normalizeArtifactFormat(format) == "zip" {
+		return fmt.Sprintf("build-%03d.zip", buildNumber)
+	}
+	return fmt.Sprintf("build-%03d.tar.gz", buildNumber)
+}
+
+func normalizeArtifactFormat(format string) string {
+	switch strings.ToLower(strings.TrimSpace(format)) {
+	case "zip":
+		return "zip"
+	default:
+		return "gzip"
+	}
+}
+
+func createArtifactArchive(targetPath, sourceDir, format string) error {
+	if normalizeArtifactFormat(format) == "zip" {
+		return createZip(targetPath, sourceDir)
+	}
+	return createTarGz(targetPath, sourceDir)
+}
+
 // createTarGz creates a tar.gz archive from a directory
 func createTarGz(targetPath, sourceDir string) error {
 	file, err := os.Create(targetPath)
@@ -524,6 +607,58 @@ func createTarGz(targetPath, sourceDir string) error {
 		}
 		defer f.Close()
 		_, err = io.Copy(tw, f)
+		return err
+	})
+}
+
+func createZip(targetPath, sourceDir string) error {
+	file, err := os.Create(targetPath)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	writer := zip.NewWriter(file)
+	defer writer.Close()
+
+	return filepath.Walk(sourceDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		relPath, err := filepath.Rel(sourceDir, path)
+		if err != nil {
+			return err
+		}
+		if relPath == "." {
+			return nil
+		}
+
+		header, err := zip.FileInfoHeader(info)
+		if err != nil {
+			return err
+		}
+		header.Name = filepath.ToSlash(relPath)
+		if info.IsDir() {
+			header.Name += "/"
+		} else {
+			header.Method = zip.Deflate
+		}
+
+		dst, err := writer.CreateHeader(header)
+		if err != nil {
+			return err
+		}
+		if info.IsDir() {
+			return nil
+		}
+
+		src, err := os.Open(path)
+		if err != nil {
+			return err
+		}
+		defer src.Close()
+
+		_, err = io.Copy(dst, src)
 		return err
 	})
 }

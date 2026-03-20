@@ -2,6 +2,7 @@ package deployer
 
 import (
 	"archive/tar"
+	"archive/zip"
 	"compress/gzip"
 	"context"
 	"fmt"
@@ -28,7 +29,8 @@ func (d *AgentDeployer) Deploy(ctx context.Context, opts DeployOptions) error {
 		return err
 	}
 
-	archivePath, err := createArchive(opts.SourceDir)
+	format := normalizeAgentArchiveFormat(opts.ArchiveFormat)
+	archivePath, err := createArchive(opts.SourceDir, format)
 	if err != nil {
 		return err
 	}
@@ -45,7 +47,8 @@ func (d *AgentDeployer) Deploy(ctx context.Context, opts DeployOptions) error {
 		return err
 	}
 	req.Header.Set("Authorization", "Bearer "+opts.Server.AgentToken)
-	req.Header.Set("Content-Type", "application/gzip")
+	req.Header.Set("Content-Type", archiveContentType(format))
+	req.Header.Set("X-Archive-Format", format)
 	req.Header.Set("X-Target-Path", normalizeRemotePath(opts.Server, opts.RemotePath))
 
 	if info, statErr := file.Stat(); statErr == nil {
@@ -73,12 +76,20 @@ func (d *AgentDeployer) Deploy(ctx context.Context, opts DeployOptions) error {
 	return nil
 }
 
-func createArchive(sourceDir string) (string, error) {
-	tmpFile, err := os.CreateTemp("", "buildflow-agent-*.tar.gz")
+func createArchive(sourceDir, format string) (string, error) {
+	format = normalizeAgentArchiveFormat(format)
+	tmpFile, err := os.CreateTemp("", "buildflow-agent-*."+archiveFileSuffix(format))
 	if err != nil {
 		return "", err
 	}
 	defer tmpFile.Close()
+
+	if format == "zip" {
+		if err := writeZipArchive(tmpFile, sourceDir); err != nil {
+			return "", err
+		}
+		return tmpFile.Name(), nil
+	}
 
 	gzipWriter := gzip.NewWriter(tmpFile)
 	tarWriter := tar.NewWriter(gzipWriter)
@@ -134,4 +145,78 @@ func createArchive(sourceDir string) (string, error) {
 		return "", err
 	}
 	return tmpFile.Name(), nil
+}
+
+func writeZipArchive(file *os.File, sourceDir string) error {
+	writer := zip.NewWriter(file)
+
+	if err := filepath.Walk(sourceDir, func(path string, info os.FileInfo, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+
+		relPath, err := filepath.Rel(sourceDir, path)
+		if err != nil {
+			return err
+		}
+		if relPath == "." {
+			return nil
+		}
+
+		header, err := zip.FileInfoHeader(info)
+		if err != nil {
+			return err
+		}
+		header.Name = filepath.ToSlash(relPath)
+		if info.IsDir() {
+			header.Name += "/"
+		} else {
+			header.Method = zip.Deflate
+		}
+
+		dst, err := writer.CreateHeader(header)
+		if err != nil {
+			return err
+		}
+		if info.IsDir() {
+			return nil
+		}
+
+		src, err := os.Open(path)
+		if err != nil {
+			return err
+		}
+		defer src.Close()
+
+		_, err = io.Copy(dst, src)
+		return err
+	}); err != nil {
+		writer.Close()
+		return err
+	}
+
+	return writer.Close()
+}
+
+func normalizeAgentArchiveFormat(format string) string {
+	switch strings.ToLower(strings.TrimSpace(format)) {
+	case "zip":
+		return "zip"
+	default:
+		return "gzip"
+	}
+}
+
+func archiveContentType(format string) string {
+	if normalizeAgentArchiveFormat(format) == "zip" {
+		return "application/zip"
+	}
+	return "application/gzip"
+}
+
+func archiveFileSuffix(format string) string {
+	if normalizeAgentArchiveFormat(format) == "zip" {
+		return "zip"
+	}
+	return "tar.gz"
 }

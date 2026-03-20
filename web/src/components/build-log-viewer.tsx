@@ -16,6 +16,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { useWebSocket } from '@/hooks/use-websocket'
+import { api } from '@/lib/api'
 
 type BuildStatus =
   | 'pending'
@@ -86,6 +87,36 @@ export function BuildLogViewer({
       : `/ws/builds/${buildId}/logs`)
 
   const isRunning = ['pending', 'cloning', 'building', 'deploying'].includes(status)
+
+  useEffect(() => {
+    if (initialLogs) {
+      setLogs(initialLogs.split('\n').filter(Boolean))
+      return
+    }
+
+    let cancelled = false
+    const loadLogs = async () => {
+      try {
+        const text = await api.getText(`/builds/${buildId}/log`)
+        if (cancelled) return
+        const lines = text.split('\n')
+        if (lines.at(-1) === '') {
+          lines.pop()
+        }
+        setLogs(lines)
+      } catch {
+        if (!cancelled) {
+          setLogs([])
+        }
+      }
+    }
+
+    void loadLogs()
+
+    return () => {
+      cancelled = true
+    }
+  }, [buildId, initialLogs])
 
   useWebSocket({
     url: wsUrl,

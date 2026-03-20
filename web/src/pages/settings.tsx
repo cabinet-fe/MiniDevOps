@@ -7,6 +7,7 @@ import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -538,12 +539,12 @@ export function SettingsPage() {
       </Dialog>
 
       <Dialog open={varGroupDialogOpen} onOpenChange={setVarGroupDialogOpen}>
-        <DialogContent className="sm:max-w-[760px] max-h-[90vh] overflow-y-auto">
+        <DialogContent className="sm:max-w-[760px]">
           <DialogHeader>
             <DialogTitle>{editingVarGroupId ? '编辑变量组' : '新建变量组'}</DialogTitle>
             <DialogDescription>变量组中的密文项会加密存储，环境关联后可直接参与构建。</DialogDescription>
           </DialogHeader>
-          <div className="space-y-4">
+          <DialogBody className="space-y-4">
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="var-group-name">名称</Label>
@@ -629,7 +630,7 @@ export function SettingsPage() {
                 </div>
               )}
             </div>
-          </div>
+          </DialogBody>
           <DialogFooter>
             <Button variant="outline" onClick={() => setVarGroupDialogOpen(false)}>取消</Button>
             <Button onClick={saveVarGroup} disabled={varGroupSubmitting}>

@@ -8,6 +8,8 @@ interface Notification {
   message: string
   build_id: number | null
   project_id?: number
+  environment_id?: number
+  build_status?: string
   is_read: boolean
   created_at: string
 }
@@ -15,6 +17,7 @@ interface Notification {
 interface NotificationState {
   notifications: Notification[]
   unreadCount: number
+  latestNotification: Notification | null
   fetchNotifications: () => Promise<void>
   markRead: (id: number) => Promise<void>
   markAllRead: () => Promise<void>
@@ -24,6 +27,7 @@ interface NotificationState {
 export const useNotificationStore = create<NotificationState>((set) => ({
   notifications: [],
   unreadCount: 0,
+  latestNotification: null,
   
   fetchNotifications: async () => {
     const res = await api.get<{ items: Notification[]; total: number }>('/notifications?page_size=50')
@@ -32,6 +36,7 @@ export const useNotificationStore = create<NotificationState>((set) => ({
       set({ 
         notifications: items,
         unreadCount: items.filter(n => !n.is_read).length,
+        latestNotification: items[0] ?? null,
       })
     }
   },
@@ -54,8 +59,13 @@ export const useNotificationStore = create<NotificationState>((set) => ({
   
   addNotification: (n) => {
     set(state => ({
-      notifications: [n, ...state.notifications],
-      unreadCount: state.unreadCount + 1,
+      notifications: state.notifications.some(item => item.id === n.id)
+        ? state.notifications
+        : [n, ...state.notifications],
+      unreadCount: state.notifications.some(item => item.id === n.id)
+        ? state.unreadCount
+        : state.unreadCount + (n.is_read ? 0 : 1),
+      latestNotification: n,
     }))
   },
 }))

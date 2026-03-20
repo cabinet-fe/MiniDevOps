@@ -32,6 +32,7 @@ interface BuildDetail {
   environment_id: number
   build_number: number
   status: string
+  current_stage: string
   trigger_type: string
   triggered_by: number
   commit_hash: string
@@ -53,22 +54,26 @@ const TIMELINE_STAGES = ['pending', 'cloning', 'building', 'deploying', 'success
 
 function getStageState(
   currentStatus: string,
+  currentStage: string,
   stage: string
 ): 'completed' | 'active' | 'pending' | 'failed' {
   const order = TIMELINE_STAGES.indexOf(stage as (typeof TIMELINE_STAGES)[number])
-  const currentOrder = TIMELINE_STAGES.indexOf(currentStatus as (typeof TIMELINE_STAGES)[number])
+  const effectiveStage =
+    currentStatus === 'failed' || currentStatus === 'cancelled'
+      ? currentStage
+      : currentStatus
+  const currentOrder = TIMELINE_STAGES.indexOf(
+    effectiveStage as (typeof TIMELINE_STAGES)[number]
+  )
+
+  if (currentOrder === -1) return 'pending'
 
   if (currentStatus === 'failed' || currentStatus === 'cancelled') {
-    if (order < currentOrder || currentOrder === -1) return 'completed'
-    if (stage === currentStatus) return 'failed'
-    // Find the last active stage before failure
-    const failOrder = ['pending', 'cloning', 'building', 'deploying'].indexOf(currentStatus)
-    if (failOrder >= 0 && order <= failOrder) return 'completed'
-    if (order === failOrder + 1) return 'failed'
+    if (order < currentOrder) return 'completed'
+    if (order === currentOrder) return 'failed'
     return 'pending'
   }
 
-  if (currentOrder === -1) return 'pending'
   if (order < currentOrder) return 'completed'
   if (order === currentOrder) return currentStatus === 'success' ? 'completed' : 'active'
   return 'pending'
@@ -187,6 +192,9 @@ export function BuildDetailPage() {
     label: build.status,
     color: 'bg-gray-500',
   }
+  const currentStageInfo = build.current_stage
+    ? BUILD_STATUSES[build.current_stage as keyof typeof BUILD_STATUSES]
+    : undefined
 
   return (
     <div className="space-y-6">
@@ -287,6 +295,7 @@ export function BuildDetailPage() {
             <InfoItem label="项目" value={build.project_name} />
             <InfoItem label="环境" value={build.environment_name} />
             <InfoItem label="分支" value={build.branch || '-'} />
+            <InfoItem label="当前阶段" value={currentStageInfo?.label ?? build.current_stage ?? '-'} />
             <InfoItem label="触发方式" value={build.trigger_type || '-'} />
             <InfoItem
               label="触发者"
@@ -314,6 +323,9 @@ export function BuildDetailPage() {
               <Separator className="my-3" />
               <div className="rounded-md bg-red-500/10 border border-red-500/20 p-3">
                 <p className="text-sm font-medium text-red-400">错误信息</p>
+                {currentStageInfo && (
+                  <p className="mt-1 text-xs text-red-300/70">失败阶段：{currentStageInfo.label}</p>
+                )}
                 <p className="mt-1 text-sm text-red-300/80">{build.error_message}</p>
               </div>
             </>
@@ -329,7 +341,7 @@ export function BuildDetailPage() {
         <CardContent>
           <div className="flex items-center gap-0">
             {TIMELINE_STAGES.map((stage, i) => {
-              const state = getStageState(build.status, stage)
+              const state = getStageState(build.status, build.current_stage, stage)
               const stageLabel =
                 BUILD_STATUSES[stage as keyof typeof BUILD_STATUSES]?.label ?? stage
               return (

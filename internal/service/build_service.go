@@ -1,9 +1,12 @@
 package service
 
 import (
+	"bufio"
 	"buildflow/internal/model"
 	"buildflow/internal/repository"
+	"os"
 	"sort"
+	"strings"
 )
 
 type BuildService struct {
@@ -31,13 +34,32 @@ func (s *BuildService) GetBuildDetail(id uint) (*BuildDetailResponse, error) {
 		return nil, err
 	}
 	resp := &BuildDetailResponse{Build: *build}
-	if project, err := s.projectRepo.FindByID(build.ProjectID); err == nil {
-		resp.ProjectName = project.Name
+	if s.projectRepo != nil {
+		if project, err := s.projectRepo.FindByID(build.ProjectID); err == nil {
+			resp.ProjectName = project.Name
+		}
 	}
-	if env, err := s.envRepo.FindByID(build.EnvironmentID); err == nil {
-		resp.EnvironmentName = env.Name
+	if s.envRepo != nil {
+		if env, err := s.envRepo.FindByID(build.EnvironmentID); err == nil {
+			resp.EnvironmentName = env.Name
+			if resp.Branch == "" {
+				resp.Branch = env.Branch
+			}
+		}
 	}
-	if build.TriggeredBy > 0 {
+	if resp.CurrentStage == "" || ((resp.Status == "failed" || resp.Status == "cancelled") && resp.CurrentStage == "pending") {
+		if inferredStage := inferBuildStageFromLog(resp.LogPath); inferredStage != "" {
+			resp.CurrentStage = inferredStage
+		}
+	}
+	if resp.CurrentStage == "" {
+		if resp.Status == "failed" || resp.Status == "cancelled" {
+			resp.CurrentStage = "pending"
+		} else {
+			resp.CurrentStage = resp.Status
+		}
+	}
+	if build.TriggeredBy > 0 && s.userRepo != nil {
 		if user, err := s.userRepo.FindByID(build.TriggeredBy); err == nil {
 			resp.TriggeredByName = user.DisplayName
 			if resp.TriggeredByName == "" {
@@ -48,7 +70,45 @@ func (s *BuildService) GetBuildDetail(id uint) (*BuildDetailResponse, error) {
 	return resp, nil
 }
 
+func inferBuildStageFromLog(logPath string) string {
+	if logPath == "" {
+		return ""
+	}
+
+	file, err := os.Open(logPath)
+	if err != nil {
+		return ""
+	}
+	defer file.Close()
+
+	stage := ""
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := scanner.Text()
+		switch {
+		case strings.Contains(line, "=== Stage: Cloning ==="):
+			stage = "cloning"
+		case strings.Contains(line, "=== Stage: Building ==="):
+			stage = "building"
+		case strings.Contains(line, "=== Stage: Deploying ==="):
+			stage = "deploying"
+		case strings.Contains(line, "=== Build completed successfully ==="):
+			stage = "success"
+		}
+	}
+
+	return stage
+}
+
 func (s *BuildService) TriggerBuild(projectID, environmentID, triggeredBy uint, triggerType, branch, commitHash, commitMessage string) (*model.Build, error) {
+	if branch == "" {
+		env, err := s.envRepo.FindByID(environmentID)
+		if err != nil {
+			return nil, err
+		}
+		branch = env.Branch
+	}
+
 	num, err := s.repo.GetNextBuildNumber(projectID)
 	if err != nil {
 		return nil, err
@@ -58,6 +118,7 @@ func (s *BuildService) TriggerBuild(projectID, environmentID, triggeredBy uint, 
 		EnvironmentID: environmentID,
 		BuildNumber:   num,
 		Status:        "pending",
+		CurrentStage:  "pending",
 		TriggerType:   triggerType,
 		TriggeredBy:   triggeredBy,
 		Branch:        branch,

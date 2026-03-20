@@ -2,6 +2,7 @@ package main
 
 import (
 	"archive/tar"
+	"archive/zip"
 	"compress/gzip"
 	"encoding/json"
 	"errors"
@@ -86,12 +87,13 @@ func uploadHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "missing X-Target-Path header", http.StatusBadRequest)
 		return
 	}
+	archiveFormat := normalizeArchiveFormat(r.Header.Get("X-Archive-Format"))
 
 	if err := os.MkdirAll(targetPath, 0755); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	if err := extractTarGz(r.Body, targetPath); err != nil {
+	if err := extractArchive(r.Body, targetPath, archiveFormat); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -133,6 +135,27 @@ func execHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Write(output)
+}
+
+func extractArchive(src io.Reader, targetDir, format string) error {
+	tmpFile, err := os.CreateTemp("", "buildflow-upload-*")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(tmpFile.Name())
+	defer tmpFile.Close()
+
+	if _, err := io.Copy(tmpFile, src); err != nil {
+		return err
+	}
+	if _, err := tmpFile.Seek(0, 0); err != nil {
+		return err
+	}
+
+	if normalizeArchiveFormat(format) == "zip" {
+		return extractZip(tmpFile.Name(), targetDir)
+	}
+	return extractTarGz(tmpFile, targetDir)
 }
 
 func extractTarGz(src io.Reader, targetDir string) error {
@@ -185,6 +208,60 @@ func extractTarGz(src io.Reader, targetDir string) error {
 	}
 }
 
+func extractZip(srcPath, targetDir string) error {
+	archive, err := zip.OpenReader(srcPath)
+	if err != nil {
+		return err
+	}
+	defer archive.Close()
+
+	for _, file := range archive.File {
+		targetPath := filepath.Join(targetDir, filepath.Clean(file.Name))
+		relPath, err := filepath.Rel(targetDir, targetPath)
+		if err != nil {
+			return err
+		}
+		if strings.HasPrefix(relPath, "..") {
+			return fmt.Errorf("illegal archive path: %s", file.Name)
+		}
+
+		if file.FileInfo().IsDir() {
+			if err := os.MkdirAll(targetPath, file.Mode()); err != nil {
+				return err
+			}
+			continue
+		}
+
+		if err := os.MkdirAll(filepath.Dir(targetPath), 0755); err != nil {
+			return err
+		}
+
+		reader, err := file.Open()
+		if err != nil {
+			return err
+		}
+		dst, err := os.OpenFile(targetPath, os.O_CREATE|os.O_RDWR|os.O_TRUNC, file.Mode())
+		if err != nil {
+			reader.Close()
+			return err
+		}
+		if _, err := io.Copy(dst, reader); err != nil {
+			dst.Close()
+			reader.Close()
+			return err
+		}
+		if err := dst.Close(); err != nil {
+			reader.Close()
+			return err
+		}
+		if err := reader.Close(); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 func commandForCurrentOS(script string) *exec.Cmd {
 	if runtime.GOOS == "windows" {
 		return exec.Command("powershell", "-NoProfile", "-NonInteractive", "-Command", script)
@@ -198,4 +275,13 @@ func getenv(key, fallback string) string {
 		return fallback
 	}
 	return value
+}
+
+func normalizeArchiveFormat(format string) string {
+	switch strings.ToLower(strings.TrimSpace(format)) {
+	case "zip":
+		return "zip"
+	default:
+		return "gzip"
+	}
 }

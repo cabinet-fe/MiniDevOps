@@ -57,6 +57,7 @@ func (s *ProjectService) Create(project *model.Project) error {
 	if project.WebhookType == "" {
 		project.WebhookType = "auto"
 	}
+	project.ArtifactFormat = normalizeProjectArtifactFormat(project.ArtifactFormat)
 	if project.RepoPassword != "" {
 		enc, err := pkg.Encrypt(project.RepoPassword)
 		if err != nil {
@@ -103,6 +104,7 @@ func (s *ProjectService) Update(project *model.Project) error {
 	if project.WebhookType == "" {
 		project.WebhookType = existing.WebhookType
 	}
+	project.ArtifactFormat = normalizeProjectArtifactFormat(project.ArtifactFormat)
 	return s.repo.Update(project)
 }
 
@@ -139,6 +141,7 @@ type ProjectExport struct {
 	RepoAuthType       string              `json:"repo_auth_type"`
 	RepoUsername       string              `json:"repo_username"`
 	MaxArtifacts       int                 `json:"max_artifacts"`
+	ArtifactFormat     string              `json:"artifact_format"`
 	WebhookType        string              `json:"webhook_type"`
 	WebhookRefPath     string              `json:"webhook_ref_path"`
 	WebhookCommitPath  string              `json:"webhook_commit_path"`
@@ -184,6 +187,7 @@ func (s *ProjectService) Export(id uint) ([]byte, error) {
 		RepoAuthType:       project.RepoAuthType,
 		RepoUsername:       project.RepoUsername,
 		MaxArtifacts:       project.MaxArtifacts,
+		ArtifactFormat:     normalizeProjectArtifactFormat(project.ArtifactFormat),
 		WebhookType:        project.WebhookType,
 		WebhookRefPath:     project.WebhookRefPath,
 		WebhookCommitPath:  project.WebhookCommitPath,
@@ -250,6 +254,7 @@ func (s *ProjectService) Import(data []byte, createdBy uint) (*model.Project, er
 		RepoAuthType:       exp.RepoAuthType,
 		RepoUsername:       exp.RepoUsername,
 		MaxArtifacts:       exp.MaxArtifacts,
+		ArtifactFormat:     normalizeProjectArtifactFormat(exp.ArtifactFormat),
 		WebhookType:        exp.WebhookType,
 		WebhookRefPath:     exp.WebhookRefPath,
 		WebhookCommitPath:  exp.WebhookCommitPath,
@@ -297,6 +302,15 @@ func (s *ProjectService) Import(data []byte, createdBy uint) (*model.Project, er
 		}
 	}
 	return s.repo.FindByID(project.ID)
+}
+
+func normalizeProjectArtifactFormat(format string) string {
+	switch strings.ToLower(strings.TrimSpace(format)) {
+	case "zip":
+		return "zip"
+	default:
+		return "gzip"
+	}
 }
 
 func (s *ProjectService) ListEnvironments(projectID uint) ([]model.Environment, error) {

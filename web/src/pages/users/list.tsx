@@ -23,6 +23,7 @@ import {
 } from '@/components/ui/table'
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -262,12 +263,12 @@ export function UserListPage() {
 
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent>
-          <form onSubmit={handleCreate}>
+          <form onSubmit={handleCreate} className="flex min-h-0 flex-1 flex-col">
             <DialogHeader>
               <DialogTitle>新建用户</DialogTitle>
               <DialogDescription>创建新的系统用户</DialogDescription>
             </DialogHeader>
-            <div className="space-y-4 py-4">
+            <DialogBody className="space-y-4">
               <div>
                 <Label>用户名 *</Label>
                 <Input value={createForm.username} onChange={(e) => setCreateForm((f) => ({ ...f, username: e.target.value }))} placeholder="用户名" className="mt-1" />
@@ -297,7 +298,7 @@ export function UserListPage() {
                 <Label>邮箱</Label>
                 <Input type="email" value={createForm.email} onChange={(e) => setCreateForm((f) => ({ ...f, email: e.target.value }))} placeholder="email@example.com" className="mt-1" />
               </div>
-            </div>
+            </DialogBody>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setCreateOpen(false)}>取消</Button>
               <Button type="submit" disabled={submitting}>{submitting ? '创建中...' : '创建'}</Button>
@@ -308,12 +309,12 @@ export function UserListPage() {
 
       <Dialog open={!!editUser} onOpenChange={(o) => !o && setEditUser(null)}>
         <DialogContent>
-          <form onSubmit={handleUpdate}>
+          <form onSubmit={handleUpdate} className="flex min-h-0 flex-1 flex-col">
             <DialogHeader>
               <DialogTitle>编辑用户 {editUser?.username}</DialogTitle>
               <DialogDescription>修改用户信息</DialogDescription>
             </DialogHeader>
-            <div className="space-y-4 py-4">
+            <DialogBody className="space-y-4">
               <div>
                 <Label>昵称</Label>
                 <Input value={editForm.display_name} onChange={(e) => setEditForm((f) => ({ ...f, display_name: e.target.value }))} placeholder="显示名称" className="mt-1" />
@@ -339,7 +340,7 @@ export function UserListPage() {
                 <Label>启用</Label>
                 <Switch checked={editForm.is_active} onCheckedChange={(v) => setEditForm((f) => ({ ...f, is_active: v }))} />
               </div>
-            </div>
+            </DialogBody>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setEditUser(null)}>取消</Button>
               <Button type="submit" disabled={submitting}>{submitting ? '保存中...' : '保存'}</Button>

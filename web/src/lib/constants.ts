@@ -44,6 +44,11 @@ export const BUILD_SCRIPT_TYPES = [
   { value: 'python', label: 'Python', placeholder: "import subprocess\nsubprocess.run(['npm', 'install'], check=True)\nsubprocess.run(['npm', 'run', 'build'], check=True)" },
 ]
 
+export const ARTIFACT_FORMATS = [
+  { value: 'gzip', label: 'Gzip (.tar.gz)', hint: '兼容当前默认构建流程与 Linux/类 Unix 部署链路。' },
+  { value: 'zip', label: 'Zip (.zip)', hint: '适合 Windows Agent 或更通用的解压环境。' },
+]
+
 export const WEBHOOK_TYPES = [
   { value: 'auto', label: '自动识别' },
   { value: 'github', label: 'GitHub' },

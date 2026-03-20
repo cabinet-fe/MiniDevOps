@@ -20,19 +20,24 @@ export function setTokenGetter(fn: () => string | null) {
   getToken = fn
 }
 
-async function request<T>(method: string, path: string, body?: unknown, isFormData = false): Promise<ApiResponse<T>> {
+function buildHeaders(isFormData = false): Record<string, string> {
   const headers: Record<string, string> = {}
   const token = getToken()
   if (token) headers['Authorization'] = `Bearer ${token}`
   if (!isFormData) headers['Content-Type'] = 'application/json'
-  
+  return headers
+}
+
+async function authorizedFetch(method: string, path: string, body?: unknown, isFormData = false): Promise<Response> {
+  const headers = buildHeaders(isFormData)
+
   const res = await fetch(`${API_BASE}${path}`, {
     method,
     headers,
     body: isFormData ? body as FormData : body ? JSON.stringify(body) : undefined,
     credentials: 'include',
   })
-  
+
   if (res.status === 401) {
     const shouldTryRefresh = path !== '/auth/login' && path !== '/auth/refresh'
     if (shouldTryRefresh) {
@@ -48,7 +53,7 @@ async function request<T>(method: string, path: string, body?: unknown, isFormDa
             body: isFormData ? body as FormData : body ? JSON.stringify(body) : undefined,
             credentials: 'include',
           })
-          return retryRes.json()
+          return retryRes
         }
       }
     }
@@ -59,7 +64,12 @@ async function request<T>(method: string, path: string, body?: unknown, isFormDa
     }
     throw new Error('Unauthorized')
   }
-  
+
+  return res
+}
+
+async function request<T>(method: string, path: string, body?: unknown, isFormData = false): Promise<ApiResponse<T>> {
+  const res = await authorizedFetch(method, path, body, isFormData)
   return res.json()
 }
 
@@ -69,12 +79,12 @@ export const api = {
   put: <T>(path: string, body?: unknown) => request<T>('PUT', path, body),
   delete: <T>(path: string) => request<T>('DELETE', path),
   upload: <T>(path: string, formData: FormData) => request<T>('POST', path, formData, true),
+  getText: async (path: string) => {
+    const res = await authorizedFetch('GET', path)
+    return res.text()
+  },
   download: async (path: string) => {
-    const token = getToken()
-    const res = await fetch(`${API_BASE}${path}`, {
-      headers: token ? { 'Authorization': `Bearer ${token}` } : {},
-      credentials: 'include',
-    })
+    const res = await authorizedFetch('GET', path)
     return res.blob()
   },
 }

@@ -8,6 +8,7 @@ type Build struct {
 	EnvironmentID uint       `json:"environment_id" gorm:"not null"`
 	BuildNumber   int        `json:"build_number" gorm:"uniqueIndex:idx_proj_build_num;not null"`
 	Status        string     `json:"status" gorm:"size:20;not null;default:pending"`
+	CurrentStage  string     `json:"current_stage" gorm:"size:20;not null;default:pending"`
 	TriggerType   string     `json:"trigger_type" gorm:"size:20"`
 	TriggeredBy   uint       `json:"triggered_by"`
 	Branch        string     `json:"branch" gorm:"size:200"`

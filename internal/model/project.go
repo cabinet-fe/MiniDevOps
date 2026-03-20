@@ -13,6 +13,7 @@ type Project struct {
 	RepoUsername       string        `json:"repo_username" gorm:"size:200"`
 	RepoPassword       string        `json:"-" gorm:"size:1000"`
 	MaxArtifacts       int           `json:"max_artifacts" gorm:"default:5"`
+	ArtifactFormat     string        `json:"artifact_format" gorm:"size:20;default:gzip"`
 	WebhookSecret      string        `json:"webhook_secret" gorm:"size:64"`
 	WebhookType        string        `json:"webhook_type" gorm:"size:20;default:auto"`
 	WebhookRefPath     string        `json:"webhook_ref_path" gorm:"size:300"`

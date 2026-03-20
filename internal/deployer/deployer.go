@@ -15,10 +15,11 @@ type ServerInfo struct {
 }
 
 type DeployOptions struct {
-	SourceDir  string
-	Server     ServerInfo
-	RemotePath string
-	Logger     func(string)
+	SourceDir     string
+	ArchiveFormat string
+	Server        ServerInfo
+	RemotePath    string
+	Logger        func(string)
 }
 
 type Deployer interface {

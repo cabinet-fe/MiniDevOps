@@ -4,6 +4,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/robfig/cron/v3"
@@ -55,6 +56,7 @@ func (h *ProjectHandler) Create(c *gin.Context) {
 		RepoUsername       string `json:"repo_username"`
 		RepoPassword       string `json:"repo_password"`
 		MaxArtifacts       int    `json:"max_artifacts"`
+		ArtifactFormat     string `json:"artifact_format"`
 		WebhookType        string `json:"webhook_type"`
 		WebhookRefPath     string `json:"webhook_ref_path"`
 		WebhookCommitPath  string `json:"webhook_commit_path"`
@@ -67,6 +69,7 @@ func (h *ProjectHandler) Create(c *gin.Context) {
 	if req.MaxArtifacts == 0 {
 		req.MaxArtifacts = 5
 	}
+	req.ArtifactFormat = normalizeArtifactFormat(req.ArtifactFormat)
 	project := &model.Project{
 		Name:               req.Name,
 		Description:        req.Description,
@@ -77,6 +80,7 @@ func (h *ProjectHandler) Create(c *gin.Context) {
 		RepoUsername:       req.RepoUsername,
 		RepoPassword:       req.RepoPassword,
 		MaxArtifacts:       req.MaxArtifacts,
+		ArtifactFormat:     req.ArtifactFormat,
 		WebhookType:        req.WebhookType,
 		WebhookRefPath:     req.WebhookRefPath,
 		WebhookCommitPath:  req.WebhookCommitPath,
@@ -127,6 +131,7 @@ func (h *ProjectHandler) Update(c *gin.Context) {
 		RepoUsername       *string `json:"repo_username"`
 		RepoPassword       *string `json:"repo_password"`
 		MaxArtifacts       *int    `json:"max_artifacts"`
+		ArtifactFormat     *string `json:"artifact_format"`
 		WebhookType        *string `json:"webhook_type"`
 		WebhookRefPath     *string `json:"webhook_ref_path"`
 		WebhookCommitPath  *string `json:"webhook_commit_path"`
@@ -162,6 +167,9 @@ func (h *ProjectHandler) Update(c *gin.Context) {
 	}
 	if req.MaxArtifacts != nil {
 		project.MaxArtifacts = *req.MaxArtifacts
+	}
+	if req.ArtifactFormat != nil {
+		project.ArtifactFormat = normalizeArtifactFormat(*req.ArtifactFormat)
 	}
 	if req.WebhookType != nil {
 		project.WebhookType = *req.WebhookType
@@ -511,6 +519,15 @@ func (h *ProjectHandler) UpdateEnvVar(c *gin.Context) {
 		return
 	}
 	pkg.Success(c, item)
+}
+
+func normalizeArtifactFormat(format string) string {
+	switch strings.ToLower(strings.TrimSpace(format)) {
+	case "zip":
+		return "zip"
+	default:
+		return "gzip"
+	}
 }
 
 // DELETE /api/v1/projects/:id/envs/:envId/vars/:varId

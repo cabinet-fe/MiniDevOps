@@ -14,13 +14,18 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover'
+import { useWebSocket } from '@/hooks/use-websocket'
 import { useNotificationStore } from '@/stores/notification-store'
+import { toast } from 'sonner'
 
 const NOTIFICATION_ICONS: Record<string, React.ElementType> = {
   success: CheckCircle2,
   error: AlertCircle,
   warning: AlertTriangle,
   info: Info,
+  build_success: CheckCircle2,
+  build_failed: AlertCircle,
+  build_cancelled: AlertTriangle,
   default: Bell,
 }
 
@@ -45,6 +50,7 @@ export function NotificationBell() {
   const {
     notifications,
     unreadCount,
+    addNotification,
     fetchNotifications,
     markRead,
     markAllRead,
@@ -53,6 +59,47 @@ export function NotificationBell() {
   useEffect(() => {
     fetchNotifications()
   }, [fetchNotifications])
+
+  const hasToken = typeof window !== 'undefined' && !!localStorage.getItem('access_token')
+
+  useWebSocket({
+    url: '/ws/notifications',
+    enabled: hasToken,
+    onMessage: (raw) => {
+      try {
+        const notification = JSON.parse(raw) as {
+          id: number
+          type: string
+          title: string
+          message: string
+          build_id: number | null
+          project_id?: number
+          environment_id?: number
+          build_status?: string
+          is_read?: boolean
+          created_at?: string
+        }
+
+        if (!notification.id || !notification.type || !notification.title) return
+
+        addNotification({
+          ...notification,
+          is_read: notification.is_read ?? false,
+          created_at: notification.created_at ?? new Date().toISOString(),
+        })
+
+        if (notification.type === 'build_success') {
+          toast.success(notification.title, { description: notification.message || '构建已完成' })
+        } else if (notification.type === 'build_failed') {
+          toast.error(notification.title, { description: notification.message || '构建失败' })
+        } else {
+          toast(notification.title, { description: notification.message || undefined })
+        }
+      } catch {
+        // Ignore malformed notification payloads.
+      }
+    },
+  })
 
   return (
     <Popover>
@@ -68,7 +115,7 @@ export function NotificationBell() {
       </PopoverTrigger>
       <PopoverContent align="end" className="w-96 p-0">
         <div className="flex items-center justify-between border-b p-3">
-          <h3 className="font-semibold">Notifications</h3>
+          <h3 className="font-semibold">站内通知</h3>
           {unreadCount > 0 && (
             <Button
               variant="ghost"
@@ -76,7 +123,7 @@ export function NotificationBell() {
               className="h-8 text-xs"
               onClick={() => markAllRead()}
             >
-              Mark all read
+              全部已读
             </Button>
           )}
         </div>
@@ -84,7 +131,7 @@ export function NotificationBell() {
           {notifications.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 text-center text-sm text-muted-foreground">
               <Bell className="mb-2 size-8 opacity-40" />
-              <p>No notifications yet</p>
+              <p>暂无通知</p>
             </div>
           ) : (
             <div className="divide-y">

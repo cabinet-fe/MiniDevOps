@@ -13,6 +13,7 @@ import {
 import { Textarea } from '@/components/ui/textarea'
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -194,7 +195,7 @@ export function ServerFormDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[560px] max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-[560px]">
         <DialogHeader>
           <DialogTitle>{isEdit ? '编辑服务器' : '新建服务器'}</DialogTitle>
           <DialogDescription>
@@ -203,191 +204,193 @@ export function ServerFormDialog({
         </DialogHeader>
 
         {loading ? (
-          <div className="flex h-32 items-center justify-center">
+          <DialogBody className="flex items-center justify-center py-10">
             <div className="size-8 animate-spin rounded-full border-2 border-zinc-600 border-t-zinc-300" />
-          </div>
+          </DialogBody>
         ) : (
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {error && (
-              <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400">
-                {error}
-              </div>
-            )}
+          <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
+            <DialogBody className="space-y-4">
+              {error && (
+                <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400">
+                  {error}
+                </div>
+              )}
 
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="server-name">服务器名称 *</Label>
-                <Input
-                  id="server-name"
-                  value={form.name}
-                  onChange={(e) => setField('name', e.target.value)}
-                  placeholder="例如：production-web-01"
-                  maxLength={100}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>操作系统 *</Label>
-                <Select value={form.os_type} onValueChange={(value) => setField('os_type', value)}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {OS_TYPES.map((t) => (
-                      <SelectItem key={t.value} value={t.value}>
-                        {t.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="server-host">主机地址 *</Label>
-                <Input
-                  id="server-host"
-                  value={form.host}
-                  onChange={(e) => setField('host', e.target.value)}
-                  placeholder={form.auth_type === 'agent' ? '可选，默认从 Agent URL 自动解析' : 'IP 地址或域名'}
-                  maxLength={200}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>认证方式 *</Label>
-                <Select
-                  value={form.auth_type}
-                  onValueChange={(value) => {
-                    setForm((prev) => ({
-                      ...prev,
-                      auth_type: value,
-                      password: '',
-                      private_key: '',
-                      agent_url: value === 'agent' ? prev.agent_url : '',
-                      agent_token: '',
-                    }))
-                  }}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {AUTH_TYPES.map((t) => (
-                      <SelectItem key={t.value} value={t.value}>
-                        {t.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            {form.auth_type !== 'agent' && (
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
-                  <Label htmlFor="server-port">SSH 端口 *</Label>
+                  <Label htmlFor="server-name">服务器名称 *</Label>
                   <Input
-                    id="server-port"
-                    type="number"
-                    min={1}
-                    max={65535}
-                    value={form.port}
-                    onChange={(e) => setField('port', Math.max(1, Number(e.target.value) || 22))}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="server-username">用户名 *</Label>
-                  <Input
-                    id="server-username"
-                    value={form.username}
-                    onChange={(e) => setField('username', e.target.value)}
-                    placeholder="root"
+                    id="server-name"
+                    value={form.name}
+                    onChange={(e) => setField('name', e.target.value)}
+                    placeholder="例如：production-web-01"
                     maxLength={100}
                   />
                 </div>
-              </div>
-            )}
-
-            {form.auth_type === 'password' && (
-              <div className="space-y-2">
-                <Label htmlFor="server-password">
-                  {isEdit ? '密码（留空表示不变）' : '密码 *'}
-                </Label>
-                <Input
-                  id="server-password"
-                  type="password"
-                  value={form.password}
-                  onChange={(e) => setField('password', e.target.value)}
-                  placeholder={isEdit ? '如不修改可留空' : '请输入 SSH 登录密码'}
-                />
-              </div>
-            )}
-
-            {form.auth_type === 'agent' && (
-              <>
                 <div className="space-y-2">
-                  <Label htmlFor="server-agent-url">Agent URL *</Label>
+                  <Label>操作系统 *</Label>
+                  <Select value={form.os_type} onValueChange={(value) => setField('os_type', value)}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {OS_TYPES.map((t) => (
+                        <SelectItem key={t.value} value={t.value}>
+                          {t.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="server-host">主机地址 *</Label>
                   <Input
-                    id="server-agent-url"
-                    value={form.agent_url}
-                    onChange={(e) => setField('agent_url', e.target.value)}
-                    placeholder="http://server:9091"
-                    maxLength={500}
+                    id="server-host"
+                    value={form.host}
+                    onChange={(e) => setField('host', e.target.value)}
+                    placeholder={form.auth_type === 'agent' ? '可选，默认从 Agent URL 自动解析' : 'IP 地址或域名'}
+                    maxLength={200}
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="server-agent-token">
-                    {isEdit ? 'Agent Token（留空表示不变）' : 'Agent Token *'}
+                  <Label>认证方式 *</Label>
+                  <Select
+                    value={form.auth_type}
+                    onValueChange={(value) => {
+                      setForm((prev) => ({
+                        ...prev,
+                        auth_type: value,
+                        password: '',
+                        private_key: '',
+                        agent_url: value === 'agent' ? prev.agent_url : '',
+                        agent_token: '',
+                      }))
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {AUTH_TYPES.map((t) => (
+                        <SelectItem key={t.value} value={t.value}>
+                          {t.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {form.auth_type !== 'agent' && (
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="server-port">SSH 端口 *</Label>
+                    <Input
+                      id="server-port"
+                      type="number"
+                      min={1}
+                      max={65535}
+                      value={form.port}
+                      onChange={(e) => setField('port', Math.max(1, Number(e.target.value) || 22))}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="server-username">用户名 *</Label>
+                    <Input
+                      id="server-username"
+                      value={form.username}
+                      onChange={(e) => setField('username', e.target.value)}
+                      placeholder="root"
+                      maxLength={100}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {form.auth_type === 'password' && (
+                <div className="space-y-2">
+                  <Label htmlFor="server-password">
+                    {isEdit ? '密码（留空表示不变）' : '密码 *'}
                   </Label>
                   <Input
-                    id="server-agent-token"
+                    id="server-password"
                     type="password"
-                    value={form.agent_token}
-                    onChange={(e) => setField('agent_token', e.target.value)}
-                    placeholder={isEdit ? '如不修改可留空' : '请输入 Agent Bearer Token'}
+                    value={form.password}
+                    onChange={(e) => setField('password', e.target.value)}
+                    placeholder={isEdit ? '如不修改可留空' : '请输入 SSH 登录密码'}
                   />
                 </div>
-              </>
-            )}
+              )}
 
-            {form.auth_type === 'key' && (
+              {form.auth_type === 'agent' && (
+                <>
+                  <div className="space-y-2">
+                    <Label htmlFor="server-agent-url">Agent URL *</Label>
+                    <Input
+                      id="server-agent-url"
+                      value={form.agent_url}
+                      onChange={(e) => setField('agent_url', e.target.value)}
+                      placeholder="http://server:9091"
+                      maxLength={500}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="server-agent-token">
+                      {isEdit ? 'Agent Token（留空表示不变）' : 'Agent Token *'}
+                    </Label>
+                    <Input
+                      id="server-agent-token"
+                      type="password"
+                      value={form.agent_token}
+                      onChange={(e) => setField('agent_token', e.target.value)}
+                      placeholder={isEdit ? '如不修改可留空' : '请输入 Agent Bearer Token'}
+                    />
+                  </div>
+                </>
+              )}
+
+              {form.auth_type === 'key' && (
+                <div className="space-y-2">
+                  <Label htmlFor="server-private-key">
+                    {isEdit ? 'SSH 私钥（留空表示不变）' : 'SSH 私钥 *'}
+                  </Label>
+                  <Textarea
+                    id="server-private-key"
+                    value={form.private_key}
+                    onChange={(e) => setField('private_key', e.target.value)}
+                    placeholder="-----BEGIN OPENSSH PRIVATE KEY-----"
+                    rows={5}
+                    className="font-mono text-xs"
+                  />
+                </div>
+              )}
+
               <div className="space-y-2">
-                <Label htmlFor="server-private-key">
-                  {isEdit ? 'SSH 私钥（留空表示不变）' : 'SSH 私钥 *'}
-                </Label>
+                <Label htmlFor="server-description">描述</Label>
                 <Textarea
-                  id="server-private-key"
-                  value={form.private_key}
-                  onChange={(e) => setField('private_key', e.target.value)}
-                  placeholder="-----BEGIN OPENSSH PRIVATE KEY-----"
-                  rows={5}
-                  className="font-mono text-xs"
+                  id="server-description"
+                  value={form.description}
+                  onChange={(e) => setField('description', e.target.value)}
+                  placeholder="服务器用途说明"
+                  rows={2}
+                  maxLength={500}
                 />
               </div>
-            )}
 
-            <div className="space-y-2">
-              <Label htmlFor="server-description">描述</Label>
-              <Textarea
-                id="server-description"
-                value={form.description}
-                onChange={(e) => setField('description', e.target.value)}
-                placeholder="服务器用途说明"
-                rows={2}
-                maxLength={500}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="server-tags">标签</Label>
-              <Input
-                id="server-tags"
-                value={form.tags}
-                onChange={(e) => setField('tags', e.target.value)}
-                placeholder="多个标签用逗号分隔，如：web,production"
-                maxLength={500}
-              />
-            </div>
+              <div className="space-y-2">
+                <Label htmlFor="server-tags">标签</Label>
+                <Input
+                  id="server-tags"
+                  value={form.tags}
+                  onChange={(e) => setField('tags', e.target.value)}
+                  placeholder="多个标签用逗号分隔，如：web,production"
+                  maxLength={500}
+                />
+              </div>
+            </DialogBody>
 
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
