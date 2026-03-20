@@ -13,6 +13,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"go.uber.org/zap"
@@ -76,6 +77,16 @@ func NewPipeline(
 }
 
 func (p *Pipeline) Execute(ctx context.Context, buildID uint) {
+	defer func() {
+		if r := recover(); r != nil {
+			p.logger.Error("pipeline panic recovered",
+				zap.Uint("build_id", buildID),
+				zap.Any("panic", r),
+			)
+			p.failBuild(&model.Build{ID: buildID}, fmt.Sprintf("internal panic: %v", r))
+		}
+	}()
+
 	build, err := p.buildRepo.FindByID(buildID)
 	if err != nil {
 		p.logger.Error("build not found", zap.Uint("id", buildID))
@@ -114,7 +125,10 @@ func (p *Pipeline) Execute(ctx context.Context, buildID uint) {
 	})
 
 	channel := fmt.Sprintf("build:%d", build.ID)
+	var logMu sync.Mutex
 	writeLine := func(line string) {
+		logMu.Lock()
+		defer logMu.Unlock()
 		logFile.WriteString(line + "\n")
 		p.hub.BroadcastToChannel(channel, []byte(line))
 	}
@@ -233,8 +247,14 @@ func (p *Pipeline) Execute(ctx context.Context, buildID uint) {
 	}
 
 	// Stream output line by line
-	go scanLines(stdout, writeLine)
+	var scanWg sync.WaitGroup
+	scanWg.Add(1)
+	go func() {
+		defer scanWg.Done()
+		scanLines(stdout, writeLine)
+	}()
 	scanLines(stderr, writeLine)
+	scanWg.Wait()
 
 	if err := cmd.Wait(); err != nil {
 		if ctx.Err() != nil {

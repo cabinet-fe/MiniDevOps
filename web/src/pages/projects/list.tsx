@@ -1,8 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { Link } from 'react-router'
 import {
-  ChevronDown,
-  ChevronRight,
   FolderGit2,
   LayoutGrid,
   List,
@@ -36,7 +34,6 @@ interface Project {
   id: number
   name: string
   description: string
-  group_name: string
   tags: string
   repo_url: string
   environments?: { id: number; name: string }[]
@@ -49,6 +46,10 @@ function splitTags(tags: string) {
     .filter(Boolean)
 }
 
+function tagDictLabel(value: string, dict: { label: string; value: string }[]) {
+  return dict.find((d) => d.value === value)?.label ?? value
+}
+
 export function ProjectListPage() {
   const [projects, setProjects] = useState<Project[]>([])
   const [loading, setLoading] = useState(true)
@@ -58,7 +59,6 @@ export function ProjectListPage() {
   const [viewMode, setViewMode] = useState<'card' | 'table'>('card')
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editingId, setEditingId] = useState<number | null>(null)
-  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({})
 
   const fetchProjects = useCallback(async () => {
     setLoading(true)
@@ -93,13 +93,28 @@ export function ProjectListPage() {
     fetchProjects()
   }
 
+  const [dictTags, setDictTags] = useState<{ label: string; value: string }[]>([])
+
+  useEffect(() => {
+    api
+      .get<{ label: string; value: string }[]>('/dictionaries/code/project_tags/items')
+      .then((res) => {
+        if (res.code === 0 && res.data) {
+          setDictTags(res.data)
+        }
+      })
+  }, [])
+
   const allTags = useMemo(() => {
+    if (dictTags.length > 0) {
+      return dictTags.map((t) => t.value)
+    }
     const tags = new Set<string>()
     for (const project of projects) {
       splitTags(project.tags).forEach((tag) => tags.add(tag))
     }
     return Array.from(tags).sort((a, b) => a.localeCompare(b, 'zh-CN'))
-  }, [projects])
+  }, [projects, dictTags])
 
   const filtered = useMemo(() => {
     const keyword = search.trim().toLowerCase()
@@ -111,34 +126,20 @@ export function ProjectListPage() {
       return (
         project.name.toLowerCase().includes(keyword) ||
         (project.description || '').toLowerCase().includes(keyword) ||
-        (project.group_name || '').toLowerCase().includes(keyword) ||
-        tagList.some((tag) => tag.toLowerCase().includes(keyword))
+        tagList.some((tag) => {
+          if (tag.toLowerCase().includes(keyword)) return true
+          if (dictTags.length > 0) {
+            return tagDictLabel(tag, dictTags).toLowerCase().includes(keyword)
+          }
+          return false
+        })
       )
     })
-  }, [projects, search, selectedTag])
-
-  const groupedProjects = useMemo(() => {
-    const groups = new Map<string, Project[]>()
-    for (const project of filtered) {
-      const groupName = project.group_name || '未分组'
-      const current = groups.get(groupName) ?? []
-      current.push(project)
-      groups.set(groupName, current)
-    }
-    return Array.from(groups.entries()).sort((a, b) => a[0].localeCompare(b[0], 'zh-CN'))
-  }, [filtered])
-
-  const toggleGroup = (groupName: string) => {
-    setCollapsedGroups((prev) => ({ ...prev, [groupName]: !prev[groupName] }))
-  }
+  }, [projects, search, selectedTag, dictTags])
 
   const columnHelper = createColumnHelper<Project>()
   const columns = [
     columnHelper.accessor('name', { header: '项目名称' }),
-    columnHelper.accessor('group_name', {
-      header: '分组',
-      cell: ({ getValue }) => getValue() || '未分组',
-    }),
     columnHelper.accessor('tags', {
       header: '标签',
       cell: ({ getValue }) => {
@@ -148,7 +149,7 @@ export function ProjectListPage() {
           <div className="flex flex-wrap gap-1">
             {tags.map((tag) => (
               <Badge key={tag} variant="secondary">
-                {tag}
+                {tagDictLabel(tag, dictTags)}
               </Badge>
             ))}
           </div>
@@ -192,7 +193,7 @@ export function ProjectListPage() {
   if (loading) {
     return (
       <div className="flex h-64 items-center justify-center">
-        <div className="size-8 animate-spin rounded-full border-2 border-zinc-600 border-t-zinc-300" />
+        <div className="border-muted size-8 animate-spin rounded-full border-2 border-t-foreground" />
       </div>
     )
   }
@@ -201,8 +202,8 @@ export function ProjectListPage() {
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">项目</h1>
-          <p className="mt-1 text-sm text-zinc-500">按分组、标签与关键字管理构建项目</p>
+          <h1 className="text-foreground text-2xl font-bold tracking-tight">项目</h1>
+          <p className="text-muted-foreground mt-1 text-sm">按标签与关键字管理构建项目</p>
         </div>
         <Button className="gap-2" onClick={openCreate}>
           <Plus className="size-4" />
@@ -213,9 +214,9 @@ export function ProjectListPage() {
       <div className="flex flex-col gap-4">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
           <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-zinc-500" />
+            <Search className="text-muted-foreground absolute left-3 top-1/2 size-4 -translate-y-1/2" />
             <Input
-              placeholder="搜索项目名称、描述、分组或标签..."
+              placeholder="搜索项目名称、描述或标签..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="pl-9"
@@ -255,7 +256,7 @@ export function ProjectListPage() {
                 size="sm"
                 onClick={() => setSelectedTag(tag)}
               >
-                {tag}
+                {tagDictLabel(tag, dictTags)}
               </Button>
             ))}
           </div>
@@ -267,81 +268,57 @@ export function ProjectListPage() {
       )}
 
       {viewMode === 'card' ? (
-        <div className="space-y-4">
-          {groupedProjects.map(([groupName, items]) => {
-            const collapsed = !!collapsedGroups[groupName]
-            return (
-              <Card key={groupName} className="border-zinc-200 dark:border-zinc-800">
-                <CardHeader className="pb-3">
-                  <button
-                    type="button"
-                    className="flex items-center justify-between text-left"
-                    onClick={() => toggleGroup(groupName)}
-                  >
-                    <div>
-                      <CardTitle className="flex items-center gap-2 text-lg">
-                        {collapsed ? <ChevronRight className="size-4" /> : <ChevronDown className="size-4" />}
-                        {groupName}
-                      </CardTitle>
-                      <CardDescription className="mt-1">{items.length} 个项目</CardDescription>
-                    </div>
-                  </button>
-                </CardHeader>
-                {!collapsed && (
-                  <CardContent className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                    {items.map((project) => (
-                      <div key={project.id} className="group relative">
-                        <Link to={`/projects/${project.id}`}>
-                          <Card className="h-full border-zinc-200 transition-colors hover:border-zinc-400 dark:border-zinc-800 dark:hover:border-zinc-600">
-                            <CardHeader className="pb-2">
-                              <div className="flex items-start gap-3">
-                                <div className="rounded-lg bg-zinc-100 p-2 dark:bg-zinc-800">
-                                  <FolderGit2 className="size-5 text-zinc-600 dark:text-zinc-400" />
-                                </div>
-                                <div className="min-w-0 flex-1">
-                                  <CardTitle className="truncate text-lg">{project.name}</CardTitle>
-                                  <CardDescription className="line-clamp-2 mt-1">
-                                    {project.description || '暂无描述'}
-                                  </CardDescription>
-                                </div>
-                              </div>
-                            </CardHeader>
-                            <CardContent className="space-y-3">
-                              <p className="truncate text-xs text-zinc-500">{project.repo_url}</p>
-                              <div className="flex flex-wrap gap-1">
-                                {splitTags(project.tags).map((tag) => (
-                                  <Badge key={tag} variant="secondary">
-                                    {tag}
-                                  </Badge>
-                                ))}
-                                {splitTags(project.tags).length === 0 && <span className="text-xs text-zinc-500">无标签</span>}
-                              </div>
-                              <Badge variant="outline">{project.environments?.length ?? 0} 个环境</Badge>
-                            </CardContent>
-                          </Card>
-                        </Link>
-                        <Button
-                          variant="ghost"
-                          size="icon-sm"
-                          className="absolute right-3 top-3 opacity-0 transition-opacity group-hover:opacity-100"
-                          onClick={(e) => {
-                            e.preventDefault()
-                            e.stopPropagation()
-                            openEdit(project.id)
-                          }}
-                        >
-                          <Pencil className="size-4" />
-                        </Button>
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          {filtered.map((project) => (
+            <div key={project.id} className="group relative">
+              <Link to={`/projects/${project.id}`}>
+                <Card className="h-full border-border transition-colors">
+                  <CardHeader className="pb-2">
+                    <div className="flex items-start gap-3">
+                      <div className="bg-muted rounded-lg p-2">
+                        <FolderGit2 className="text-muted-foreground size-5" />
                       </div>
-                    ))}
+                      <div className="min-w-0 flex-1">
+                        <CardTitle className="truncate text-lg">{project.name}</CardTitle>
+                        <CardDescription className="line-clamp-2 mt-1">
+                          {project.description || '暂无描述'}
+                        </CardDescription>
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <p className="text-muted-foreground truncate text-xs">{project.repo_url}</p>
+                    <div className="flex flex-wrap gap-1">
+                      {splitTags(project.tags).map((tag) => (
+                        <Badge key={tag} variant="secondary">
+                          {tagDictLabel(tag, dictTags)}
+                        </Badge>
+                      ))}
+                      {splitTags(project.tags).length === 0 && (
+                        <span className="text-muted-foreground text-xs">无标签</span>
+                      )}
+                    </div>
+                    <Badge variant="outline">{project.environments?.length ?? 0} 个环境</Badge>
                   </CardContent>
-                )}
-              </Card>
-            )
-          })}
+                </Card>
+              </Link>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                className="absolute right-3 top-3 opacity-0 transition-opacity group-hover:opacity-100"
+                onClick={(e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  openEdit(project.id)
+                }}
+              >
+                <Pencil className="size-4" />
+              </Button>
+            </div>
+          ))}
         </div>
       ) : (
-        <Card className="border-zinc-200 dark:border-zinc-800">
+        <Card className="border-border">
           <CardHeader>
             <CardTitle>项目列表</CardTitle>
             <CardDescription>共 {filtered.length} 个项目</CardDescription>

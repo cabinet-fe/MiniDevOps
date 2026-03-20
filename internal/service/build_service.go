@@ -2,6 +2,7 @@ package service
 
 import (
 	"bufio"
+	"buildflow/internal/config"
 	"buildflow/internal/model"
 	"buildflow/internal/repository"
 	"os"
@@ -171,17 +172,34 @@ func (s *BuildService) Cancel(id uint) error {
 
 // DashboardStats holds dashboard statistics.
 type DashboardStats struct {
-	TotalProjects int64                 `json:"total_projects"`
-	TodayBuilds   int64                 `json:"today_builds"`
-	SuccessRate   float64               `json:"success_rate"`
-	ActiveCount   int                   `json:"active_count"`
-	GroupSummary  []ProjectGroupSummary `json:"group_summary"`
+	TotalProjects   int64                    `json:"total_projects"`
+	TodayBuilds     int64                    `json:"today_builds"`
+	SuccessRate     float64                  `json:"success_rate"`
+	ActiveCount     int                      `json:"active_count"`
+	TagSummary      []ProjectTagSummary      `json:"tag_summary"`
+	SystemResources DashboardSystemResources `json:"system_resources"`
 }
 
-type ProjectGroupSummary struct {
-	GroupName        string `json:"group_name"`
+type ProjectTagSummary struct {
+	Tag              string `json:"tag"`
 	ProjectCount     int    `json:"project_count"`
 	EnvironmentCount int    `json:"environment_count"`
+}
+
+type DashboardSystemResources struct {
+	CPUUsagePercent    float64 `json:"cpu_usage_percent"`
+	MemoryUsedBytes    uint64  `json:"memory_used_bytes"`
+	MemoryTotalBytes   uint64  `json:"memory_total_bytes"`
+	MemoryUsagePercent float64 `json:"memory_usage_percent"`
+	DiskFreeBytes      uint64  `json:"disk_free_bytes"`
+	DiskTotalBytes     uint64  `json:"disk_total_bytes"`
+	DiskUsagePercent   float64 `json:"disk_usage_percent"`
+}
+
+type DashboardBuildItem struct {
+	model.Build
+	ProjectName     string `json:"project_name"`
+	EnvironmentName string `json:"environment_name"`
 }
 
 func (s *BuildService) GetDashboardStats() (*DashboardStats, error) {
@@ -218,40 +236,70 @@ func (s *BuildService) GetDashboardStats() (*DashboardStats, error) {
 	if err != nil {
 		return nil, err
 	}
-	groupStats := make(map[string]*ProjectGroupSummary)
+	tagStats := make(map[string]*ProjectTagSummary)
 	for _, project := range projects {
-		groupName := project.GroupName
-		if groupName == "" {
-			groupName = "未分组"
+		tags := strings.Split(project.Tags, ",")
+		if project.Tags == "" {
+			tags = []string{"未标记"}
 		}
-		if _, exists := groupStats[groupName]; !exists {
-			groupStats[groupName] = &ProjectGroupSummary{GroupName: groupName}
+		for _, tag := range tags {
+			tag = strings.TrimSpace(tag)
+			if tag == "" {
+				continue
+			}
+			if _, exists := tagStats[tag]; !exists {
+				tagStats[tag] = &ProjectTagSummary{Tag: tag}
+			}
+			tagStats[tag].ProjectCount++
+			tagStats[tag].EnvironmentCount += len(project.Environments)
 		}
-		groupStats[groupName].ProjectCount++
-		groupStats[groupName].EnvironmentCount += len(project.Environments)
 	}
-	groupSummary := make([]ProjectGroupSummary, 0, len(groupStats))
-	for _, item := range groupStats {
-		groupSummary = append(groupSummary, *item)
+	tagSummary := make([]ProjectTagSummary, 0, len(tagStats))
+	for _, item := range tagStats {
+		tagSummary = append(tagSummary, *item)
 	}
-	sort.Slice(groupSummary, func(i, j int) bool {
-		return groupSummary[i].GroupName < groupSummary[j].GroupName
+	sort.Slice(tagSummary, func(i, j int) bool {
+		return tagSummary[i].Tag < tagSummary[j].Tag
 	})
+
+	diskPath := "."
+	if config.C != nil && config.C.Build.WorkspaceDir != "" {
+		diskPath = config.C.Build.WorkspaceDir
+	}
+
 	return &DashboardStats{
-		TotalProjects: totalProjects,
-		TodayBuilds:   todayBuilds,
-		SuccessRate:   successRate,
-		ActiveCount:   len(activeBuilds),
-		GroupSummary:  groupSummary,
+		TotalProjects:   totalProjects,
+		TodayBuilds:     todayBuilds,
+		SuccessRate:     successRate,
+		ActiveCount:     len(activeBuilds),
+		TagSummary:      tagSummary,
+		SystemResources: collectDashboardSystemResources(diskPath),
 	}, nil
 }
 
-func (s *BuildService) GetActiveBuildsList() ([]model.Build, error) {
-	return s.repo.FindActiveBuilds()
+func (s *BuildService) GetDashboardSystemResources() DashboardSystemResources {
+	diskPath := "."
+	if config.C != nil && config.C.Build.WorkspaceDir != "" {
+		diskPath = config.C.Build.WorkspaceDir
+	}
+
+	return collectDashboardSystemResources(diskPath)
 }
 
-func (s *BuildService) GetRecentBuilds(limit int) ([]model.Build, error) {
-	return s.repo.GetRecentBuilds(limit)
+func (s *BuildService) GetActiveBuildsList() ([]DashboardBuildItem, error) {
+	builds, err := s.repo.FindActiveBuilds()
+	if err != nil {
+		return nil, err
+	}
+	return s.decorateDashboardBuilds(builds), nil
+}
+
+func (s *BuildService) GetRecentBuilds(limit int) ([]DashboardBuildItem, error) {
+	builds, err := s.repo.GetRecentBuilds(limit)
+	if err != nil {
+		return nil, err
+	}
+	return s.decorateDashboardBuilds(builds), nil
 }
 
 // BuildTrendItem represents build counts by day and status.
@@ -275,4 +323,36 @@ func (s *BuildService) GetBuildTrend(days int) ([]BuildTrendItem, error) {
 		})
 	}
 	return items, nil
+}
+
+func (s *BuildService) decorateDashboardBuilds(builds []model.Build) []DashboardBuildItem {
+	items := make([]DashboardBuildItem, 0, len(builds))
+	projectNames := make(map[uint]string, len(builds))
+	environmentNames := make(map[uint]string, len(builds))
+
+	for _, build := range builds {
+		item := DashboardBuildItem{Build: build}
+
+		if name, ok := projectNames[build.ProjectID]; ok {
+			item.ProjectName = name
+		} else if s.projectRepo != nil {
+			if project, err := s.projectRepo.FindByID(build.ProjectID); err == nil {
+				item.ProjectName = project.Name
+				projectNames[build.ProjectID] = project.Name
+			}
+		}
+
+		if name, ok := environmentNames[build.EnvironmentID]; ok {
+			item.EnvironmentName = name
+		} else if s.envRepo != nil {
+			if env, err := s.envRepo.FindByID(build.EnvironmentID); err == nil {
+				item.EnvironmentName = env.Name
+				environmentNames[build.EnvironmentID] = env.Name
+			}
+		}
+
+		items = append(items, item)
+	}
+
+	return items
 }

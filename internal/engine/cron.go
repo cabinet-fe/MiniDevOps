@@ -95,6 +95,15 @@ func (cs *CronScheduler) addEntry(env model.Environment) error {
 	expression := env.CronExpression
 
 	entryID, err := cs.cron.AddFunc(expression, func() {
+		defer func() {
+			if r := recover(); r != nil {
+				cs.logger.Error("cron callback panic recovered",
+					zap.Uint("env_id", envID),
+					zap.Any("panic", r),
+				)
+			}
+		}()
+
 		cs.logger.Info("cron triggered build",
 			zap.Uint("env_id", envID),
 			zap.Uint("project_id", projectID),

@@ -14,13 +14,14 @@ func GitCloneOrPull(ctx context.Context, workDir, repoURL, authType, username, p
 	authURL := buildAuthURL(repoURL, authType, username, password)
 
 	if _, err := os.Stat(filepath.Join(workDir, ".git")); os.IsNotExist(err) {
-		// Clone
 		logFn("Cloning repository...")
 		os.MkdirAll(filepath.Dir(workDir), 0755)
 		return runGit(ctx, "", logFn, "clone", "--branch", branch, authURL, workDir)
 	}
 
-	// Existing workspace: fetch + reset
+	// Remove stale lock files that may remain from a previous crashed build
+	cleanGitLockFiles(workDir, logFn)
+
 	logFn("Fetching updates...")
 	if err := runGit(ctx, workDir, logFn, "fetch", "origin"); err != nil {
 		return err
@@ -33,13 +34,30 @@ func GitCloneOrPull(ctx context.Context, workDir, repoURL, authType, username, p
 	if err := runGit(ctx, workDir, logFn, "reset", "--hard", "origin/"+branch); err != nil {
 		return err
 	}
-	// Clean untracked files but preserve dependency caches
-	logFn("Cleaning workspace...")
+	logFn("Cleaning workspace (preserving dependency caches)...")
 	runGit(ctx, workDir, logFn, "clean", "-fd",
 		"-e", "node_modules", "-e", "vendor", "-e", ".gradle",
 		"-e", "target", "-e", "__pycache__", "-e", ".venv",
 		"-e", "venv", "-e", ".tox")
 	return nil
+}
+
+var gitLockFiles = []string{
+	".git/index.lock",
+	".git/shallow.lock",
+	".git/refs/heads/*.lock",
+	".git/HEAD.lock",
+}
+
+func cleanGitLockFiles(workDir string, logFn func(string)) {
+	for _, pattern := range gitLockFiles {
+		matches, _ := filepath.Glob(filepath.Join(workDir, pattern))
+		for _, f := range matches {
+			if err := os.Remove(f); err == nil {
+				logFn("[git] Removed stale lock file: " + filepath.Base(f))
+			}
+		}
+	}
 }
 
 func runGit(ctx context.Context, dir string, logFn func(string), args ...string) error {

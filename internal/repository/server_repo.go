@@ -40,6 +40,10 @@ func (r *ServerRepository) Update(server *model.Server) error {
 	return r.db.Save(server).Error
 }
 
+func (r *ServerRepository) UpdateStatus(id uint, status string) error {
+	return r.db.Model(&model.Server{}).Where("id = ?", id).Update("status", status).Error
+}
+
 func (r *ServerRepository) Delete(id uint) error {
 	return r.db.Delete(&model.Server{}, id).Error
 }

@@ -160,10 +160,23 @@ func (s *ServerService) TestConnection(id uint) (string, error) {
 	if err != nil {
 		return "", err
 	}
+
+	var output string
 	if server.AuthType == "agent" {
-		return testAgentConnection(server)
+		output, err = testAgentConnection(server)
+	} else {
+		output, err = s.testSSHConnection(server)
 	}
 
+	if err != nil {
+		_ = s.repo.UpdateStatus(id, "offline")
+		return "", err
+	}
+	_ = s.repo.UpdateStatus(id, "online")
+	return output, nil
+}
+
+func (s *ServerService) testSSHConnection(server *model.Server) (string, error) {
 	addr := fmt.Sprintf("%s:%d", server.Host, server.Port)
 	if server.Port == 0 {
 		addr = server.Host + ":22"

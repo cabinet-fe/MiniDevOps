@@ -7,7 +7,7 @@ import (
 
 	"buildflow/internal/config"
 	"golang.org/x/crypto/bcrypt"
-	"gorm.io/driver/sqlite"
+	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 )
@@ -51,8 +51,26 @@ func InitDB() (*gorm.DB, error) {
 		&Build{},
 		&Notification{},
 		&AuditLog{},
+		&Dictionary{},
+		&DictItem{},
 	); err != nil {
 		return nil, fmt.Errorf("auto migrating: %w", err)
+	}
+
+	// Drop legacy group_name column from projects table if it still exists
+	if db.Migrator().HasColumn(&Project{}, "group_name") {
+		_ = db.Migrator().DropColumn(&Project{}, "group_name")
+	}
+
+	// Seed default project_tags dictionary
+	var dictCount int64
+	db.Model(&Dictionary{}).Where("code = ?", "project_tags").Count(&dictCount)
+	if dictCount == 0 {
+		db.Create(&Dictionary{
+			Name:        "项目标签",
+			Code:        "project_tags",
+			Description: "项目可选标签列表",
+		})
 	}
 
 	var count int64

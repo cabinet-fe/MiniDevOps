@@ -2,9 +2,13 @@ package engine
 
 import (
 	"context"
+	"fmt"
 	"sync"
+	"sync/atomic"
 
 	"go.uber.org/zap"
+
+	"buildflow/internal/model"
 )
 
 type Scheduler struct {
@@ -17,6 +21,7 @@ type Scheduler struct {
 	logger        *zap.Logger
 	wg            sync.WaitGroup
 	done          chan struct{}
+	closed        atomic.Bool
 }
 
 func NewScheduler(maxConcurrent int, pipeline *Pipeline, logger *zap.Logger) *Scheduler {
@@ -44,6 +49,15 @@ func (s *Scheduler) run() {
 				<-s.semaphore
 				s.wg.Done()
 			}()
+			defer func() {
+				if r := recover(); r != nil {
+					s.logger.Error("worker panic recovered, marking build as failed",
+						zap.Uint("build_id", id),
+						zap.String("panic", fmt.Sprint(r)),
+					)
+					s.pipeline.failBuild(&model.Build{ID: id}, fmt.Sprintf("internal panic: %v", r))
+				}
+			}()
 			ctx, cancel := context.WithCancel(context.Background())
 			s.mu.Lock()
 			s.cancelMap[id] = cancel
@@ -59,8 +73,12 @@ func (s *Scheduler) run() {
 	}
 }
 
-func (s *Scheduler) Submit(buildID uint) {
+func (s *Scheduler) Submit(buildID uint) error {
+	if s.closed.Load() {
+		return fmt.Errorf("scheduler is shut down")
+	}
 	s.jobs <- buildID
+	return nil
 }
 
 func (s *Scheduler) Cancel(buildID uint) bool {
@@ -75,6 +93,7 @@ func (s *Scheduler) Cancel(buildID uint) bool {
 }
 
 func (s *Scheduler) Shutdown() {
+	s.closed.Store(true)
 	close(s.jobs)
 	s.wg.Wait()
 	close(s.done)

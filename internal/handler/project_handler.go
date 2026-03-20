@@ -49,7 +49,6 @@ func (h *ProjectHandler) Create(c *gin.Context) {
 	var req struct {
 		Name               string `json:"name" binding:"required"`
 		Description        string `json:"description"`
-		GroupName          string `json:"group_name"`
 		Tags               string `json:"tags"`
 		RepoURL            string `json:"repo_url" binding:"required"`
 		RepoAuthType       string `json:"repo_auth_type"`
@@ -73,7 +72,6 @@ func (h *ProjectHandler) Create(c *gin.Context) {
 	project := &model.Project{
 		Name:               req.Name,
 		Description:        req.Description,
-		GroupName:          req.GroupName,
 		Tags:               req.Tags,
 		RepoURL:            req.RepoURL,
 		RepoAuthType:       req.RepoAuthType,
@@ -124,7 +122,6 @@ func (h *ProjectHandler) Update(c *gin.Context) {
 	var req struct {
 		Name               *string `json:"name"`
 		Description        *string `json:"description"`
-		GroupName          *string `json:"group_name"`
 		Tags               *string `json:"tags"`
 		RepoURL            *string `json:"repo_url"`
 		RepoAuthType       *string `json:"repo_auth_type"`
@@ -146,9 +143,6 @@ func (h *ProjectHandler) Update(c *gin.Context) {
 	}
 	if req.Description != nil {
 		project.Description = *req.Description
-	}
-	if req.GroupName != nil {
-		project.GroupName = *req.GroupName
 	}
 	if req.Tags != nil {
 		project.Tags = *req.Tags

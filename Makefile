@@ -1,38 +1,23 @@
-.PHONY: dev dev-backend dev-frontend build clean
+.PHONY: dev build-linux build-win clean
 
-# Development
+VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
+LDFLAGS := -s -w -X main.version=$(VERSION)
+
 dev:
 	@trap 'kill 0' INT TERM; \
-	mkdir -p cmd/server/dist && touch cmd/server/dist/.gitkeep; \
-	(cd cmd/server && go run . --config ../../config.yaml) & \
+	(cd cmd/server && go run -tags dev . --config ../../config.yaml) & \
 	(cd web && bun run dev) & \
 	wait
 
-dev-backend:
-	@mkdir -p cmd/server/dist && touch cmd/server/dist/.gitkeep
-	cd cmd/server && go run . --config ../../config.yaml
-
-dev-frontend:
-	cd web && bun run dev
-
-# Production build
-build: build-frontend build-backend
-
-build-frontend:
-	cd web && bun run build
-	rm -rf cmd/server/dist
-	cp -r web/dist cmd/server/dist
-
-build-backend:
-	CGO_ENABLED=1 go build -o buildflow ./cmd/server
-
-# Cross-compile
 build-linux:
-	cd web && bun run build
-	rm -rf cmd/server/dist
-	cp -r web/dist cmd/server/dist
-	CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -o buildflow-linux ./cmd/server
+	cd web && bun install && bun run build
+	rm -rf cmd/server/dist && cp -r web/dist cmd/server/dist
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags "$(LDFLAGS)" -o buildflow-linux-amd64 ./cmd/server
 
-# Clean
+build-win:
+	cd web && bun install && bun run build
+	rm -rf cmd/server/dist && cp -r web/dist cmd/server/dist
+	CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags "$(LDFLAGS)" -o buildflow-windows-amd64.exe ./cmd/server
+
 clean:
-	rm -rf buildflow buildflow-linux cmd/server/dist web/dist data/
+	rm -rf buildflow* cmd/server/dist web/dist data/

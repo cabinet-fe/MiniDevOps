@@ -214,7 +214,7 @@ export function UserListPage() {
   if (loading) {
     return (
       <div className="flex h-64 items-center justify-center">
-        <div className="size-8 animate-spin rounded-full border-2 border-zinc-600 border-t-zinc-300" />
+        <div className="border-muted size-8 animate-spin rounded-full border-2 border-t-foreground" />
       </div>
     )
   }
@@ -223,8 +223,8 @@ export function UserListPage() {
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">用户管理</h1>
-          <p className="mt-1 text-sm text-zinc-500">管理系统用户与角色</p>
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">用户管理</h1>
+          <p className="mt-1 text-sm text-muted-foreground">管理系统用户与角色</p>
         </div>
         <Button onClick={() => setCreateOpen(true)} className="gap-2">
           <Plus className="size-4" />
@@ -232,7 +232,7 @@ export function UserListPage() {
         </Button>
       </div>
 
-      <Card className="border-zinc-200 dark:border-zinc-800">
+      <Card className="border-border">
         <CardHeader>
           <CardTitle>用户列表</CardTitle>
           <CardDescription>共 {users.length} 个用户</CardDescription>

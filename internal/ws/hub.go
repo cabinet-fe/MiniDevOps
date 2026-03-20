@@ -18,6 +18,7 @@ type Hub struct {
 	channels   map[string]map[*Client]bool
 	register   chan *Client
 	unregister chan *Client
+	quit       chan struct{}
 	mu         sync.RWMutex
 }
 
@@ -27,14 +28,30 @@ func NewHub() *Hub {
 		channels:   make(map[string]map[*Client]bool),
 		register:   make(chan *Client),
 		unregister: make(chan *Client),
+		quit:       make(chan struct{}),
 	}
 	go h.run()
 	return h
 }
 
 func (h *Hub) run() {
+	defer func() {
+		if r := recover(); r != nil {
+			go h.run()
+		}
+	}()
+
 	for {
 		select {
+		case <-h.quit:
+			h.mu.Lock()
+			for client := range h.clients {
+				close(client.Send)
+				delete(h.clients, client)
+			}
+			h.channels = make(map[string]map[*Client]bool)
+			h.mu.Unlock()
+			return
 		case client := <-h.register:
 			h.mu.Lock()
 			h.clients[client] = true
@@ -58,6 +75,10 @@ func (h *Hub) run() {
 			h.mu.Unlock()
 		}
 	}
+}
+
+func (h *Hub) Shutdown() {
+	close(h.quit)
 }
 
 func (h *Hub) Register(client *Client) {

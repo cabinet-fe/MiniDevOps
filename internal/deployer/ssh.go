@@ -180,15 +180,17 @@ func ExecuteRemoteScriptInDir(ctx context.Context, server ServerInfo, workDir, s
 	return nil
 }
 
-// buildSSHOptions returns SSH options for rsync -e and scp -o (e.g. "-o StrictHostKeyChecking=no -o Port=22")
-func buildSSHOptions(server ServerInfo) string {
-	opts := buildSSHOptionsSlice(server)
-	return strings.Join(opts, " ")
+// buildSSHOptions returns SSH option string and a cleanup function for temp key files.
+func buildSSHOptions(server ServerInfo) (string, func()) {
+	opts, cleanup := buildSSHOptionsSlice(server)
+	return strings.Join(opts, " "), cleanup
 }
 
-// buildSSHOptionsSlice returns []string{"-o", "Opt1", "-o", "Opt2"} for scp
-func buildSSHOptionsSlice(server ServerInfo) []string {
+// buildSSHOptionsSlice returns []string{"-o", "Opt1", "-o", "Opt2"} and a cleanup function
+// that removes any temporary key files created during the call.
+func buildSSHOptionsSlice(server ServerInfo) ([]string, func()) {
 	var result []string
+	var tmpFiles []string
 	result = append(result, "-o", "StrictHostKeyChecking=no")
 	if server.Port > 0 && server.Port != 22 {
 		result = append(result, "-o", fmt.Sprintf("Port=%d", server.Port))
@@ -198,10 +200,17 @@ func buildSSHOptionsSlice(server ServerInfo) []string {
 		if err == nil {
 			tmpFile.WriteString(server.PrivateKey)
 			tmpFile.Close()
+			os.Chmod(tmpFile.Name(), 0600)
 			result = append(result, "-o", "IdentityFile="+tmpFile.Name())
+			tmpFiles = append(tmpFiles, tmpFile.Name())
 		}
 	}
-	return result
+	cleanup := func() {
+		for _, f := range tmpFiles {
+			os.Remove(f)
+		}
+	}
+	return result, cleanup
 }
 
 // runAndLog executes cmd and streams output line by line to logFn

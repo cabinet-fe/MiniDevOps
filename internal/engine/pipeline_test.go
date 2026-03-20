@@ -13,7 +13,7 @@ import (
 	"buildflow/internal/model"
 	"buildflow/internal/repository"
 	"buildflow/internal/ws"
-	"gorm.io/driver/sqlite"
+	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
 )
 

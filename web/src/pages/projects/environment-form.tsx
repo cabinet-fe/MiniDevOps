@@ -444,7 +444,7 @@ export function EnvironmentFormDialog({
               </div>
               <div className="space-y-2">
                 <Label>构建脚本</Label>
-                <div className="overflow-hidden rounded-md border border-zinc-200 dark:border-zinc-800">
+                <div className="overflow-hidden rounded-md border border-border">
                   <CodeMirror
                     value={form.build_script}
                     height="160px"
@@ -452,7 +452,7 @@ export function EnvironmentFormDialog({
                     extensions={getScriptExtensions()}
                     onChange={(value) => setField('build_script', value)}
                     placeholder={currentScriptType?.placeholder || 'npm install && npm run build'}
-                    className="text-sm font-mono"
+                    className="text-sm font-mono [&_.cm-editor]:!bg-transparent [&_.cm-gutters]:!bg-transparent"
                   />
                 </div>
               </div>
@@ -504,11 +504,11 @@ export function EnvironmentFormDialog({
               </div>
             </div>
 
-            <div className="rounded-lg border border-zinc-200 p-4 space-y-4 dark:border-zinc-800">
+            <div className="rounded-lg border border-border p-4 space-y-4">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium">定时构建</p>
-                  <p className="mt-0.5 text-xs text-zinc-500">使用 Cron 表达式配置定时自动构建</p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">使用 Cron 表达式配置定时自动构建</p>
                 </div>
                 <Switch checked={form.cron_enabled} onCheckedChange={(checked) => setField('cron_enabled', checked)} />
               </div>
@@ -552,7 +552,7 @@ export function EnvironmentFormDialog({
             <div className="space-y-2">
               <Label>变量组</Label>
               {varGroups.length === 0 ? (
-                <div className="rounded-lg border border-dashed border-zinc-200 p-4 text-sm text-zinc-500 dark:border-zinc-800">
+                <div className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
                   暂无可用变量组，可在系统设置中创建。
                 </div>
               ) : (
@@ -581,11 +581,11 @@ export function EnvironmentFormDialog({
               )}
             </div>
 
-            <div className="space-y-3 rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
+            <div className="space-y-3 rounded-lg border border-border p-4">
               <div className="flex items-center justify-between">
                 <div>
                   <Label>环境变量</Label>
-                  <p className="mt-1 text-xs text-zinc-500">键值对形式维护，支持按变量逐个加密。</p>
+                  <p className="mt-1 text-xs text-muted-foreground">键值对形式维护，支持按变量逐个加密。</p>
                 </div>
                 <Button
                   type="button"
@@ -598,13 +598,13 @@ export function EnvironmentFormDialog({
                 </Button>
               </div>
               {envVars.length === 0 ? (
-                <div className="rounded-lg border border-dashed border-zinc-200 p-4 text-sm text-zinc-500 dark:border-zinc-800">
+                <div className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
                   暂未配置环境变量
                 </div>
               ) : (
                 <div className="space-y-3">
                   {envVars.map((item, index) => (
-                    <div key={`${item.id ?? 'new'}-${index}`} className="rounded-lg border border-zinc-200 p-3 dark:border-zinc-800">
+                    <div key={`${item.id ?? 'new'}-${index}`} className="rounded-lg border border-border p-3">
                       <div className="grid gap-3 sm:grid-cols-[1fr_1.4fr_auto_auto]">
                         <Input
                           value={item.key}
@@ -617,7 +617,7 @@ export function EnvironmentFormDialog({
                           onChange={(e) => updateEnvVar(index, { value: e.target.value, keep_value: false })}
                           placeholder={item.keep_value ? '已存储密文，留空则保持不变' : '变量值'}
                         />
-                        <div className="flex items-center gap-2 rounded-md border border-zinc-200 px-3 dark:border-zinc-800">
+                        <div className="flex items-center gap-2 rounded-md border border-border px-3">
                           <Switch
                             checked={item.is_secret}
                             onCheckedChange={(checked) => updateEnvVar(index, {
@@ -626,7 +626,7 @@ export function EnvironmentFormDialog({
                               value: checked ? item.value : '',
                             })}
                           />
-                          <span className="text-sm text-zinc-500">加密</span>
+                          <span className="text-sm text-muted-foreground">加密</span>
                         </div>
                         <Button
                           type="button"
@@ -645,7 +645,7 @@ export function EnvironmentFormDialog({
 
             <div className="space-y-2">
               <Label>构建缓存路径</Label>
-              <div className="overflow-hidden rounded-md border border-zinc-200 dark:border-zinc-800">
+              <div className="overflow-hidden rounded-md border border-border">
                 <CodeMirror
                   value={form.cache_paths ?? ''}
                   height="80px"
@@ -653,10 +653,10 @@ export function EnvironmentFormDialog({
                   extensions={[StreamLanguage.define(shell)]}
                   onChange={(value) => setField('cache_paths', value)}
                   placeholder={'node_modules\n.npm\nvendor'}
-                  className="text-sm font-mono"
+                  className="text-sm font-mono [&_.cm-editor]:!bg-transparent [&_.cm-gutters]:!bg-transparent"
                 />
               </div>
-              <p className="text-xs text-zinc-500">每行一个路径，构建后缓存这些目录，下次构建时恢复以加速依赖安装。</p>
+              <p className="text-xs text-muted-foreground">每行一个路径，构建后缓存这些目录，下次构建时恢复以加速依赖安装。</p>
             </div>
           </DialogBody>
 

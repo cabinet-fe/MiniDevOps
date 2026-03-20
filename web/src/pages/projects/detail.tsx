@@ -1,29 +1,23 @@
-import type { ReactNode } from "react";
 import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router";
 import {
-  Clock,
   Copy,
   Download,
   ExternalLink,
   GitBranch,
-  Layers3,
   Loader2,
-  Package,
   Pencil,
   Play,
   Plus,
-  Radio,
   Rocket,
   RotateCcw,
-  Server,
   Settings2,
   Sparkles,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog,
   DialogBody,
@@ -43,13 +37,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { api } from "@/lib/api";
-import type { PaginatedData } from "@/lib/api";
-import { ARTIFACT_FORMATS, BUILD_SCRIPT_TYPES, BUILD_STATUSES } from "@/lib/constants";
-import { cn } from "@/lib/utils";
-import { ProjectFormDialog } from "@/pages/projects/form";
-import { EnvironmentFormDialog } from "@/pages/projects/environment-form";
-import { useNotificationStore } from "@/stores/notification-store";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   Command,
@@ -59,6 +53,13 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
+import { api } from "@/lib/api";
+import type { PaginatedData } from "@/lib/api";
+import { ARTIFACT_FORMATS, BUILD_SCRIPT_TYPES, BUILD_STATUSES } from "@/lib/constants";
+import { cn } from "@/lib/utils";
+import { ProjectFormDialog } from "@/pages/projects/form";
+import { EnvironmentFormDialog } from "@/pages/projects/environment-form";
+import { useNotificationStore } from "@/stores/notification-store";
 
 interface Environment {
   id: number;
@@ -83,7 +84,6 @@ interface Project {
   id: number;
   name: string;
   description: string;
-  group_name: string;
   tags: string;
   repo_url: string;
   repo_auth_type: string;
@@ -113,75 +113,10 @@ interface Build {
 
 const RUNNING_BUILD_STATUSES = new Set(["pending", "cloning", "building", "deploying"]);
 
-const SIGNAL_TOKENS: {
-  shell: string;
-  hero: string;
-  glow: string;
-  panel: string;
-  stat: string;
-  envCard: string;
-  detailButton: string;
-  detailButtonGhost: string;
-} = {
-  shell: "space-y-4 pb-6",
-  hero: "relative overflow-hidden rounded-[26px] border border-zinc-200/80 bg-[linear-gradient(135deg,rgba(255,255,255,0.98),rgba(230,236,248,0.95))] p-5 shadow-[0_24px_80px_-48px_rgba(15,23,42,0.55)] dark:border-zinc-800 dark:bg-[linear-gradient(135deg,rgba(12,17,27,0.98),rgba(22,30,46,0.96))]",
-  glow: "pointer-events-none absolute inset-x-0 top-0 h-40 bg-[radial-gradient(circle_at_top_right,rgba(56,189,248,0.18),transparent_50%),radial-gradient(circle_at_top_left,rgba(250,204,21,0.16),transparent_45%)]",
-  panel:
-    "border-zinc-200/80 bg-white/82 shadow-[0_18px_60px_-44px_rgba(15,23,42,0.5)] dark:border-zinc-800 dark:bg-zinc-950/72",
-  stat: "rounded-[24px] border border-white/70 bg-white/72 p-3 shadow-sm backdrop-blur dark:border-zinc-800/80 dark:bg-zinc-900/72",
-  envCard:
-    "rounded-[24px] border border-zinc-200/80 bg-white/90 p-4 shadow-[0_18px_60px_-48px_rgba(15,23,42,0.6)] backdrop-blur dark:border-zinc-800 dark:bg-zinc-950/78",
-  detailButton:
-    "bg-zinc-950 text-white hover:bg-zinc-800 dark:bg-cyan-300 dark:text-zinc-950 dark:hover:bg-cyan-200",
-  detailButtonGhost:
-    "border-cyan-500/20 bg-cyan-500/8 text-cyan-700 hover:bg-cyan-500/14 dark:text-cyan-200",
-};
-
-const REPO_URL_VALUE_CLASS = "break-all whitespace-normal leading-5";
-
 function formatRepoAuthType(value: string): string {
-  if (!value) return "无需认证";
-  if (value === "none") return "无需认证";
+  if (!value || value === "none") return "无需认证";
   return value;
 }
-
-const WEBHOOK_GUIDES: Record<string, { title: string; headers: string[]; sample: string }> = {
-  auto: {
-    title: "自动识别",
-    headers: [
-      "GitHub: `X-GitHub-Event: push`",
-      "GitLab: `X-Gitlab-Event: Push Hook`",
-      "Gitea: `X-Gitea-Event: push`",
-      "Bitbucket: `X-Event-Key: repo:push`",
-    ],
-    sample: "服务端会按请求头自动识别平台并解析 push payload。",
-  },
-  github: {
-    title: "GitHub",
-    headers: ["Header: `X-GitHub-Event: push`"],
-    sample: "仓库 Webhook 选择 JSON，触发事件勾选 push。",
-  },
-  gitlab: {
-    title: "GitLab",
-    headers: ["Header: `X-Gitlab-Event: Push Hook`"],
-    sample: "GitLab 项目集成里启用 Push events 即可。",
-  },
-  gitea: {
-    title: "Gitea",
-    headers: ["Header: `X-Gitea-Event: push`"],
-    sample: "Gitea Webhook 选择 Gitea/GitHub 风格 JSON，触发 push。",
-  },
-  bitbucket: {
-    title: "Bitbucket",
-    headers: ["Header: `X-Event-Key: repo:push`"],
-    sample: "Bitbucket Cloud/Server 推送事件会使用 `push.changes[0]` 结构。",
-  },
-  generic: {
-    title: "通用 JSON",
-    headers: ["自定义 JSONPath: `$.ref`、`$.head_commit.id`、`$.head_commit.message`"],
-    sample: "支持 `$.field` 与 `$.list[0].field` 形式的路径。",
-  },
-};
 
 function formatDuration(ms: number): string {
   if (!ms) return "-";
@@ -192,7 +127,12 @@ function formatDuration(ms: number): string {
 }
 
 function formatDateTime(date: string): string {
-  return new Date(date).toLocaleString("zh-CN");
+  return new Date(date).toLocaleString("zh-CN", {
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 function getArtifactLabel(format: string): string {
@@ -208,43 +148,76 @@ function extractFileName(path: string, fallback: string): string {
   return segments.at(-1) ?? fallback;
 }
 
-function EnvironmentMeta({
+function getExternalHref(value: string): string | undefined {
+  return /^https?:\/\//i.test(value) ? value : undefined;
+}
+
+function tagDictLabel(value: string, dict: { label: string; value: string }[]) {
+  return dict.find((d) => d.value === value)?.label ?? value;
+}
+
+function MetaItem({
   label,
   value,
   mono = false,
-  icon,
-  className,
-  valueClassName,
 }: {
   label: string;
   value: string;
   mono?: boolean;
-  icon?: ReactNode;
-  className?: string;
-  valueClassName?: string;
 }) {
   return (
-    <div
-      className={cn(
-        "min-w-0 rounded-[20px] border border-black/5 bg-black/[0.03] px-3 py-2.5 dark:border-white/5 dark:bg-white/[0.03]",
-        className,
-      )}
-    >
-      <p className="text-[10px] uppercase tracking-[0.24em] text-zinc-500 dark:text-zinc-400">
+    <span className="text-muted-foreground">
+      {label}{" "}
+      <span className={cn("text-foreground", mono && "font-mono")}>{value || "-"}</span>
+    </span>
+  );
+}
+
+function UrlRow({
+  label,
+  value,
+  href,
+  copyLabel,
+}: {
+  label: string;
+  value: string;
+  href?: string;
+  copyLabel: string;
+}) {
+  const handleCopy = async () => {
+    if (!value) return;
+    await navigator.clipboard.writeText(value);
+    toast.success(copyLabel);
+  };
+
+  return (
+    <div className="bg-muted/50 flex items-center gap-2 rounded-md border border-border px-3 py-2">
+      <span className="text-muted-foreground shrink-0 text-[11px] font-medium uppercase tracking-wider">
         {label}
-      </p>
-      <div className="mt-1.5 flex min-w-0 items-start gap-2">
-        {icon}
-        <p
-          className={cn(
-            "min-w-0 text-sm font-medium text-zinc-900 dark:text-zinc-100",
-            mono && "font-mono",
-            valueClassName,
+      </span>
+      <span
+        className={cn(
+          "min-w-0 flex-1 truncate font-mono text-xs",
+          value ? "text-muted-foreground" : "text-muted-foreground/50",
+        )}
+        title={value || undefined}
+      >
+        {value || "未配置"}
+      </span>
+      {value && (
+        <div className="flex shrink-0 gap-0.5">
+          <Button variant="ghost" size="icon-xs" onClick={handleCopy}>
+            <Copy className="size-3" />
+          </Button>
+          {href && (
+            <Button variant="ghost" size="icon-xs" asChild>
+              <a href={href} target="_blank" rel="noreferrer">
+                <ExternalLink className="size-3" />
+              </a>
+            </Button>
           )}
-        >
-          {value || "-"}
-        </p>
-      </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -261,17 +234,27 @@ export function ProjectDetailPage() {
   const [triggerDialogEnv, setTriggerDialogEnv] = useState<Environment | null>(null);
   const [envFormOpen, setEnvFormOpen] = useState(false);
   const [editingEnv, setEditingEnv] = useState<Environment | null>(null);
+  const [activeTab, setActiveTab] = useState<string>("");
+  const [dictTags, setDictTags] = useState<{ label: string; value: string }[]>([]);
   const latestNotification = useNotificationStore((state) => state.latestNotification);
+
+  useEffect(() => {
+    api
+      .get<{ label: string; value: string }[]>("/dictionaries/code/project_tags/items")
+      .then((res) => {
+        if (res.code === 0 && res.data) {
+          setDictTags(res.data);
+        }
+      });
+  }, []);
 
   const fetchProject = useCallback(async () => {
     if (!projectId) return;
-
     const res = await api.get<Project>(`/projects/${projectId}`);
     if (res.code !== 0 || !res.data) {
       setLoading(false);
       return;
     }
-
     const envs = res.data.environments ?? [];
     const buildPairs = await Promise.all(
       envs.map(async (env) => {
@@ -282,11 +265,18 @@ export function ProjectDetailPage() {
         return [env.id, items] as const;
       }),
     );
-
     setProject(res.data);
     setBuildsByEnv(Object.fromEntries(buildPairs));
     setLoading(false);
   }, [projectId]);
+
+  useEffect(() => {
+    if (!project) return;
+    const envIds = project.environments.map((e) => String(e.id));
+    if (envIds.length > 0 && (!activeTab || !envIds.includes(activeTab))) {
+      setActiveTab(envIds[0]);
+    }
+  }, [project, activeTab]);
 
   useEffect(() => {
     fetchProject();
@@ -309,19 +299,16 @@ export function ProjectDetailPage() {
 
   const triggerBuild = async (envId: number, branch?: string, commitHash?: string) => {
     if (!projectId) return;
-
     setTriggering(envId);
     try {
       const payload: Record<string, unknown> = { environment_id: envId };
       if (branch) payload.branch = branch;
       if (commitHash) payload.commit_hash = commitHash;
-
       const res = await api.post<Build>(`/projects/${projectId}/builds`, payload);
       if (res.code !== 0 || !res.data) {
         toast.error(res.message || "触发失败");
         return;
       }
-
       toast.success("构建已触发");
       setBuildsByEnv((prev) => ({
         ...prev,
@@ -337,7 +324,6 @@ export function ProjectDetailPage() {
   const handleBuildAction = async (action: "download" | "deploy" | "retry", build: Build) => {
     const actionKey = `${action}:${build.id}`;
     setBuildActionLoading(actionKey);
-
     try {
       if (action === "download") {
         const blob = await api.download(`/builds/${build.id}/artifact`);
@@ -352,7 +338,6 @@ export function ProjectDetailPage() {
         toast.success("下载开始");
         return;
       }
-
       const endpoint =
         action === "deploy" ? `/builds/${build.id}/deploy` : `/builds/${build.id}/retry`;
       const res = await api.post(endpoint);
@@ -360,7 +345,6 @@ export function ProjectDetailPage() {
         toast.error(res.message || "操作失败");
         return;
       }
-
       toast.success(action === "deploy" ? "部署已触发" : "已重新触发构建");
       await fetchProject();
     } catch {
@@ -370,22 +354,14 @@ export function ProjectDetailPage() {
     }
   };
 
-  const copyWebhook = () => {
-    if (!project?.webhook_secret) return;
-    const url = `${window.location.origin}/api/v1/webhook/${project.id}/${project.webhook_secret}`;
-    navigator.clipboard.writeText(url);
-    toast.success("Webhook URL 已复制");
-  };
-
   if (loading || !project) {
     return (
       <div className="flex h-64 items-center justify-center">
-        <div className="size-8 animate-spin rounded-full border-2 border-zinc-600 border-t-zinc-300" />
+        <div className="size-6 animate-spin rounded-full border-2 border-border border-t-emerald-500" />
       </div>
     );
   }
 
-  const tokens = SIGNAL_TOKENS;
   const webhookUrl = project.webhook_secret
     ? `${window.location.origin}/api/v1/webhook/${project.id}/${project.webhook_secret}`
     : "";
@@ -393,468 +369,416 @@ export function ProjectDetailPage() {
     .split(",")
     .map((item) => item.trim())
     .filter(Boolean);
-  const webhookGuide = WEBHOOK_GUIDES[project.webhook_type || "auto"] ?? WEBHOOK_GUIDES.auto;
+  const repoHref = getExternalHref(project.repo_url);
   const successCount = Object.values(buildsByEnv)
     .flat()
     .filter((item) => item.status === "success").length;
 
   return (
-    <div className={tokens.shell}>
-      <section className={tokens.hero}>
-        <div className={tokens.glow} />
-        <div className="relative flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <div className="space-y-3">
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge
-                variant="outline"
-                className="rounded-full border-current/20 bg-white/60 px-3 py-1 text-[11px] uppercase tracking-[0.24em] dark:bg-white/5"
-              >
-                Project Control Room
-              </Badge>
-              <Badge variant="secondary" className="rounded-full">
-                {project.group_name || "未分组"}
-              </Badge>
-              <Badge variant="outline" className="rounded-full">
-                {getArtifactLabel(project.artifact_format)}
-              </Badge>
-            </div>
-            <div>
-              <h1 className="text-3xl font-semibold tracking-tight text-zinc-950 dark:text-white">
-                {project.name}
-              </h1>
-              <p className="mt-1.5 max-w-3xl text-sm leading-6 text-zinc-600 dark:text-zinc-300">
-                {project.description ||
-                  "当前项目尚未填写描述，可直接在右上角编辑项目补充背景信息。"}
-              </p>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {tagList.length === 0 ? (
-                <Badge variant="outline" className="rounded-full">
-                  暂无标签
-                </Badge>
-              ) : (
-                tagList.map((tag) => (
-                  <Badge key={tag} variant="outline" className="rounded-full">
-                    {tag}
+    <TooltipProvider>
+      <div className="space-y-4">
+        {/* ── Block 1: Project Info ── */}
+        <Card className="border-border">
+          <CardHeader className="pb-3">
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0 space-y-1.5">
+                <div className="flex flex-wrap items-center gap-2">
+                  <CardTitle className="text-xl tracking-tight">{project.name}</CardTitle>
+                  <Badge variant="outline" className="font-mono text-[11px]">
+                    #{project.id}
                   </Badge>
-                ))
-              )}
-            </div>
-          </div>
-
-          <div className="grid gap-3 lg:min-w-[340px]">
-            <div className="grid grid-cols-2 gap-2.5">
-              <div className={tokens.stat}>
-                <p className="text-[11px] uppercase tracking-[0.24em] text-zinc-500 dark:text-zinc-400">
-                  环境
-                </p>
-                <p className="mt-1 text-xl font-semibold text-zinc-950 dark:text-white">
-                  {project.environments.length}
+                  {tagList.map((tag) => (
+                    <Badge key={tag} variant="secondary">
+                      {tagDictLabel(tag, dictTags)}
+                    </Badge>
+                  ))}
+                </div>
+                <p className="text-muted-foreground max-w-3xl text-sm">
+                  {project.description || "未填写项目说明"}
                 </p>
               </div>
-              <div className={tokens.stat}>
-                <p className="text-[11px] uppercase tracking-[0.24em] text-zinc-500 dark:text-zinc-400">
-                  成功构建
-                </p>
-                <p className="mt-1 text-xl font-semibold text-zinc-950 dark:text-white">
-                  {successCount}
-                </p>
-              </div>
-              <div className={tokens.stat}>
-                <p className="text-[11px] uppercase tracking-[0.24em] text-zinc-500 dark:text-zinc-400">
-                  保留数量
-                </p>
-                <p className="mt-1 text-xl font-semibold text-zinc-950 dark:text-white">
-                  {project.max_artifacts}
-                </p>
-              </div>
-              <div className={tokens.stat}>
-                <p className="text-[11px] uppercase tracking-[0.24em] text-zinc-500 dark:text-zinc-400">
-                  Webhook
-                </p>
-                <p className="mt-1 text-xl font-semibold text-zinc-950 capitalize dark:text-white">
-                  {project.webhook_type || "auto"}
-                </p>
+              <div className="flex shrink-0 gap-2">
+                <Button variant="outline" size="sm" onClick={() => setEditDialogOpen(true)}>
+                  <Pencil className="size-3.5" />
+                  编辑
+                </Button>
+                <Link to="/projects">
+                  <Button variant="ghost" size="sm">
+                    返回
+                  </Button>
+                </Link>
               </div>
             </div>
-            <div className="flex flex-wrap justify-end gap-2">
-              <Button variant="outline" onClick={() => setEditDialogOpen(true)}>
-                <Pencil className="size-4" />
-                编辑项目
-              </Button>
-              <Link to="/projects">
-                <Button variant="outline">返回列表</Button>
-              </Link>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <div className="grid gap-4 xl:grid-cols-[1.3fr_0.9fr]">
-        <Card className={tokens.panel}>
-          <CardHeader className="pb-3">
-            <CardTitle className="flex items-center gap-2">
-              <Layers3 className="size-4" />
-              仓库与归档策略
-            </CardTitle>
-            <CardDescription>仓库来源、认证方式与构建物保留规则。</CardDescription>
-          </CardHeader>
-          <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-            <EnvironmentMeta
-              label="仓库地址"
-              value={project.repo_url}
-              mono
-              icon={<Package className="mt-0.5 size-4 shrink-0 text-zinc-500" />}
-              className="md:col-span-2 xl:col-span-2"
-              valueClassName={REPO_URL_VALUE_CLASS}
-            />
-            <EnvironmentMeta label="认证方式" value={formatRepoAuthType(project.repo_auth_type)} />
-            <EnvironmentMeta label="构建物格式" value={getArtifactLabel(project.artifact_format)} />
-            <EnvironmentMeta label="保留数量" value={`${project.max_artifacts} 个`} />
-          </CardContent>
-        </Card>
-
-        <Card className={tokens.panel}>
-          <CardHeader className="pb-3">
-            <CardTitle className="flex items-center gap-2">
-              <Radio className="size-4" />
-              Webhook 控制面板
-            </CardTitle>
-            <CardDescription>{webhookGuide.title} 配置指引与当前入口。</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
-            {webhookUrl ? (
-              <div>
-                <p className="text-xs uppercase tracking-[0.24em] text-zinc-500 dark:text-zinc-400">
-                  Webhook URL
-                </p>
-                <div className="mt-2 flex items-center gap-2">
-                  <code className="min-w-0 flex-1 break-all rounded-2xl bg-black/5 px-3 py-2 font-mono text-sm leading-5 whitespace-normal dark:bg-white/5">
-                    {webhookUrl}
-                  </code>
-                  <Button variant="outline" size="icon" onClick={copyWebhook}>
-                    <Copy className="size-4" />
-                  </Button>
+            <div className="flex items-stretch border-b border-border/80 pb-3">
+              {[
+                { label: "环境", value: `${project.environments.length}` },
+                { label: "成功构建", value: `${successCount}` },
+                { label: "保留制品", value: `${project.max_artifacts}` },
+                { label: "认证", value: formatRepoAuthType(project.repo_auth_type) },
+                { label: "格式", value: getArtifactLabel(project.artifact_format) },
+                { label: "Webhook", value: project.webhook_type || "auto" },
+              ].map(({ label, value }, i) => (
+                <div
+                  key={label}
+                  className={cn("flex-1 px-3", i > 0 && "border-l border-border/80")}
+                >
+                  <p className="text-muted-foreground text-[10px] font-medium uppercase tracking-widest">
+                    {label}
+                  </p>
+                  <p className="text-foreground mt-0.5 text-sm font-medium">{value}</p>
                 </div>
-              </div>
-            ) : (
-              <p className="rounded-2xl border border-dashed border-zinc-300 px-4 py-3 text-sm text-zinc-500 dark:border-zinc-700 dark:text-zinc-400">
-                当前项目尚未生成 Webhook 地址。
-              </p>
-            )}
-            <div className="rounded-3xl border border-black/5 bg-black/[0.03] p-3.5 dark:border-white/5 dark:bg-white/[0.03]">
-              <div className="space-y-1 text-sm text-zinc-600 dark:text-zinc-300">
-                {webhookGuide.headers.map((item) => (
-                  <p key={item}>{item}</p>
-                ))}
-              </div>
-              <p className="mt-3 text-sm text-zinc-500 dark:text-zinc-400">{webhookGuide.sample}</p>
+              ))}
             </div>
+
+            <div className="grid gap-2 lg:grid-cols-2">
+              <UrlRow
+                label="仓库"
+                value={project.repo_url}
+                href={repoHref}
+                copyLabel="仓库地址已复制"
+              />
+              <UrlRow
+                label="Webhook"
+                value={webhookUrl}
+                href={webhookUrl || undefined}
+                copyLabel="Webhook URL 已复制"
+              />
+            </div>
+
+            {project.webhook_type === "generic" && (
+              <div className="flex flex-wrap gap-x-5 gap-y-1 text-xs">
+                <MetaItem label="Ref:" value={project.webhook_ref_path || "$.ref"} mono />
+                <MetaItem
+                  label="Commit:"
+                  value={project.webhook_commit_path || "$.head_commit.id"}
+                  mono
+                />
+                <MetaItem
+                  label="Message:"
+                  value={project.webhook_message_path || "$.head_commit.message"}
+                  mono
+                />
+              </div>
+            )}
           </CardContent>
         </Card>
-      </div>
 
-      <section className="space-y-3">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <p className="text-[11px] uppercase tracking-[0.3em] text-zinc-500 dark:text-zinc-400">
-              Environment Grid
-            </p>
-            <h2 className="mt-1 text-2xl font-semibold tracking-tight text-zinc-950 dark:text-white">
-              项目环境
-            </h2>
-            <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-              统一展示分支、部署、定时与最近构建，并直接在表格内执行常用操作。
-            </p>
-          </div>
-          <Button
-            onClick={() => {
-              setEditingEnv(null);
-              setEnvFormOpen(true);
-            }}
-          >
-            <Plus className="size-4" />
-            新建环境
-          </Button>
-        </div>
-
-        {project.environments.length === 0 ? (
-          <div
-            className={cn(
-              tokens.envCard,
-              "flex min-h-48 flex-col items-center justify-center text-center",
-            )}
-          >
-            <Sparkles className="size-8 text-zinc-400" />
-            <p className="mt-4 text-lg font-semibold text-zinc-900 dark:text-zinc-100">
-              还没有环境
-            </p>
-            <p className="mt-1 max-w-md text-sm text-zinc-500 dark:text-zinc-400">
-              先创建至少一个环境，再配置分支、构建脚本、部署目标和定时策略。
-            </p>
-          </div>
-        ) : (
-          project.environments.map((env) => (
-            <div key={env.id} className={tokens.envCard}>
-              <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                <div className="min-w-0 space-y-2">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h3 className="text-lg font-semibold text-zinc-950 dark:text-zinc-50">
-                      {env.name}
-                    </h3>
-                    <Badge variant="outline" className="rounded-full">
-                      {getScriptTypeLabel(env.build_script_type)}
-                    </Badge>
-                    {env.cron_enabled && env.cron_expression ? (
-                      <Badge variant="secondary" className="rounded-full">
-                        定时中
-                      </Badge>
-                    ) : null}
-                  </div>
-                </div>
-
-                <div className="flex shrink-0 flex-wrap gap-2 lg:justify-end">
+        {/* ── Block 2: Environments ── */}
+        <Card className="border-border">
+          {project.environments.length === 0 ? (
+            <div className="flex min-h-48 flex-col items-center justify-center p-6 text-center">
+              <Sparkles className="text-muted-foreground/50 size-8" />
+              <p className="text-muted-foreground mt-3 text-sm font-medium">还没有环境</p>
+              <p className="text-muted-foreground mt-1 text-xs">
+                先创建至少一个环境，再配置分支、构建脚本和部署目标。
+              </p>
+              <Button
+                size="sm"
+                className="mt-4"
+                onClick={() => {
+                  setEditingEnv(null);
+                  setEnvFormOpen(true);
+                }}
+              >
+                <Plus className="size-3.5" />
+                新建环境
+              </Button>
+            </div>
+          ) : (
+            <Tabs value={activeTab} onValueChange={setActiveTab}>
+              <CardHeader className="pb-0">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-lg">环境与构建</CardTitle>
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={() => {
-                      setEditingEnv(env);
+                      setEditingEnv(null);
                       setEnvFormOpen(true);
                     }}
                   >
-                    <Pencil className="size-4" />
-                    编辑环境
-                  </Button>
-                  <Button variant="outline" size="sm" onClick={() => setTriggerDialogEnv(env)}>
-                    <Settings2 className="size-4" />
-                    高级触发
-                  </Button>
-                  <Button
-                    size="sm"
-                    onClick={() => triggerBuild(env.id)}
-                    disabled={triggering === env.id}
-                  >
-                    {triggering === env.id ? (
-                      <>
-                        <Loader2 className="size-4 animate-spin" />
-                        触发中
-                      </>
-                    ) : (
-                      <>
-                        <Play className="size-4" />
-                        触发构建
-                      </>
-                    )}
+                    <Plus className="size-3.5" />
+                    新建环境
                   </Button>
                 </div>
-              </div>
+                <TabsList variant="line" className="mt-2 w-full justify-start">
+                  {project.environments.map((env) => (
+                    <TabsTrigger key={env.id} value={String(env.id)} className="gap-1.5">
+                      {env.name}
+                      {env.cron_enabled && env.cron_expression && (
+                        <span className="size-1.5 rounded-full bg-emerald-500" />
+                      )}
+                    </TabsTrigger>
+                  ))}
+                </TabsList>
+              </CardHeader>
 
-              <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-5">
-                <EnvironmentMeta
-                  label="分支"
-                  value={env.branch || "-"}
-                  mono
-                  icon={<GitBranch className="mt-0.5 size-4 shrink-0 text-zinc-500" />}
-                />
-                <EnvironmentMeta
-                  label="构建脚本"
-                  value={
-                    env.build_script
-                      ? `${getScriptTypeLabel(env.build_script_type)} · 已配置`
-                      : "未配置"
-                  }
-                />
-                <EnvironmentMeta
-                  label="产物目录"
-                  value={env.build_output_dir || "未配置"}
-                  mono
-                  icon={<Package className="mt-0.5 size-4 shrink-0 text-zinc-500" />}
-                />
-                <EnvironmentMeta
-                  label="部署方式"
-                  value={env.deploy_method || "未部署"}
-                  icon={<Server className="mt-0.5 size-4 shrink-0 text-zinc-500" />}
-                />
-                <EnvironmentMeta
-                  label="部署路径"
-                  value={env.deploy_path || "未配置"}
-                  mono
-                  valueClassName="break-all whitespace-normal leading-5"
-                />
-                <EnvironmentMeta label="变量组" value={`${env.var_group_ids?.length ?? 0} 个`} />
-                <EnvironmentMeta
-                  label="Cron 表达式"
-                  value={env.cron_enabled ? env.cron_expression || "已启用" : "未启用"}
-                  mono
-                  icon={<Clock className="mt-0.5 size-4 shrink-0 text-zinc-500" />}
-                />
-              </div>
+              {project.environments.map((env) => {
+                const builds = buildsByEnv[env.id] ?? [];
+                return (
+                  <TabsContent key={env.id} value={String(env.id)}>
+                    <CardContent className="space-y-3 pt-4">
+                      <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 text-xs">
+                        <span className="text-muted-foreground inline-flex items-center gap-1">
+                          <GitBranch className="size-3" />
+                          <span className="text-foreground font-mono">{env.branch || "-"}</span>
+                        </span>
+                        <MetaItem
+                          label="脚本"
+                          value={
+                            env.build_script
+                              ? `${getScriptTypeLabel(env.build_script_type)} · 已配置`
+                              : "未配置"
+                          }
+                        />
+                        <MetaItem label="产物" value={env.build_output_dir || "未配置"} mono />
+                        <MetaItem label="部署" value={env.deploy_method || "未部署"} />
+                        {env.deploy_path && (
+                          <MetaItem label="路径" value={env.deploy_path} mono />
+                        )}
+                        <MetaItem
+                          label="Cron"
+                          value={
+                            env.cron_enabled
+                              ? env.cron_expression || "已启用"
+                              : "未启用"
+                          }
+                          mono
+                        />
+                        <MetaItem
+                          label="变量组"
+                          value={`${env.var_group_ids?.length ?? 0} 个`}
+                        />
+                      </div>
 
-              <div className="mt-3 rounded-[22px] border border-black/6 bg-black/[0.025] p-1.5 dark:border-white/6 dark:bg-white/[0.02]">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="w-20">编号</TableHead>
-                      <TableHead className="w-28">状态</TableHead>
-                      <TableHead className="w-32">Commit</TableHead>
-                      <TableHead>提交信息</TableHead>
-                      <TableHead className="w-32">触发</TableHead>
-                      <TableHead className="w-36">耗时 / 时间</TableHead>
-                      <TableHead className="w-[320px]">快捷操作</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {(buildsByEnv[env.id] ?? []).length === 0 ? (
-                      <TableRow>
-                        <TableCell
-                          colSpan={7}
-                          className="py-10 text-center text-zinc-500 dark:text-zinc-400"
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          onClick={() => triggerBuild(env.id)}
+                          disabled={triggering === env.id}
                         >
-                          暂无构建记录
-                        </TableCell>
-                      </TableRow>
-                    ) : (
-                      (buildsByEnv[env.id] ?? []).map((build) => {
-                        const statusInfo = BUILD_STATUSES[
-                          build.status as keyof typeof BUILD_STATUSES
-                        ] ?? {
-                          label: build.status,
-                          color: "bg-zinc-500",
-                        };
-                        const canDownload =
-                          build.status === "success" && Boolean(build.artifact_path);
-                        const canDeploy = build.status === "success";
-                        const canRetry = ["failed", "cancelled"].includes(build.status);
-                        const downloadKey = `download:${build.id}`;
-                        const deployKey = `deploy:${build.id}`;
-                        const retryKey = `retry:${build.id}`;
+                          {triggering === env.id ? (
+                            <Loader2 className="size-3.5 animate-spin" />
+                          ) : (
+                            <Play className="size-3.5" />
+                          )}
+                          {triggering === env.id ? "触发中" : "触发构建"}
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setTriggerDialogEnv(env)}
+                        >
+                          <Settings2 className="size-3.5" />
+                          高级触发
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setEditingEnv(env);
+                            setEnvFormOpen(true);
+                          }}
+                        >
+                          <Pencil className="size-3.5" />
+                          编辑环境
+                        </Button>
+                      </div>
 
-                        return (
-                          <TableRow key={build.id}>
-                            <TableCell className="py-2.5 font-semibold text-zinc-900 dark:text-zinc-100">
-                              #{build.build_number}
-                            </TableCell>
-                            <TableCell className="py-2.5">
-                              <Badge className={cn(statusInfo.color, "text-white")}>
-                                {statusInfo.label}
-                              </Badge>
-                            </TableCell>
-                            <TableCell className="py-2.5 font-mono text-xs text-zinc-600 dark:text-zinc-300">
-                              {build.commit_hash ? build.commit_hash.slice(0, 7) : "-"}
-                            </TableCell>
-                            <TableCell className="max-w-[280px] py-2.5">
-                              <div className="truncate text-sm text-zinc-700 dark:text-zinc-200">
-                                {build.commit_message || "-"}
-                              </div>
-                              <div className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-                                {build.branch || env.branch}
-                              </div>
-                            </TableCell>
-                            <TableCell className="py-2.5 text-sm text-zinc-600 dark:text-zinc-300">
-                              {build.trigger_type || "-"}
-                            </TableCell>
-                            <TableCell className="py-2.5 text-sm text-zinc-600 dark:text-zinc-300">
-                              <p>{formatDuration(build.duration_ms)}</p>
-                              <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-                                {formatDateTime(build.created_at)}
-                              </p>
-                            </TableCell>
-                            <TableCell className="py-2.5">
-                              <div className="flex flex-wrap gap-2">
-                                {canDownload ? (
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    disabled={buildActionLoading === downloadKey}
-                                    onClick={() => handleBuildAction("download", build)}
-                                  >
-                                    {buildActionLoading === downloadKey ? (
-                                      <Loader2 className="size-4 animate-spin" />
-                                    ) : (
-                                      <Download className="size-4" />
-                                    )}
-                                    下载
-                                  </Button>
-                                ) : null}
-                                {canDeploy ? (
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    disabled={buildActionLoading === deployKey}
-                                    onClick={() => handleBuildAction("deploy", build)}
-                                  >
-                                    {buildActionLoading === deployKey ? (
-                                      <Loader2 className="size-4 animate-spin" />
-                                    ) : (
-                                      <Rocket className="size-4" />
-                                    )}
-                                    部署
-                                  </Button>
-                                ) : null}
-                                {canRetry ? (
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    disabled={buildActionLoading === retryKey}
-                                    onClick={() => handleBuildAction("retry", build)}
-                                  >
-                                    {buildActionLoading === retryKey ? (
-                                      <Loader2 className="size-4 animate-spin" />
-                                    ) : (
-                                      <RotateCcw className="size-4" />
-                                    )}
-                                    重建
-                                  </Button>
-                                ) : null}
-                                <Link to={`/builds/${build.id}`}>
-                                  <Button size="sm" className={tokens.detailButton}>
-                                    <ExternalLink className="size-4" />
-                                    详情
-                                  </Button>
-                                </Link>
-                              </div>
-                            </TableCell>
-                          </TableRow>
-                        );
-                      })
-                    )}
-                  </TableBody>
-                </Table>
-              </div>
-            </div>
-          ))
+                      <div className="max-h-[420px] overflow-y-auto rounded-md border border-border">
+                        <Table>
+                          <TableHeader className="bg-card sticky top-0 z-10">
+                            <TableRow>
+                              <TableHead className="w-16">编号</TableHead>
+                              <TableHead className="w-20">状态</TableHead>
+                              <TableHead className="w-28">Commit</TableHead>
+                              <TableHead>提交信息</TableHead>
+                              <TableHead className="w-28">耗时 / 时间</TableHead>
+                              <TableHead className="w-28 text-right">操作</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {builds.length === 0 ? (
+                              <TableRow>
+                                <TableCell
+                                  colSpan={6}
+                                  className="text-muted-foreground py-8 text-center text-xs"
+                                >
+                                  暂无构建记录
+                                </TableCell>
+                              </TableRow>
+                            ) : (
+                              builds.map((build) => (
+                                <BuildRow
+                                  key={build.id}
+                                  build={build}
+                                  env={env}
+                                  actionLoading={buildActionLoading}
+                                  onAction={handleBuildAction}
+                                />
+                              ))
+                            )}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    </CardContent>
+                  </TabsContent>
+                );
+              })}
+            </Tabs>
+          )}
+        </Card>
+
+        <ProjectFormDialog
+          open={editDialogOpen}
+          onOpenChange={setEditDialogOpen}
+          editId={projectId}
+          onSuccess={() => fetchProject()}
+        />
+        <EnvironmentFormDialog
+          open={envFormOpen}
+          onOpenChange={setEnvFormOpen}
+          projectId={projectId}
+          editEnv={editingEnv}
+          onSuccess={() => fetchProject()}
+        />
+        <TriggerBuildDialog
+          env={triggerDialogEnv}
+          open={!!triggerDialogEnv}
+          onOpenChange={(open) => {
+            if (!open) setTriggerDialogEnv(null);
+          }}
+          onTrigger={(envId, branch, commitHash) => {
+            setTriggerDialogEnv(null);
+            triggerBuild(envId, branch, commitHash);
+          }}
+          triggering={triggering}
+          projectId={projectId}
+        />
+      </div>
+    </TooltipProvider>
+  );
+}
+
+function BuildRow({
+  build,
+  env,
+  actionLoading,
+  onAction,
+}: {
+  build: Build;
+  env: Environment;
+  actionLoading: string | null;
+  onAction: (action: "download" | "deploy" | "retry", build: Build) => void;
+}) {
+  const statusInfo = BUILD_STATUSES[build.status as keyof typeof BUILD_STATUSES] ?? {
+    label: build.status,
+    color: "bg-zinc-500",
+  };
+  const canDownload = build.status === "success" && Boolean(build.artifact_path);
+  const canDeploy = build.status === "success";
+  const canRetry = ["failed", "cancelled"].includes(build.status);
+  const branchDiffers = build.branch && build.branch !== env.branch;
+
+  return (
+    <TableRow>
+      <TableCell className="text-foreground py-1.5 font-mono text-xs font-semibold">
+        #{build.build_number}
+      </TableCell>
+      <TableCell className="py-1.5">
+        <Badge className={cn("text-[10px] text-white", statusInfo.color)}>
+          {statusInfo.label}
+        </Badge>
+      </TableCell>
+      <TableCell className="py-1.5">
+        <span className="text-muted-foreground font-mono text-[11px]">
+          {build.commit_hash ? build.commit_hash.slice(0, 7) : "-"}
+        </span>
+        {branchDiffers && (
+          <span className="text-muted-foreground ml-1.5 text-[10px]">{build.branch}</span>
         )}
-      </section>
-
-      <ProjectFormDialog
-        open={editDialogOpen}
-        onOpenChange={setEditDialogOpen}
-        editId={projectId}
-        onSuccess={() => fetchProject()}
-      />
-
-      <EnvironmentFormDialog
-        open={envFormOpen}
-        onOpenChange={setEnvFormOpen}
-        projectId={projectId}
-        editEnv={editingEnv}
-        onSuccess={() => fetchProject()}
-      />
-
-      <TriggerBuildDialog
-        env={triggerDialogEnv}
-        open={!!triggerDialogEnv}
-        onOpenChange={(open) => {
-          if (!open) setTriggerDialogEnv(null);
-        }}
-        onTrigger={(envId, branch, commitHash) => {
-          setTriggerDialogEnv(null);
-          triggerBuild(envId, branch, commitHash);
-        }}
-        triggering={triggering}
-        projectId={projectId}
-      />
-    </div>
+      </TableCell>
+      <TableCell className="max-w-[240px] py-1.5">
+        <p className="text-muted-foreground truncate text-xs">{build.commit_message || "-"}</p>
+      </TableCell>
+      <TableCell className="text-muted-foreground py-1.5 text-[11px]">
+        <p className="font-mono">{formatDuration(build.duration_ms)}</p>
+        <p className="text-muted-foreground">{formatDateTime(build.created_at)}</p>
+      </TableCell>
+      <TableCell className="py-1.5">
+        <div className="flex justify-end gap-0.5">
+          {canDownload && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon-xs"
+                  disabled={actionLoading === `download:${build.id}`}
+                  onClick={() => onAction("download", build)}
+                >
+                  {actionLoading === `download:${build.id}` ? (
+                    <Loader2 className="size-3 animate-spin" />
+                  ) : (
+                    <Download className="size-3" />
+                  )}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>下载制品</TooltipContent>
+            </Tooltip>
+          )}
+          {canDeploy && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon-xs"
+                  disabled={actionLoading === `deploy:${build.id}`}
+                  onClick={() => onAction("deploy", build)}
+                >
+                  {actionLoading === `deploy:${build.id}` ? (
+                    <Loader2 className="size-3 animate-spin" />
+                  ) : (
+                    <Rocket className="size-3" />
+                  )}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>重新部署</TooltipContent>
+            </Tooltip>
+          )}
+          {canRetry && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon-xs"
+                  disabled={actionLoading === `retry:${build.id}`}
+                  onClick={() => onAction("retry", build)}
+                >
+                  {actionLoading === `retry:${build.id}` ? (
+                    <Loader2 className="size-3 animate-spin" />
+                  ) : (
+                    <RotateCcw className="size-3" />
+                  )}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>重新构建</TooltipContent>
+            </Tooltip>
+          )}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" size="icon-xs" asChild>
+                <Link to={`/builds/${build.id}`}>
+                  <ExternalLink className="size-3" />
+                </Link>
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>查看详情</TooltipContent>
+          </Tooltip>
+        </div>
+      </TableCell>
+    </TableRow>
   );
 }
 
@@ -886,7 +810,6 @@ function TriggerBuildDialog({
       setBranches([]);
       return;
     }
-
     setBranchesLoading(true);
     api
       .get<string[]>(`/projects/${projectId}/branches`)
@@ -909,7 +832,6 @@ function TriggerBuildDialog({
             可指定分支或 Commit，留空则使用环境默认分支（{env.branch}）。
           </DialogDescription>
         </DialogHeader>
-
         <DialogBody className="space-y-4 py-2">
           <div className="space-y-2">
             <Label htmlFor="trigger-branch">分支（可选）</Label>
@@ -955,7 +877,6 @@ function TriggerBuildDialog({
               </PopoverContent>
             </Popover>
           </div>
-
           <div className="space-y-2">
             <Label htmlFor="trigger-commit">Commit Hash（可选）</Label>
             <Input
@@ -967,7 +888,6 @@ function TriggerBuildDialog({
             />
           </div>
         </DialogBody>
-
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             取消

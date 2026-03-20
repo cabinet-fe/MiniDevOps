@@ -52,23 +52,22 @@ export function LoginPage() {
   }
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-gradient-to-br from-zinc-950 via-zinc-900 to-zinc-950">
-      {/* Animated gradient orbs */}
+    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-gradient-to-br from-zinc-100 via-zinc-50 to-zinc-100 dark:from-zinc-950 dark:via-zinc-900 dark:to-zinc-950">
       <div className="absolute inset-0 overflow-hidden">
-        <div className="absolute -left-40 -top-40 h-80 w-80 rounded-full bg-emerald-500/20 blur-3xl" />
-        <div className="absolute -right-40 -bottom-40 h-80 w-80 rounded-full bg-blue-500/20 blur-3xl" />
-        <div className="absolute left-1/2 top-1/2 h-60 w-60 -translate-x-1/2 -translate-y-1/2 rounded-full bg-violet-500/10 blur-3xl" />
+        <div className="absolute -left-40 -top-40 h-80 w-80 rounded-full bg-emerald-500/10 blur-3xl dark:bg-emerald-500/20" />
+        <div className="absolute -right-40 -bottom-40 h-80 w-80 rounded-full bg-blue-500/10 blur-3xl dark:bg-blue-500/20" />
+        <div className="absolute left-1/2 top-1/2 h-60 w-60 -translate-x-1/2 -translate-y-1/2 rounded-full bg-violet-500/5 blur-3xl dark:bg-violet-500/10" />
       </div>
 
-      <Card className="relative z-10 w-full max-w-md border-zinc-800 bg-zinc-900/80 shadow-2xl backdrop-blur-xl">
+      <Card className="relative z-10 w-full max-w-md border-border bg-card/80 shadow-2xl backdrop-blur-xl">
         <CardHeader className="space-y-1 text-center">
-          <div className="mx-auto mb-4 flex size-14 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-blue-600">
+          <div className="mx-auto mb-4 flex size-14 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600">
             <Rocket className="size-8 text-white" />
           </div>
-          <CardTitle className="text-2xl font-bold tracking-tight text-white">
+          <CardTitle className="text-2xl font-bold tracking-tight text-foreground">
             BuildFlow
           </CardTitle>
-          <CardDescription className="text-zinc-400">
+          <CardDescription>
             持续集成与部署平台
           </CardDescription>
         </CardHeader>
@@ -80,7 +79,7 @@ export function LoginPage() {
               </div>
             )}
             <div className="space-y-2">
-              <Label htmlFor="username" className="text-zinc-300">用户名</Label>
+              <Label htmlFor="username">用户名</Label>
               <Input
                 id="username"
                 type="text"
@@ -89,11 +88,11 @@ export function LoginPage() {
                 placeholder="请输入用户名"
                 required
                 autoComplete="username"
-                className="border-zinc-700 bg-zinc-800/50 text-white placeholder:text-zinc-500 focus-visible:ring-emerald-500/50"
+                className="focus-visible:ring-emerald-500/50"
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="password" className="text-zinc-300">密码</Label>
+              <Label htmlFor="password">密码</Label>
               <Input
                 id="password"
                 type="password"
@@ -102,7 +101,7 @@ export function LoginPage() {
                 placeholder="请输入密码"
                 required
                 autoComplete="current-password"
-                className="border-zinc-700 bg-zinc-800/50 text-white placeholder:text-zinc-500 focus-visible:ring-emerald-500/50"
+                className="focus-visible:ring-emerald-500/50"
               />
             </div>
             <Button

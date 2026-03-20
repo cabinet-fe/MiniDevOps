@@ -7,10 +7,10 @@ import {
   Users,
   FileText,
   Settings,
+  BookOpen,
   Rocket,
   ChevronsLeft,
   ChevronsRight,
-  Hammer,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -30,7 +30,6 @@ const NAV_GROUPS = [
     label: '资源',
     items: [
       { path: '/projects', label: '项目', icon: FolderGit2, roles: [] as string[] },
-      { path: '/builds', label: '构建', icon: Hammer, roles: [] as string[] },
       { path: '/servers', label: '服务器', icon: Server, roles: [] as string[] },
     ],
   },
@@ -38,6 +37,7 @@ const NAV_GROUPS = [
     label: '管理',
     items: [
       { path: '/users', label: '用户', icon: Users, roles: ['admin'] },
+      { path: '/dictionaries', label: '数据字典', icon: BookOpen, roles: ['admin'] },
       { path: '/audit-logs', label: '审计日志', icon: FileText, roles: ['admin', 'ops'] },
       { path: '/settings', label: '设置', icon: Settings, roles: ['admin'] },
     ],
@@ -61,9 +61,9 @@ function NavContent({ collapsed, onClose }: { collapsed: boolean; onClose?: () =
       <nav className="flex flex-1 flex-col gap-1 px-3 py-4">
         {visibleGroups.map((group, groupIdx) => (
           <div key={group.label}>
-            {groupIdx > 0 && <Separator className="my-3 bg-zinc-800/60" />}
+            {groupIdx > 0 && <Separator className="my-3 bg-border" />}
             {!collapsed && (
-              <p className="mb-2 px-3 text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
+              <p className="mb-2 px-3 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
                 {group.label}
               </p>
             )}
@@ -84,11 +84,11 @@ function NavContent({ collapsed, onClose }: { collapsed: boolean; onClose?: () =
                       'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-150',
                       collapsed && 'justify-center px-0',
                       isActive
-                        ? 'bg-white/10 text-white shadow-sm'
-                        : 'text-zinc-400 hover:bg-white/5 hover:text-zinc-200'
+                        ? 'bg-emerald-500/10 text-foreground shadow-[inset_3px_0_0_0_#10b981]'
+                        : 'text-muted-foreground hover:bg-accent hover:text-foreground'
                     )}
                   >
-                    <Icon className={cn('size-[18px] shrink-0', isActive && 'text-blue-400')} />
+                    <Icon className={cn('size-[18px] shrink-0', isActive && 'text-emerald-400')} />
                     {!collapsed && <span>{item.label}</span>}
                   </Link>
                 )
@@ -124,17 +124,17 @@ function SidebarContent({
   onToggleCollapse?: () => void
 }) {
   return (
-    <div className="flex h-full w-full flex-col bg-zinc-950">
+    <div className="flex h-full w-full flex-col bg-sidebar">
       {/* Logo */}
       <div className={cn(
-        'flex h-14 shrink-0 items-center border-b border-zinc-800/60 transition-all duration-200',
+        'flex h-14 shrink-0 items-center border-b border-border transition-all duration-200',
         collapsed ? 'justify-center px-2' : 'gap-2.5 px-4'
       )}>
-        <div className="flex size-8 items-center justify-center rounded-lg bg-gradient-to-br from-blue-500 to-violet-600 shadow-lg shadow-blue-500/20">
+        <div className="flex size-8 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600 shadow-lg shadow-emerald-500/20">
           <Rocket className="size-4 text-white" />
         </div>
         {!collapsed && (
-          <span className="text-[15px] font-semibold tracking-tight text-white">
+          <span className="text-[15px] font-semibold tracking-tight text-foreground">
             BuildFlow
           </span>
         )}
@@ -144,12 +144,12 @@ function SidebarContent({
 
       {/* Collapse toggle */}
       {onToggleCollapse && (
-        <div className="border-t border-zinc-800/60 p-2">
+        <div className="border-t border-border p-2">
           <Button
             variant="ghost"
             size="sm"
             className={cn(
-              'h-8 w-full text-zinc-500 hover:bg-white/5 hover:text-zinc-300',
+              'h-8 w-full text-muted-foreground hover:bg-accent hover:text-foreground',
               collapsed ? 'justify-center px-0' : 'justify-start gap-2 px-3',
             )}
             onClick={onToggleCollapse}
@@ -182,8 +182,8 @@ export function Sidebar({ mobileOpen = false, onMobileOpenChange }: SidebarProps
       {/* Desktop sidebar */}
       <aside
         className={cn(
-          'hidden shrink-0 flex-col border-r border-zinc-800/60 bg-zinc-950 transition-all duration-200 ease-in-out md:flex',
-          collapsed ? 'w-[60px]' : 'w-[220px]'
+          'hidden shrink-0 flex-col border-r border-border bg-sidebar transition-all duration-200 ease-in-out md:flex',
+          collapsed ? 'w-[60px]' : 'w-[200px]'
         )}
       >
         <div className="flex h-full flex-col">
@@ -198,15 +198,15 @@ export function Sidebar({ mobileOpen = false, onMobileOpenChange }: SidebarProps
       <Sheet open={mobileOpen} onOpenChange={onMobileOpenChange}>
         <SheetContent
           side="left"
-          className="w-[260px] border-zinc-800/60 bg-zinc-950 p-0"
+          className="w-[260px] border-border bg-sidebar p-0"
           showCloseButton={true}
         >
           <div className="flex h-full flex-col">
-            <div className="flex h-14 shrink-0 items-center gap-2.5 border-b border-zinc-800/60 px-4">
-              <div className="flex size-8 items-center justify-center rounded-lg bg-gradient-to-br from-blue-500 to-violet-600 shadow-lg shadow-blue-500/20">
+            <div className="flex h-14 shrink-0 items-center gap-2.5 border-b border-border px-4">
+              <div className="flex size-8 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600 shadow-lg shadow-emerald-500/20">
                 <Rocket className="size-4 text-white" />
               </div>
-              <span className="text-[15px] font-semibold tracking-tight text-white">
+              <span className="text-[15px] font-semibold tracking-tight text-foreground">
                 BuildFlow
               </span>
             </div>

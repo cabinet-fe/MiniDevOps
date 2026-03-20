@@ -249,12 +249,12 @@ export function BuildLogViewer({
   return (
     <div
       className={cn(
-        'flex flex-col overflow-hidden rounded-lg border border-zinc-800 bg-zinc-950',
+        'flex flex-col overflow-hidden rounded-lg border border-border bg-zinc-950 dark:bg-zinc-950',
         isFullscreen && 'fixed inset-0 z-50 rounded-none border-0',
         className
       )}
     >
-      <div className="flex items-center justify-between border-b border-zinc-800 px-4 py-2 gap-2">
+      <div className="flex items-center justify-between border-b border-zinc-800/60 px-4 py-2 gap-2">
         <div className="flex items-center gap-2">
           <Badge className={statusInfo.className}>{statusInfo.label}</Badge>
           <span className="text-xs text-zinc-500">{totalLines} 行</span>

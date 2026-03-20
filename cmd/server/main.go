@@ -2,14 +2,11 @@ package main
 
 import (
 	"context"
-	"embed"
 	"flag"
 	"fmt"
-	"io/fs"
 	"net/http"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 	"time"
 
@@ -27,8 +24,7 @@ import (
 	"buildflow/internal/ws"
 )
 
-//go:embed all:dist
-var webFS embed.FS
+var version = "dev"
 
 func main() {
 	configPath := flag.String("config", "config.yaml", "path to config file")
@@ -41,10 +37,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Set Gin mode to release to avoid startup route logs
-	gin.SetMode(gin.ReleaseMode)
-
-	// Init logger
 	var logger *zap.Logger
 	if gin.Mode() == gin.ReleaseMode {
 		logger, _ = zap.NewProduction()
@@ -74,6 +66,7 @@ func main() {
 	buildRepo := repository.NewBuildRepository(db)
 	notifRepo := repository.NewNotificationRepository(db)
 	auditRepo := repository.NewAuditRepository(db)
+	dictRepo := repository.NewDictRepository(db)
 
 	// Init services
 	authService, err := service.NewAuthService(cfg)
@@ -86,6 +79,7 @@ func main() {
 	buildService := service.NewBuildService(buildRepo, projectRepo, envRepo, userRepo)
 	notifService := service.NewNotificationService(notifRepo)
 	auditService := service.NewAuditService(auditRepo)
+	dictService := service.NewDictService(dictRepo)
 
 	// Init WebSocket hub
 	hub := ws.NewHub()
@@ -114,6 +108,7 @@ func main() {
 	webhookHandler := handler.NewWebhookHandler(projectService, buildService, envRepo, scheduler)
 	notifHandler := handler.NewNotificationHandler(notifService)
 	systemHandler := handler.NewSystemHandler(auditService)
+	dictHandler := handler.NewDictHandler(dictService)
 	wsHandler := handler.NewWSHandler(authService, buildRepo, projectRepo, hub)
 
 	// Setup Gin
@@ -193,6 +188,7 @@ func main() {
 
 			// Dashboard
 			auth.GET("/dashboard/stats", buildHandler.DashboardStats)
+			auth.GET("/dashboard/system-resources", buildHandler.DashboardSystemResources)
 			auth.GET("/dashboard/active-builds", buildHandler.DashboardActiveBuilds)
 			auth.GET("/dashboard/recent-builds", buildHandler.DashboardRecentBuilds)
 			auth.GET("/dashboard/trend", buildHandler.DashboardTrend)
@@ -201,6 +197,21 @@ func main() {
 			auth.GET("/notifications", notifHandler.List)
 			auth.PUT("/notifications/:id/read", notifHandler.MarkRead)
 			auth.PUT("/notifications/read-all", notifHandler.MarkAllRead)
+
+			// Dictionaries
+			auth.GET("/dictionaries", dictHandler.ListDictionaries)
+			auth.GET("/dictionaries/code/:code/items", dictHandler.GetItemsByCode)
+			dicts := auth.Group("/dictionaries", middleware.RequireRole("admin"))
+			{
+				dicts.POST("", dictHandler.CreateDictionary)
+				dicts.GET("/:id", dictHandler.GetDictionary)
+				dicts.PUT("/:id", dictHandler.UpdateDictionary)
+				dicts.DELETE("/:id", dictHandler.DeleteDictionary)
+				dicts.GET("/:id/items", dictHandler.ListItems)
+				dicts.POST("/:id/items", dictHandler.CreateItem)
+				dicts.PUT("/:id/items/:itemId", dictHandler.UpdateItem)
+				dicts.DELETE("/:id/items/:itemId", dictHandler.DeleteItem)
+			}
 
 			// System (admin/ops)
 			auth.GET("/system/audit-logs", middleware.RequireRole("admin", "ops"), systemHandler.AuditLogs)
@@ -248,46 +259,27 @@ func main() {
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
-
-	cronScheduler.Stop()
-	scheduler.Shutdown()
+	logger.Info("Shutting down...")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
+
+	// 1. Stop accepting new HTTP requests
 	if err := srv.Shutdown(ctx); err != nil {
-		logger.Error("Server forced shutdown", zap.Error(err))
+		logger.Error("HTTP server forced shutdown", zap.Error(err))
 	}
-}
 
-func serveSPA(r *gin.Engine) {
-	distFS, err := fs.Sub(webFS, "dist")
-	if err != nil {
-		return
+	// 2. Stop cron (no new builds will be triggered)
+	cronScheduler.Stop()
+
+	// 3. Close WebSocket connections
+	hub.Shutdown()
+
+	// 4. Wait for all running builds to finish
+	scheduler.Shutdown()
+
+	// 5. Close database
+	if sqlDB, err := db.DB(); err == nil {
+		sqlDB.Close()
 	}
-	staticServer := http.FileServer(http.FS(distFS))
-
-	r.NoRoute(func(c *gin.Context) {
-		path := c.Request.URL.Path
-		if strings.HasPrefix(path, "/api/") || strings.HasPrefix(path, "/ws/") {
-			c.JSON(http.StatusNotFound, gin.H{"code": 404, "message": "not found"})
-			return
-		}
-
-		trimmedPath := strings.TrimPrefix(path, "/")
-		if trimmedPath == "" {
-			c.Request.URL.Path = "/"
-			staticServer.ServeHTTP(c.Writer, c.Request)
-			return
-		}
-
-		// Serve real static assets directly; fallback all other routes to SPA entry.
-		if fileInfo, err := fs.Stat(distFS, trimmedPath); err == nil && !fileInfo.IsDir() {
-			c.Request.URL.Path = path
-			staticServer.ServeHTTP(c.Writer, c.Request)
-			return
-		}
-
-		c.Request.URL.Path = "/"
-		staticServer.ServeHTTP(c.Writer, c.Request)
-	})
 }

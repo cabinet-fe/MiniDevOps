@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react'
+import { X } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Badge } from '@/components/ui/badge'
 import {
   Select,
   SelectContent,
@@ -20,13 +22,25 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover'
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@/components/ui/command'
 import { api } from '@/lib/api'
 import { ARTIFACT_FORMATS, REPO_AUTH_TYPES, WEBHOOK_TYPES } from '@/lib/constants'
 
 interface ProjectPayload {
   name: string
   description: string
-  group_name: string
   tags: string
   repo_url: string
   repo_auth_type: string
@@ -47,7 +61,6 @@ interface ProjectDetail extends Omit<ProjectPayload, 'repo_password'> {
 const DEFAULT_FORM: ProjectPayload = {
   name: '',
   description: '',
-  group_name: '',
   tags: '',
   repo_url: '',
   repo_auth_type: 'none',
@@ -59,6 +72,11 @@ const DEFAULT_FORM: ProjectPayload = {
   webhook_ref_path: '$.ref',
   webhook_commit_path: '$.head_commit.id',
   webhook_message_path: '$.head_commit.message',
+}
+
+interface DictTagOption {
+  label: string
+  value: string
 }
 
 interface ProjectFormDialogProps {
@@ -80,6 +98,8 @@ export function ProjectFormDialog({
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
   const [form, setForm] = useState<ProjectPayload>(DEFAULT_FORM)
+  const [tagOptions, setTagOptions] = useState<DictTagOption[]>([])
+  const [tagPopoverOpen, setTagPopoverOpen] = useState(false)
 
   useEffect(() => {
     if (!open) {
@@ -87,6 +107,14 @@ export function ProjectFormDialog({
       setError('')
       return
     }
+
+    api
+      .get<DictTagOption[]>('/dictionaries/code/project_tags/items')
+      .then((res) => {
+        if (res.code === 0 && res.data) {
+          setTagOptions(res.data)
+        }
+      })
 
     if (!isEdit || !editId) return
 
@@ -100,7 +128,6 @@ export function ProjectFormDialog({
         setForm({
           name: res.data.name || '',
           description: res.data.description || '',
-          group_name: res.data.group_name || '',
           tags: res.data.tags || '',
           repo_url: res.data.repo_url || '',
           repo_auth_type: res.data.repo_auth_type || 'none',
@@ -127,6 +154,26 @@ export function ProjectFormDialog({
 
   const setField = <K extends keyof ProjectPayload>(key: K, value: ProjectPayload[K]) => {
     setForm((prev) => ({ ...prev, [key]: value }))
+  }
+
+  const selectedTags = (form.tags || '')
+    .split(',')
+    .map((t) => t.trim())
+    .filter(Boolean)
+
+  const toggleTag = (tagValue: string) => {
+    const current = new Set(selectedTags)
+    if (current.has(tagValue)) {
+      current.delete(tagValue)
+    } else {
+      current.add(tagValue)
+    }
+    setField('tags', Array.from(current).join(','))
+  }
+
+  const removeTag = (tagValue: string) => {
+    const current = selectedTags.filter((t) => t !== tagValue)
+    setField('tags', current.join(','))
   }
 
   const validate = () => {
@@ -157,7 +204,6 @@ export function ProjectFormDialog({
       const payload: ProjectPayload = {
         name: form.name.trim(),
         description: form.description.trim(),
-        group_name: form.group_name.trim(),
         tags: form.tags.trim(),
         repo_url: form.repo_url.trim(),
         repo_auth_type: form.repo_auth_type,
@@ -204,11 +250,11 @@ export function ProjectFormDialog({
             <DialogHeader>
               <DialogTitle>{isEdit ? '编辑项目' : '新建项目'}</DialogTitle>
               <DialogDescription>
-                {isEdit ? '更新项目仓库、分组与 Webhook 配置' : '创建新的构建项目并配置仓库信息'}
+                {isEdit ? '更新项目仓库与 Webhook 配置' : '创建新的构建项目并配置仓库信息'}
               </DialogDescription>
             </DialogHeader>
             <DialogBody className="flex items-center justify-center py-10">
-              <div className="size-8 animate-spin rounded-full border-2 border-zinc-600 border-t-zinc-300" />
+              <div className="border-muted size-8 animate-spin rounded-full border-2 border-t-foreground" />
             </DialogBody>
           </>
         ) : (
@@ -216,7 +262,7 @@ export function ProjectFormDialog({
             <DialogHeader>
               <DialogTitle>{isEdit ? '编辑项目' : '新建项目'}</DialogTitle>
               <DialogDescription>
-                {isEdit ? '更新项目仓库、分组与 Webhook 配置' : '创建新的构建项目并配置仓库信息'}
+                {isEdit ? '更新项目仓库与 Webhook 配置' : '创建新的构建项目并配置仓库信息'}
               </DialogDescription>
             </DialogHeader>
 
@@ -268,32 +314,86 @@ export function ProjectFormDialog({
                       ))}
                     </SelectContent>
                   </Select>
-                  <p className="text-xs text-zinc-500">
+                  <p className="text-muted-foreground text-xs">
                     {ARTIFACT_FORMATS.find((item) => item.value === form.artifact_format)?.hint}
                   </p>
                 </div>
               </div>
 
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="project-group-name">项目分组</Label>
-                  <Input
-                    id="project-group-name"
-                    value={form.group_name}
-                    onChange={(e) => setField('group_name', e.target.value)}
-                    placeholder="例如：客户端、基础设施"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="project-tags">标签</Label>
-                  <Input
-                    id="project-tags"
-                    value={form.tags}
-                    onChange={(e) => setField('tags', e.target.value)}
-                    placeholder="例如：react, prod, internal"
-                  />
-                </div>
+              <div className="space-y-2">
+                <Label>标签</Label>
+                <Popover open={tagPopoverOpen} onOpenChange={setTagPopoverOpen}>
+                  <PopoverTrigger asChild>
+                    <div
+                      role="combobox"
+                      tabIndex={0}
+                      className="border-input bg-background ring-offset-background flex h-auto min-h-10 w-full cursor-pointer items-center rounded-md border px-3 py-2 text-sm font-normal"
+                    >
+                      {selectedTags.length === 0 ? (
+                        <span className="text-muted-foreground">选择标签...</span>
+                      ) : (
+                        <div className="flex flex-wrap gap-1">
+                          {selectedTags.map((tag) => (
+                            <Badge key={tag} variant="secondary" className="gap-1">
+                              {tagOptions.find((o) => o.value === tag)?.label || tag}
+                              <button
+                                type="button"
+                                className="hover:bg-accent rounded-full"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  removeTag(tag)
+                                }}
+                              >
+                                <X className="size-3" />
+                              </button>
+                            </Badge>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                    <Command>
+                      <CommandInput placeholder="搜索标签..." />
+                      <CommandList>
+                        <CommandEmpty>暂无可用标签，请先在数据字典中配置</CommandEmpty>
+                        <CommandGroup>
+                          {tagOptions.map((option) => (
+                            <CommandItem
+                              key={option.value}
+                              value={option.value}
+                              onSelect={() => toggleTag(option.value)}
+                            >
+                              <div className="flex items-center gap-2">
+                                <div
+                                  className={`size-4 rounded border ${
+                                    selectedTags.includes(option.value)
+                                      ? 'border-primary bg-primary'
+                                      : 'border-border'
+                                  }`}
+                                >
+                                  {selectedTags.includes(option.value) && (
+                                    <svg viewBox="0 0 14 14" className="size-4 text-white">
+                                      <path
+                                        d="M11.5 3.5L5.5 9.5L2.5 6.5"
+                                        stroke="currentColor"
+                                        strokeWidth="2"
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        fill="none"
+                                      />
+                                    </svg>
+                                  )}
+                                </div>
+                                {option.label}
+                              </div>
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
               </div>
 
               <div className="space-y-2">
@@ -391,10 +491,10 @@ export function ProjectFormDialog({
               )}
 
               {form.webhook_type === 'generic' && (
-                <div className="space-y-4 rounded-xl border border-zinc-200 bg-zinc-50/70 p-4 dark:border-zinc-800 dark:bg-zinc-900/40">
+                <div className="bg-muted/50 space-y-4 rounded-xl border border-border p-4">
                   <div>
                     <p className="text-sm font-medium">通用 JSONPath 映射</p>
-                    <p className="mt-1 text-xs text-zinc-500">
+                    <p className="text-muted-foreground mt-1 text-xs">
                       支持 `$.field` 与 `$.list[0].field` 这种路径格式。
                     </p>
                   </div>

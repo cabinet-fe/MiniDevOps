@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Plus, Pencil, Trash2, Network } from 'lucide-react'
+import { Plus, Pencil, Trash2, Network, Loader2 } from 'lucide-react'
 import {
   useReactTable,
   getCoreRowModel,
@@ -29,6 +29,7 @@ import { api } from '@/lib/api'
 import type { PaginatedData } from '@/lib/api'
 import { useAuth } from '@/hooks/use-auth'
 import { toast } from 'sonner'
+import { cn } from '@/lib/utils'
 import { ServerFormDialog } from '@/pages/servers/form'
 
 interface Server {
@@ -52,6 +53,7 @@ export function ServerListPage() {
   const [deleting, setDeleting] = useState(false)
   const [formDialogOpen, setFormDialogOpen] = useState(false)
   const [editingId, setEditingId] = useState<number | null>(null)
+  const [testingId, setTestingId] = useState<number | null>(null)
 
   const fetchServers = useCallback(async () => {
     try {
@@ -89,6 +91,7 @@ export function ServerListPage() {
   }
 
   const testConnection = async (serverId: number) => {
+    setTestingId(serverId)
     try {
       const res = await api.post<{ message: string }>(`/servers/${serverId}/test`)
       if (res.code === 0) {
@@ -96,9 +99,13 @@ export function ServerListPage() {
         fetchServers()
       } else {
         toast.error(res.message || '连接失败')
+        fetchServers()
       }
     } catch {
       toast.error('连接失败')
+      fetchServers()
+    } finally {
+      setTestingId(null)
     }
   }
 
@@ -130,10 +137,14 @@ export function ServerListPage() {
       header: '状态',
       cell: ({ getValue }) => {
         const s = String(getValue())
-        const ok = s === 'ok' || s === 'connected'
+        const config: Record<string, { label: string; class: string }> = {
+          online: { label: '在线', class: 'bg-emerald-500/15 text-emerald-600 border-emerald-500/25' },
+          offline: { label: '离线', class: 'bg-red-500/15 text-red-600 border-red-500/25' },
+        }
+        const c = config[s] ?? { label: '未检测', class: 'bg-muted/50 text-muted-foreground border-border/50' }
         return (
-          <Badge variant={ok ? 'default' : 'secondary'}>
-            {s || '未知'}
+          <Badge variant="outline" className={cn('font-medium', c.class)}>
+            {c.label}
           </Badge>
         )
       },
@@ -158,14 +169,18 @@ export function ServerListPage() {
           columnHelper.display({
             id: 'actions',
             header: '操作',
-            cell: ({ row }) => (
+            cell: ({ row }) => {
+              const isTesting = testingId === row.original.id
+              return (
               <div className="flex gap-1">
                 <Button
                   variant="ghost"
                   size="icon-sm"
                   onClick={() => testConnection(row.original.id)}
+                  disabled={isTesting}
+                  title="测试连接"
                 >
-                  <Network className="size-4" />
+                  {isTesting ? <Loader2 className="size-4 animate-spin" /> : <Network className="size-4" />}
                 </Button>
                 <Button
                   variant="ghost"
@@ -182,7 +197,8 @@ export function ServerListPage() {
                   <Trash2 className="size-4" />
                 </Button>
               </div>
-            ),
+              )
+            },
           }),
         ]
       : []),
@@ -197,7 +213,7 @@ export function ServerListPage() {
   if (loading) {
     return (
       <div className="flex h-64 items-center justify-center">
-        <div className="size-8 animate-spin rounded-full border-2 border-zinc-600 border-t-zinc-300" />
+        <div className="border-muted size-8 animate-spin rounded-full border-2 border-t-foreground" />
       </div>
     )
   }
@@ -206,8 +222,8 @@ export function ServerListPage() {
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">服务器</h1>
-          <p className="mt-1 text-sm text-zinc-500">管理部署目标服务器</p>
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">服务器</h1>
+          <p className="mt-1 text-sm text-muted-foreground">管理部署目标服务器</p>
         </div>
         {isOps() && (
           <Button className="gap-2" onClick={openCreate}>
@@ -239,7 +255,7 @@ export function ServerListPage() {
         </div>
       )}
 
-      <Card className="border-zinc-200 dark:border-zinc-800">
+      <Card className="border-border">
         <CardHeader>
           <CardTitle>服务器列表</CardTitle>
           <CardDescription>共 {servers.length} 台服务器</CardDescription>
@@ -258,7 +274,7 @@ export function ServerListPage() {
             <TableBody>
               {table.getRowModel().rows.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center text-zinc-500 py-8">
+                  <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
                     暂无服务器
                   </TableCell>
                 </TableRow>

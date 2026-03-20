@@ -185,7 +185,7 @@ func (h *ServerHandler) Delete(c *gin.Context) {
 	pkg.Success(c, nil)
 }
 
-// POST /api/v1/servers/:id/test - test SSH connection
+// POST /api/v1/servers/:id/test - test SSH connection and update status
 func (h *ServerHandler) TestConnection(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
@@ -197,5 +197,5 @@ func (h *ServerHandler) TestConnection(c *gin.Context) {
 		pkg.Error(c, http.StatusBadRequest, err.Error())
 		return
 	}
-	pkg.Success(c, gin.H{"output": output})
+	pkg.Success(c, gin.H{"message": "连接成功", "output": output})
 }

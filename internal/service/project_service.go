@@ -135,7 +135,6 @@ func (s *ProjectService) Delete(id uint) error {
 type ProjectExport struct {
 	Name               string              `json:"name"`
 	Description        string              `json:"description"`
-	GroupName          string              `json:"group_name"`
 	Tags               string              `json:"tags"`
 	RepoURL            string              `json:"repo_url"`
 	RepoAuthType       string              `json:"repo_auth_type"`
@@ -181,7 +180,6 @@ func (s *ProjectService) Export(id uint) ([]byte, error) {
 	exp := ProjectExport{
 		Name:               project.Name,
 		Description:        project.Description,
-		GroupName:          project.GroupName,
 		Tags:               project.Tags,
 		RepoURL:            project.RepoURL,
 		RepoAuthType:       project.RepoAuthType,
@@ -248,7 +246,6 @@ func (s *ProjectService) Import(data []byte, createdBy uint) (*model.Project, er
 	project := &model.Project{
 		Name:               name,
 		Description:        exp.Description,
-		GroupName:          exp.GroupName,
 		Tags:               exp.Tags,
 		RepoURL:            exp.RepoURL,
 		RepoAuthType:       exp.RepoAuthType,

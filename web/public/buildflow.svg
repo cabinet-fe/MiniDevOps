@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="512" y2="512" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#10b981"/>
+      <stop offset="100%" stop-color="#0d9488"/>
+    </linearGradient>
+    <linearGradient id="flame" x1="256" y1="380" x2="256" y2="460" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#fbbf24"/>
+      <stop offset="100%" stop-color="#f97316" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="96" fill="url(#bg)"/>
+  <!-- Rocket body -->
+  <path d="M256 100c-30 40-60 100-60 180v40h120v-40c0-80-30-140-60-180z" fill="white"/>
+  <!-- Nose cone -->
+  <path d="M256 100c-20 30-40 70-50 120h100c-10-50-30-90-50-120z" fill="white"/>
+  <!-- Window -->
+  <circle cx="256" cy="230" r="28" fill="#10b981"/>
+  <circle cx="256" cy="230" r="18" fill="white" opacity="0.3"/>
+  <!-- Fins -->
+  <path d="M196 280l-40 60v20h40z" fill="white" opacity="0.85"/>
+  <path d="M316 280l40 60v20h-40z" fill="white" opacity="0.85"/>
+  <!-- Flame -->
+  <path d="M220 320h72l-8 60c-4 30-12 50-28 72-16-22-24-42-28-72z" fill="url(#flame)"/>
+  <!-- Pipeline arrows -->
+  <rect x="100" y="395" width="312" height="4" rx="2" fill="white" opacity="0.4"/>
+  <polygon points="120,385 120,409 100,397" fill="white" opacity="0.4"/>
+  <polygon points="392,385 392,409 412,397" fill="white" opacity="0.4"/>
+</svg>

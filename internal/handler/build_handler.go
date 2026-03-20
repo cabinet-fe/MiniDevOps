@@ -17,7 +17,8 @@ import (
 
 // BuildScheduler submits builds for execution. Used to avoid circular dependency.
 type BuildScheduler interface {
-	Submit(buildID uint)
+	Submit(buildID uint) error
+	Cancel(buildID uint) bool
 }
 
 type BuildHandler struct {
@@ -148,6 +149,9 @@ func (h *BuildHandler) Cancel(c *gin.Context) {
 		pkg.Error(c, http.StatusBadRequest, "参数错误")
 		return
 	}
+	if h.scheduler != nil {
+		h.scheduler.Cancel(uint(id))
+	}
 	if err := h.buildService.Cancel(uint(id)); err != nil {
 		pkg.Error(c, http.StatusInternalServerError, "取消失败")
 		return
@@ -235,6 +239,11 @@ func (h *BuildHandler) DashboardStats(c *gin.Context) {
 		return
 	}
 	pkg.Success(c, stats)
+}
+
+// GET /api/v1/dashboard/system-resources
+func (h *BuildHandler) DashboardSystemResources(c *gin.Context) {
+	pkg.Success(c, h.buildService.GetDashboardSystemResources())
 }
 
 // GET /api/v1/dashboard/active-builds

@@ -183,7 +183,7 @@ export function BuildDetailPage() {
   if (loading || !build) {
     return (
       <div className="flex h-64 items-center justify-center">
-        <div className="size-8 animate-spin rounded-full border-2 border-zinc-600 border-t-zinc-300" />
+        <div className="size-8 animate-spin rounded-full border-2 border-muted border-t-foreground" />
       </div>
     )
   }
@@ -213,7 +213,7 @@ export function BuildDetailPage() {
                 {statusInfo.label}
               </Badge>
             </div>
-            <p className="mt-0.5 text-sm text-zinc-500">
+            <p className="mt-0.5 text-sm text-muted-foreground">
               {build.project_name} / {build.environment_name}
             </p>
           </div>
@@ -352,7 +352,7 @@ export function BuildDetailPage() {
                         'flex size-8 items-center justify-center rounded-full',
                         state === 'completed' && 'bg-green-500/20 text-green-500',
                         state === 'active' && 'bg-blue-500/20 text-blue-500 animate-pulse',
-                        state === 'pending' && 'bg-zinc-800 text-zinc-500',
+                        state === 'pending' && 'bg-muted text-muted-foreground',
                         state === 'failed' && 'bg-red-500/20 text-red-500'
                       )}
                     >
@@ -366,7 +366,7 @@ export function BuildDetailPage() {
                         'text-xs whitespace-nowrap',
                         state === 'completed' && 'text-green-500',
                         state === 'active' && 'text-blue-500 font-medium',
-                        state === 'pending' && 'text-zinc-500',
+                        state === 'pending' && 'text-muted-foreground',
                         state === 'failed' && 'text-red-500'
                       )}
                     >
@@ -377,7 +377,7 @@ export function BuildDetailPage() {
                     <div
                       className={cn(
                         'mx-1 h-0.5 w-8 sm:w-12 lg:w-16',
-                        state === 'completed' ? 'bg-green-500/40' : 'bg-zinc-800'
+                        state === 'completed' ? 'bg-green-500/40' : 'bg-muted'
                       )}
                     />
                   )}
@@ -415,7 +415,7 @@ function InfoItem({
 }) {
   return (
     <div className={className}>
-      <p className="text-xs text-zinc-500">{label}</p>
+      <p className="text-xs text-muted-foreground">{label}</p>
       <p
         className={cn(
           'mt-0.5 text-sm flex items-center gap-1',

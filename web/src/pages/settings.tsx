@@ -305,12 +305,12 @@ export function SettingsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">系统设置</h1>
-        <p className="mt-1 text-sm text-zinc-500">备份、恢复、导入与存储管理</p>
+        <h1 className="text-2xl font-bold tracking-tight text-foreground">系统设置</h1>
+        <p className="mt-1 text-sm text-muted-foreground">备份、恢复、导入与存储管理</p>
       </div>
 
       <div className="grid gap-6 md:grid-cols-2">
-        <Card className="border-zinc-200 dark:border-zinc-800">
+        <Card className="border-border">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Download className="size-5" />
@@ -328,7 +328,7 @@ export function SettingsPage() {
           </CardContent>
         </Card>
 
-        <Card className="border-zinc-200 dark:border-zinc-800">
+        <Card className="border-border">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Upload className="size-5" />
@@ -353,7 +353,7 @@ export function SettingsPage() {
           </CardContent>
         </Card>
 
-        <Card className="border-zinc-200 dark:border-zinc-800 md:col-span-2">
+        <Card className="border-border md:col-span-2">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <FileJson className="size-5" />
@@ -379,7 +379,7 @@ export function SettingsPage() {
         </Card>
       </div>
 
-      <Card className="border-zinc-200 dark:border-zinc-800">
+      <Card className="border-border">
         <CardHeader className="flex flex-row items-center justify-between">
           <div>
             <CardTitle>变量组</CardTitle>
@@ -392,17 +392,17 @@ export function SettingsPage() {
         </CardHeader>
         <CardContent>
           {varGroups.length === 0 ? (
-            <div className="rounded-lg border border-dashed border-zinc-200 p-6 text-sm text-zinc-500 dark:border-zinc-800">
+            <div className="rounded-lg border border-dashed border-border p-6 text-sm text-muted-foreground">
               暂无变量组
             </div>
           ) : (
             <div className="space-y-3">
               {varGroups.map((group) => (
-                <div key={group.id} className="flex items-center justify-between rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
+                <div key={group.id} className="flex items-center justify-between rounded-lg border border-border p-4">
                   <div>
                     <p className="font-medium">{group.name}</p>
-                    <p className="mt-1 text-sm text-zinc-500">{group.description || '暂无描述'}</p>
-                    <p className="mt-2 text-xs text-zinc-500">{group.items?.length ?? 0} 个变量项</p>
+                    <p className="mt-1 text-sm text-muted-foreground">{group.description || '暂无描述'}</p>
+                    <p className="mt-2 text-xs text-muted-foreground">{group.items?.length ?? 0} 个变量项</p>
                   </div>
                   <div className="flex gap-2">
                     <Button variant="outline" size="sm" onClick={() => openEditVarGroup(group)}>
@@ -410,7 +410,7 @@ export function SettingsPage() {
                       编辑
                     </Button>
                     <Button variant="ghost" size="sm" onClick={() => deleteVarGroup(group.id)}>
-                      <Trash2 className="size-4 text-zinc-500" />
+                      <Trash2 className="size-4 text-muted-foreground" />
                       删除
                     </Button>
                   </div>
@@ -429,27 +429,27 @@ export function SettingsPage() {
         </h2>
 
         <div className="grid gap-4 md:grid-cols-2 mb-4">
-          <Card className="border-zinc-200 dark:border-zinc-800">
+          <Card className="border-border">
             <CardContent className="pt-6">
               <div className="flex items-center gap-3">
                 <div className="flex items-center justify-center size-10 rounded-lg bg-blue-500/10 text-blue-500">
                   <Database className="size-5" />
                 </div>
                 <div>
-                  <p className="text-sm text-zinc-500">工作空间总占用</p>
+                  <p className="text-sm text-muted-foreground">工作空间总占用</p>
                   <p className="text-xl font-semibold">{formatBytes(totalWorkspaceSize)}</p>
                 </div>
               </div>
             </CardContent>
           </Card>
-          <Card className="border-zinc-200 dark:border-zinc-800">
+          <Card className="border-border">
             <CardContent className="pt-6">
               <div className="flex items-center gap-3">
                 <div className="flex items-center justify-center size-10 rounded-lg bg-amber-500/10 text-amber-500">
                   <FolderArchive className="size-5" />
                 </div>
                 <div>
-                  <p className="text-sm text-zinc-500">构建缓存总占用</p>
+                  <p className="text-sm text-muted-foreground">构建缓存总占用</p>
                   <p className="text-xl font-semibold">{formatBytes(totalCacheSize)}</p>
                 </div>
               </div>
@@ -457,7 +457,7 @@ export function SettingsPage() {
           </Card>
         </div>
 
-        <Card className="border-zinc-200 dark:border-zinc-800">
+        <Card className="border-border">
           <CardHeader>
             <CardTitle className="text-base">项目存储详情</CardTitle>
             <CardDescription>
@@ -467,21 +467,21 @@ export function SettingsPage() {
           <CardContent>
             {loadingWorkspaces ? (
               <div className="flex items-center justify-center py-8">
-                <div className="size-6 animate-spin rounded-full border-2 border-zinc-600 border-t-zinc-300" />
+                <div className="border-muted size-6 animate-spin rounded-full border-2 border-t-foreground" />
               </div>
             ) : workspaces.length === 0 ? (
-              <div className="text-center py-8 text-zinc-500 text-sm">
+              <div className="text-center py-8 text-muted-foreground text-sm">
                 暂无项目存储数据
               </div>
             ) : (
-              <div className="divide-y divide-zinc-200 dark:divide-zinc-800">
+              <div className="divide-y divide-border">
                 {workspaces.map((w) => (
                   <div key={w.project_id} className="flex items-center justify-between py-3">
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium truncate">
                         {w.project_name || `项目 #${w.project_id}`}
                       </p>
-                      <div className="flex gap-4 mt-1 text-xs text-zinc-500">
+                      <div className="flex gap-4 mt-1 text-xs text-muted-foreground">
                         <span>工作空间: {formatBytes(w.workspace_size)}</span>
                         <span>缓存: {formatBytes(w.cache_size)}</span>
                       </div>
@@ -494,7 +494,7 @@ export function SettingsPage() {
                         disabled={cleaningId === w.project_id}
                         title="清理工作空间"
                       >
-                        <Trash2 className="size-4 text-zinc-500" />
+                        <Trash2 className="size-4 text-muted-foreground" />
                         {cleaningId === w.project_id && cleanType === 'workspace' ? '清理中...' : '清理工作空间'}
                       </Button>
                       <Button
@@ -504,7 +504,7 @@ export function SettingsPage() {
                         disabled={cleaningId === w.project_id}
                         title="清理缓存"
                       >
-                        <Trash2 className="size-4 text-zinc-500" />
+                        <Trash2 className="size-4 text-muted-foreground" />
                         {cleaningId === w.project_id && cleanType === 'cache' ? '清理中...' : '清理缓存'}
                       </Button>
                     </div>
@@ -512,7 +512,7 @@ export function SettingsPage() {
                 ))}
               </div>
             )}
-            <div className="mt-4 pt-4 border-t border-zinc-200 dark:border-zinc-800">
+            <div className="mt-4 pt-4 border-t border-border">
               <Button variant="outline" size="sm" onClick={loadWorkspaces} disabled={loadingWorkspaces}>
                 刷新
               </Button>
@@ -583,13 +583,13 @@ export function SettingsPage() {
                 </Button>
               </div>
               {varGroupForm.items.length === 0 ? (
-                <div className="rounded-lg border border-dashed border-zinc-200 p-4 text-sm text-zinc-500 dark:border-zinc-800">
+                <div className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
                   暂无变量项
                 </div>
               ) : (
                 <div className="space-y-3">
                   {varGroupForm.items.map((item, index) => (
-                    <div key={`${item.id ?? 'new'}-${index}`} className="rounded-lg border border-zinc-200 p-3 dark:border-zinc-800">
+                    <div key={`${item.id ?? 'new'}-${index}`} className="rounded-lg border border-border p-3">
                       <div className="grid gap-3 sm:grid-cols-[1fr_1.3fr_auto_auto]">
                         <Input
                           value={item.key}
@@ -602,7 +602,7 @@ export function SettingsPage() {
                           onChange={(e) => updateVarGroupItem(index, { value: e.target.value, keep_value: false })}
                           placeholder={item.keep_value ? '已存储密文，留空则保持不变' : '变量值'}
                         />
-                        <div className="flex items-center gap-2 rounded-md border border-zinc-200 px-3 dark:border-zinc-800">
+                        <div className="flex items-center gap-2 rounded-md border border-border px-3">
                           <Switch
                             checked={item.is_secret}
                             onCheckedChange={(checked) => updateVarGroupItem(index, {
@@ -611,7 +611,7 @@ export function SettingsPage() {
                               value: checked ? item.value : '',
                             })}
                           />
-                          <span className="text-sm text-zinc-500">加密</span>
+                          <span className="text-sm text-muted-foreground">加密</span>
                         </div>
                         <Button
                           type="button"

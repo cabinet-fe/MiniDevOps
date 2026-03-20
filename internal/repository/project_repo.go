@@ -44,7 +44,7 @@ func (r *ProjectRepository) List(page, pageSize int, createdBy *uint) ([]model.P
 
 func (r *ProjectRepository) ListAll(createdBy *uint) ([]model.Project, error) {
 	var projects []model.Project
-	query := r.db.Preload("Environments").Order("group_name ASC, name ASC")
+	query := r.db.Preload("Environments").Order("name ASC")
 	if createdBy != nil {
 		query = query.Where("created_by = ?", *createdBy)
 	}

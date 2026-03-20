@@ -149,8 +149,8 @@ export function NotificationBell() {
                       }
                     }}
                     className={cn(
-                      'flex w-full items-start gap-3 p-3 text-left transition-colors hover:bg-zinc-100 dark:hover:bg-zinc-800',
-                      !n.is_read && 'bg-zinc-50 dark:bg-zinc-900/50'
+                      'flex w-full items-start gap-3 p-3 text-left transition-colors hover:bg-accent',
+                      !n.is_read && 'bg-muted/50'
                     )}
                   >
                     <Icon

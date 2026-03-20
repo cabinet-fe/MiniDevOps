@@ -1,424 +1,418 @@
-import { useState, useEffect } from "react";
-import { Link } from "react-router";
-import { FolderGit2, Zap, TrendingUp, Activity, ChevronRight, ExternalLink } from "lucide-react";
+import { startTransition, useEffect, useState } from 'react'
+import { Link } from 'react-router'
 import {
-  AreaChart,
-  Area,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-} from "recharts";
-import {
-  useReactTable,
-  getCoreRowModel,
-  flexRender,
-  createColumnHelper,
-} from "@tanstack/react-table";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { api } from "@/lib/api";
-import { BUILD_STATUSES } from "@/lib/constants";
-import { cn } from "@/lib/utils";
+  ArrowUpRight,
+  Clock3,
+  Cpu,
 
-interface DashboardStats {
-  total_projects: number;
-  today_builds: number;
-  success_rate: number;
-  active_count: number;
-  group_summary: {
-    group_name: string;
-    project_count: number;
-    environment_count: number;
-  }[];
+  HardDrive,
+  MemoryStick,
+  RefreshCw,
+} from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { BuildTrendChart, type BuildTrendPoint } from '@/components/dashboard/build-trend-chart'
+import { api } from '@/lib/api'
+import { BUILD_STATUSES } from '@/lib/constants'
+import { cn } from '@/lib/utils'
+
+interface DashboardSystemResources {
+  cpu_usage_percent: number
+  memory_used_bytes: number
+  memory_total_bytes: number
+  memory_usage_percent: number
+  disk_free_bytes: number
+  disk_total_bytes: number
+  disk_usage_percent: number
 }
 
-interface Build {
-  id: number;
-  project_id: number;
-  environment_id: number;
-  build_number: number;
-  status: string;
-  trigger_type: string;
-  commit_hash: string;
-  commit_message: string;
-  duration_ms: number;
-  created_at: string;
+interface DashboardStats {
+  total_projects: number
+  today_builds: number
+  success_rate: number
+  active_count: number
+  system_resources: DashboardSystemResources
+}
+
+interface DashboardBuild {
+  id: number
+  project_id: number
+  environment_id: number
+  build_number: number
+  status: string
+  current_stage: string
+  trigger_type: string
+  branch: string
+  commit_hash: string
+  commit_message: string
+  duration_ms: number
+  created_at: string
+  project_name: string
+  environment_name: string
 }
 
 interface BuildTrendItem {
-  date: string;
-  status: string;
-  count: number;
+  date: string
+  status: string
+  count: number
 }
 
-interface ChartTrendItem {
-  date: string;
-  success: number;
-  failed: number;
-  total: number;
+const EMPTY_RESOURCES: DashboardSystemResources = {
+  cpu_usage_percent: 0,
+  memory_used_bytes: 0,
+  memory_total_bytes: 0,
+  memory_usage_percent: 0,
+  disk_free_bytes: 0,
+  disk_total_bytes: 0,
+  disk_usage_percent: 0,
 }
 
-const STAT_CARDS: Array<{
-  key: keyof DashboardStats;
-  label: string;
-  icon: React.ElementType;
-  color: string;
-  bgColor: string;
-  suffix?: string;
-}> = [
-  {
-    key: "total_projects",
-    label: "项目总数",
-    icon: FolderGit2,
-    color: "from-blue-500 to-blue-600",
-    bgColor: "bg-blue-500/10",
-  },
-  {
-    key: "today_builds",
-    label: "今日构建",
-    icon: Zap,
-    color: "from-amber-500 to-amber-600",
-    bgColor: "bg-amber-500/10",
-  },
-  {
-    key: "success_rate",
-    label: "成功率",
-    icon: TrendingUp,
-    color: "from-emerald-500 to-emerald-600",
-    bgColor: "bg-emerald-500/10",
-    suffix: "%",
-  },
-  {
-    key: "active_count",
-    label: "运行中",
-    icon: Activity,
-    color: "from-violet-500 to-violet-600",
-    bgColor: "bg-violet-500/10",
-  },
-];
+const STAGE_LABELS: Record<string, string> = {
+  pending: '等待',
+  cloning: '拉取',
+  building: '构建',
+  deploying: '部署',
+  success: '完成',
+  failed: '失败',
+  cancelled: '取消',
+}
+
+const POLL_INTERVAL_MS = 2000
+
+function clampPercent(value: number) {
+  return Math.max(0, Math.min(100, value))
+}
+
+function formatBytes(bytes: number) {
+  if (!bytes) return '0 B'
+  const units = ['B', 'KB', 'MB', 'GB', 'TB']
+  let value = bytes
+  let unitIndex = 0
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024
+    unitIndex += 1
+  }
+  const digits = value >= 100 || unitIndex === 0 ? 0 : value >= 10 ? 1 : 2
+  return `${value.toFixed(digits)} ${units[unitIndex]}`
+}
+
+function formatDuration(durationMs: number) {
+  if (!durationMs) return '-'
+  const totalSeconds = Math.round(durationMs / 1000)
+  if (totalSeconds < 60) return `${totalSeconds}s`
+  const minutes = Math.floor(totalSeconds / 60)
+  const seconds = totalSeconds % 60
+  if (minutes < 60) return `${minutes}m ${seconds}s`
+  const hours = Math.floor(minutes / 60)
+  return `${hours}h ${minutes % 60}m`
+}
+
+function formatTimestamp(date: string) {
+  return new Date(date).toLocaleString('zh-CN', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
+
+function formatClockNow() {
+  return new Date().toLocaleTimeString('zh-CN', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  })
+}
+
+function getStatusInfo(status: string) {
+  return BUILD_STATUSES[status as keyof typeof BUILD_STATUSES] ?? {
+    label: status,
+    color: 'bg-slate-500',
+  }
+}
+
+function buildTrendData(items: BuildTrendItem[]) {
+  const byDate = new Map<string, { success: number; failed: number; total: number }>()
+  for (const item of items) {
+    const current = byDate.get(item.date) ?? { success: 0, failed: 0, total: 0 }
+    current.total += Number(item.count)
+    if (item.status === 'success') current.success += Number(item.count)
+    if (item.status === 'failed') current.failed += Number(item.count)
+    byDate.set(item.date, current)
+  }
+  return Array.from(byDate.entries())
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([date, value]) => ({
+      date: date.slice(5),
+      success: value.success,
+      failed: value.failed,
+      total: value.total,
+    }))
+}
 
 export function DashboardPage() {
-  const [stats, setStats] = useState<DashboardStats | null>(null);
-  const [activeBuilds, setActiveBuilds] = useState<Build[]>([]);
-  const [recentBuilds, setRecentBuilds] = useState<Build[]>([]);
-  const [trend, setTrend] = useState<ChartTrendItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const [stats, setStats] = useState<DashboardStats | null>(null)
+  const [resources, setResources] = useState<DashboardSystemResources>(EMPTY_RESOURCES)
+  const [activeBuilds, setActiveBuilds] = useState<DashboardBuild[]>([])
+  const [recentBuilds, setRecentBuilds] = useState<DashboardBuild[]>([])
+  const [trend, setTrend] = useState<BuildTrendPoint[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [resourceUpdatedAt, setResourceUpdatedAt] = useState('')
 
   useEffect(() => {
-    const fetch = async () => {
+    let cancelled = false
+    const fetchDashboard = async () => {
       try {
         const [statsRes, activeRes, recentRes, trendRes] = await Promise.all([
-          api.get<DashboardStats>("/dashboard/stats"),
-          api.get<Build[]>("/dashboard/active-builds"),
-          api.get<Build[]>("/dashboard/recent-builds?limit=10"),
-          api.get<BuildTrendItem[]>("/dashboard/trend?days=7"),
-        ]);
-
-        if (statsRes.code === 0 && statsRes.data) setStats(statsRes.data as DashboardStats);
-        if (activeRes.code === 0 && activeRes.data)
-          setActiveBuilds(Array.isArray(activeRes.data) ? (activeRes.data as Build[]) : []);
-        if (recentRes.code === 0 && recentRes.data)
-          setRecentBuilds(Array.isArray(recentRes.data) ? (recentRes.data as Build[]) : []);
-
-        if (trendRes.code === 0 && trendRes.data) {
-          const byDate = new Map<string, { success: number; failed: number; total: number }>();
-          for (const item of trendRes.data as BuildTrendItem[]) {
-            const cur = byDate.get(item.date) ?? { success: 0, failed: 0, total: 0 };
-            cur.total += Number(item.count);
-            if (item.status === "success") cur.success += Number(item.count);
-            else if (item.status === "failed") cur.failed += Number(item.count);
-            byDate.set(item.date, cur);
-          }
-          setTrend(
-            Array.from(byDate.entries())
-              .sort((a, b) => a[0].localeCompare(b[0]))
-              .map(([date, v]) => ({
-                date: date.slice(5),
-                success: v.success,
-                failed: v.failed,
-                total: v.total,
-              })),
-          );
-        }
+          api.get<DashboardStats>('/dashboard/stats'),
+          api.get<DashboardBuild[]>('/dashboard/active-builds'),
+          api.get<DashboardBuild[]>('/dashboard/recent-builds?limit=8'),
+          api.get<BuildTrendItem[]>('/dashboard/trend?days=7'),
+        ])
+        if (cancelled) return
+        const nextStats = statsRes.code === 0 && statsRes.data ? (statsRes.data as DashboardStats) : null
+        const nextActive = activeRes.code === 0 && Array.isArray(activeRes.data) ? (activeRes.data as DashboardBuild[]) : []
+        const nextRecent = recentRes.code === 0 && Array.isArray(recentRes.data) ? (recentRes.data as DashboardBuild[]) : []
+        const nextTrend = trendRes.code === 0 && Array.isArray(trendRes.data) ? buildTrendData(trendRes.data as BuildTrendItem[]) : []
+        startTransition(() => {
+          setStats(nextStats)
+          setResources(nextStats?.system_resources ?? EMPTY_RESOURCES)
+          setActiveBuilds(nextActive)
+          setRecentBuilds(nextRecent)
+          setTrend(nextTrend)
+          setResourceUpdatedAt(formatClockNow())
+        })
       } catch {
-        setError("加载失败");
+        if (!cancelled) setError('仪表盘数据加载失败')
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false)
       }
-    };
-    fetch();
-  }, []);
+    }
+    fetchDashboard()
+    return () => { cancelled = true }
+  }, [])
 
-  const getStatValue = (key: keyof DashboardStats) => {
-    if (!stats) return "-";
-    const val = stats[key];
-    if (key === "success_rate" && typeof val === "number") return val.toFixed(1);
-    return String(val);
-  };
-
-  const columnHelper = createColumnHelper<Build>();
-  const columns = [
-    columnHelper.accessor("project_id", { header: "项目" }),
-    columnHelper.accessor("environment_id", { header: "环境" }),
-    columnHelper.accessor("status", {
-      header: "状态",
-      cell: ({ getValue }) => {
-        const s = String(getValue());
-        const info = BUILD_STATUSES[s as keyof typeof BUILD_STATUSES] ?? {
-          label: s,
-          color: "bg-gray-500",
-        };
-        return <Badge className={cn("text-xs", info.color, "text-white")}>{info.label}</Badge>;
-      },
-    }),
-    columnHelper.accessor("trigger_type", { header: "触发" }),
-    columnHelper.accessor("created_at", {
-      header: "时间",
-      cell: ({ getValue }) => new Date(String(getValue())).toLocaleString("zh-CN"),
-    }),
-    columnHelper.display({
-      id: "actions",
-      header: "",
-      cell: ({ row }) => (
-        <Link to={`/builds/${row.original.id}`}>
-          <Button variant="ghost" size="icon-sm">
-            <ExternalLink className="size-4" />
-          </Button>
-        </Link>
-      ),
-    }),
-  ];
-
-  const table = useReactTable({
-    data: recentBuilds,
-    columns,
-    getCoreRowModel: getCoreRowModel(),
-  });
+  useEffect(() => {
+    const timer = window.setInterval(async () => {
+      try {
+        const res = await api.get<DashboardSystemResources>('/dashboard/system-resources')
+        if (res.code === 0 && res.data) {
+          setResources(res.data as DashboardSystemResources)
+          setResourceUpdatedAt(formatClockNow())
+        }
+      } catch { /* keep last snapshot */ }
+    }, POLL_INTERVAL_MS)
+    return () => window.clearInterval(timer)
+  }, [])
 
   if (loading) {
     return (
       <div className="flex h-64 items-center justify-center">
-        <div className="size-8 animate-spin rounded-full border-2 border-zinc-600 border-t-zinc-300" />
+        <div className="size-6 animate-spin rounded-full border-2 border-border border-t-emerald-500" />
       </div>
-    );
+    )
   }
 
   if (error) {
     return (
-      <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-4 text-red-400">
+      <div className="rounded-lg border border-red-500/20 bg-red-500/8 px-4 py-3 text-sm text-red-400">
         {error}
       </div>
-    );
+    )
   }
 
-  return (
-    <div className="space-y-8">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight text-zinc-900 dark:text-white">仪表盘</h1>
-        <p className="mt-1 text-sm text-zinc-500">构建流水线概览</p>
-      </div>
+  const summaryItems = [
+    { label: '项目总数', value: String(stats?.total_projects ?? 0) },
+    { label: '今日构建', value: String(stats?.today_builds ?? 0) },
+    { label: '成功率', value: `${(stats?.success_rate ?? 0).toFixed(1)}%` },
+    { label: '运行中', value: String(stats?.active_count ?? 0) },
+  ]
 
-      {/* Stats */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {STAT_CARDS.map(({ key, label, icon: Icon, color, bgColor, suffix = "" }) => (
-          <Card key={key} className="border-zinc-200 dark:border-zinc-800">
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-zinc-500">{label}</CardTitle>
-              <div className={cn("rounded-lg p-2", bgColor)}>
-                <Icon
-                  className={cn(
-                    "size-5",
-                    color.includes("blue") && "text-blue-500",
-                    color.includes("amber") && "text-amber-500",
-                    color.includes("emerald") && "text-emerald-500",
-                    color.includes("violet") && "text-violet-500",
-                  )}
-                />
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">
-                {getStatValue(key)}
-                {suffix}
-              </div>
-            </CardContent>
-          </Card>
+  const meters = [
+    {
+      key: 'cpu',
+      label: 'CPU',
+      value: `${resources.cpu_usage_percent.toFixed(1)}%`,
+      percent: resources.cpu_usage_percent,
+      icon: Cpu,
+      color: '#34d399',
+    },
+    {
+      key: 'memory',
+      label: '内存',
+      value: resources.memory_total_bytes
+        ? `${formatBytes(resources.memory_used_bytes)} / ${formatBytes(resources.memory_total_bytes)}`
+        : '未采集',
+      percent: resources.memory_usage_percent,
+      icon: MemoryStick,
+      color: '#22d3ee',
+    },
+    {
+      key: 'disk',
+      label: '磁盘',
+      value: resources.disk_total_bytes
+        ? `${formatBytes(resources.disk_free_bytes)} 剩余`
+        : '未采集',
+      percent: resources.disk_total_bytes > 0 ? resources.disk_usage_percent : 0,
+      icon: HardDrive,
+      color: '#a78bfa',
+    },
+  ]
+
+  return (
+    <div className="space-y-4">
+      {/* Stats row */}
+      <div className="flex items-stretch border-b border-border pb-4">
+        {summaryItems.map(({ label, value }, i) => (
+          <div key={label} className={cn('flex-1 px-4', i > 0 && 'border-l border-border')}>
+            <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">{label}</p>
+            <p className="mt-1 font-mono text-3xl font-semibold text-foreground">{value}</p>
+          </div>
         ))}
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-3">
-        {/* Active builds */}
-        <Card className="lg:col-span-1 border-zinc-200 dark:border-zinc-800">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Activity className="size-5" />
-              运行中的构建
-            </CardTitle>
-            <CardDescription>当前正在执行的构建任务</CardDescription>
+      {/* System resources */}
+      <div className="flex items-center gap-4 rounded-lg border border-border bg-muted/50 px-4 py-3">
+        <div className="grid flex-1 grid-cols-3 gap-6">
+          {meters.map(({ key, label, value, percent, icon: Icon, color }) => (
+            <div key={key} className="flex items-center gap-3">
+              <Icon className="size-4 shrink-0 text-muted-foreground" />
+              <div className="min-w-0 shrink-0">
+                <p className="text-xs font-medium text-muted-foreground">{label}</p>
+                <p className="font-mono text-sm font-medium text-foreground">{value}</p>
+              </div>
+              <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
+                <div
+                  className="h-full rounded-full transition-all duration-500"
+                  style={{ width: `${clampPercent(percent)}%`, background: color }}
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
+          <RefreshCw className="size-3" />
+          {resourceUpdatedAt || '--'}
+        </div>
+      </div>
+
+      {/* Trend chart */}
+      <Card className="border-border">
+        <CardHeader className="px-4 pb-2 pt-3">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-sm font-medium text-muted-foreground">构建趋势</CardTitle>
+            <span className="text-xs text-muted-foreground">近 7 天</span>
+          </div>
+        </CardHeader>
+        <CardContent className="px-4 pb-3">
+          <BuildTrendChart data={trend} />
+        </CardContent>
+      </Card>
+
+      {/* Active builds + Recent builds */}
+      <div className="grid gap-4 xl:grid-cols-[280px_1fr]">
+        <Card className="border-border">
+          <CardHeader className="px-4 pb-2 pt-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-sm font-medium text-muted-foreground">运行中</CardTitle>
+              <Badge variant="secondary" className="font-mono text-xs">{activeBuilds.length}</Badge>
+            </div>
           </CardHeader>
-          <CardContent>
+          <CardContent className="px-4 pb-3">
             {activeBuilds.length === 0 ? (
-              <p className="text-sm text-zinc-500">暂无运行中的构建</p>
+              <p className="py-3 text-center text-xs text-muted-foreground">无运行中构建</p>
             ) : (
-              <ul className="space-y-2">
-                {activeBuilds.map((b) => {
-                  const info = BUILD_STATUSES[b.status as keyof typeof BUILD_STATUSES] ?? {
-                    label: b.status,
-                    color: "bg-gray-500",
-                  };
+              <div className="space-y-2">
+                {activeBuilds.map((build) => {
+                  const statusInfo = getStatusInfo(build.status)
                   return (
-                    <li
-                      key={b.id}
-                      className="flex items-center justify-between rounded-lg border border-zinc-200 dark:border-zinc-800 p-3"
+                    <Link
+                      key={build.id}
+                      to={`/builds/${build.id}`}
+                      className="flex items-center justify-between rounded-md border border-border px-3 py-2 transition-colors hover:bg-muted/50"
                     >
-                      <div>
-                        <p className="font-medium">#{b.build_number}</p>
-                        <p className="text-xs text-zinc-500">项目 {b.project_id}</p>
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium text-foreground">
+                          #{build.build_number} {build.project_name}
+                        </p>
+                        <p className="mt-0.5 text-xs text-muted-foreground">
+                          {STAGE_LABELS[build.current_stage] ?? build.current_stage}
+                        </p>
                       </div>
-                      <Badge className={cn(info.color, "text-white")}>{info.label}</Badge>
-                      <Link to={`/builds/${b.id}`}>
-                        <Button variant="ghost" size="icon-sm">
-                          <ChevronRight className="size-4" />
-                        </Button>
-                      </Link>
-                    </li>
-                  );
+                      <Badge className={cn('ml-2 shrink-0 text-[11px] text-white', statusInfo.color)}>
+                        {statusInfo.label}
+                      </Badge>
+                    </Link>
+                  )
                 })}
-              </ul>
+              </div>
             )}
           </CardContent>
         </Card>
 
-        {/* Chart */}
-        <Card className="lg:col-span-2 border-zinc-200 dark:border-zinc-800">
-          <CardHeader>
-            <CardTitle>构建趋势</CardTitle>
-            <CardDescription>近 7 天构建统计</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="h-[220px]">
-              {trend.length === 0 ? (
-                <div className="flex h-full items-center justify-center text-zinc-500 text-sm">
-                  暂无数据
-                </div>
-              ) : (
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={trend}>
-                    <CartesianGrid strokeDasharray="3 3" className="stroke-zinc-700" />
-                    <XAxis dataKey="date" className="text-xs" />
-                    <YAxis className="text-xs" />
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: "rgb(24 24 27)",
-                        border: "1px solid rgb(63 63 70)",
-                      }}
-                      labelStyle={{ color: "rgb(161 161 170)" }}
-                    />
-                    <Area
-                      type="monotone"
-                      dataKey="success"
-                      stackId="1"
-                      stroke="#10b981"
-                      fill="#10b981"
-                      fillOpacity={0.6}
-                      name="成功"
-                    />
-                    <Area
-                      type="monotone"
-                      dataKey="failed"
-                      stackId="1"
-                      stroke="#ef4444"
-                      fill="#ef4444"
-                      fillOpacity={0.6}
-                      name="失败"
-                    />
-                  </AreaChart>
-                </ResponsiveContainer>
-              )}
+        <Card className="border-border">
+          <CardHeader className="px-4 pb-2 pt-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-sm font-medium text-muted-foreground">最近构建</CardTitle>
+              <Button asChild variant="ghost" size="sm" className="h-6 text-xs text-muted-foreground hover:text-foreground">
+                <Link to="/projects">
+                  查看全部
+                  <ArrowUpRight className="ml-1 size-3" />
+                </Link>
+              </Button>
             </div>
+          </CardHeader>
+          <CardContent className="px-4 pb-3">
+            {recentBuilds.length === 0 ? (
+              <p className="py-3 text-center text-xs text-muted-foreground">暂无构建记录</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-border text-left text-xs text-muted-foreground">
+                      <th className="pb-2 pr-3 font-medium">构建</th>
+                      <th className="pb-2 pr-3 font-medium">状态</th>
+                      <th className="pb-2 pr-3 font-medium">分支</th>
+                      <th className="pb-2 pr-3 font-medium text-right">耗时</th>
+                      <th className="pb-2 font-medium text-right">时间</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {recentBuilds.map((build) => {
+                      const statusInfo = getStatusInfo(build.status)
+                      return (
+                        <tr key={build.id} className="border-b border-border/50 last:border-0">
+                          <td className="py-2 pr-3">
+                            <Link to={`/builds/${build.id}`} className="text-foreground">
+                              <span className="font-mono">#{build.build_number}</span>{' '}
+                              <span className="text-muted-foreground">{build.project_name}</span>
+                            </Link>
+                          </td>
+                          <td className="py-2 pr-3">
+                            <Badge className={cn('text-[11px] text-white', statusInfo.color)}>
+                              {statusInfo.label}
+                            </Badge>
+                          </td>
+                          <td className="py-2 pr-3 font-mono text-muted-foreground">{build.branch || '-'}</td>
+                          <td className="py-2 pr-3 text-right font-mono text-muted-foreground">
+                            <span className="inline-flex items-center gap-1">
+                              <Clock3 className="size-3" />
+                              {formatDuration(build.duration_ms)}
+                            </span>
+                          </td>
+                          <td className="py-2 text-right text-muted-foreground">{formatTimestamp(build.created_at)}</td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
-
-      <Card className="border-zinc-200 dark:border-zinc-800">
-        <CardHeader>
-          <CardTitle>项目分组概览</CardTitle>
-          <CardDescription>按分组查看项目与环境规模</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {!stats?.group_summary?.length ? (
-            <div className="text-sm text-zinc-500">暂无分组数据</div>
-          ) : (
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-              {stats.group_summary.map((group) => (
-                <div
-                  key={group.group_name}
-                  className="rounded-xl border border-zinc-200 p-4 dark:border-zinc-800"
-                >
-                  <p className="font-medium">{group.group_name}</p>
-                  <div className="mt-3 flex items-center gap-3 text-sm text-zinc-500">
-                    <span>{group.project_count} 个项目</span>
-                    <span>{group.environment_count} 个环境</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Recent builds table */}
-      <Card className="border-zinc-200 dark:border-zinc-800">
-        <CardHeader className="flex flex-row items-center justify-between">
-          <div>
-            <CardTitle>最近构建</CardTitle>
-            <CardDescription>最近的构建记录</CardDescription>
-          </div>
-          <Link to="/projects">
-            <Button variant="outline" size="sm">
-              查看全部
-            </Button>
-          </Link>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              {table.getHeaderGroups().map((hg) => (
-                <TableRow key={hg.id}>
-                  {hg.headers.map((h) => (
-                    <TableHead key={h.id}>
-                      {flexRender(h.column.columnDef.header, h.getContext())}
-                    </TableHead>
-                  ))}
-                </TableRow>
-              ))}
-            </TableHeader>
-            <TableBody>
-              {table.getRowModel().rows.map((row) => (
-                <TableRow key={row.id}>
-                  {row.getVisibleCells().map((cell) => (
-                    <TableCell key={cell.id}>
-                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                    </TableCell>
-                  ))}
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
     </div>
-  );
+  )
 }

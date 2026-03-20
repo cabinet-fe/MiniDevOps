@@ -11,7 +11,9 @@ import (
 type SCPDeployer struct{}
 
 func (d *SCPDeployer) Deploy(ctx context.Context, opts DeployOptions) error {
-	sshOpts := buildSSHOptionsSlice(opts.Server)
+	sshOpts, cleanup := buildSSHOptionsSlice(opts.Server)
+	defer cleanup()
+
 	source := strings.TrimSuffix(opts.SourceDir, string(filepath.Separator)) + string(filepath.Separator)
 	remotePath := normalizeRemotePath(opts.Server, opts.RemotePath)
 	remote := fmt.Sprintf("%s@%s:%s", opts.Server.Username, opts.Server.Host, remotePath)

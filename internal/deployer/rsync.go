@@ -18,7 +18,9 @@ func (d *RsyncDeployer) Deploy(ctx context.Context, opts DeployOptions) error {
 		return (&SFTPDeployer{}).Deploy(ctx, opts)
 	}
 
-	sshOpts := buildSSHOptions(opts.Server)
+	sshOpts, cleanup := buildSSHOptions(opts.Server)
+	defer cleanup()
+
 	source := strings.TrimSuffix(opts.SourceDir, string(filepath.Separator)) + string(filepath.Separator)
 	remote := fmt.Sprintf("%s@%s:%s", opts.Server.Username, opts.Server.Host, normalizeRemotePath(opts.Server, opts.RemotePath))
 

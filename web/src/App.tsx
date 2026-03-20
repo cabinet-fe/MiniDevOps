@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router'
+import { ThemeProvider } from 'next-themes'
 import { Toaster } from '@/components/ui/sonner'
 import { AppLayout } from '@/components/layout/app-layout'
 import { useAuthStore } from '@/stores/auth-store'
@@ -8,10 +9,10 @@ import { DashboardPage } from '@/pages/dashboard'
 import { ProjectListPage } from '@/pages/projects/list'
 import { ProjectDetailPage } from '@/pages/projects/detail'
 import { BuildDetailPage } from '@/pages/builds/detail'
-import { BuildListPage } from '@/pages/builds/list'
 import { ServerListPage } from '@/pages/servers/list'
 import { UserListPage } from '@/pages/users/list'
 import { AuditLogsPage } from '@/pages/audit-logs'
+import { DictionaryListPage } from '@/pages/dictionaries/list'
 import { SettingsPage } from '@/pages/settings'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -25,7 +26,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   if (!checked) {
     return (
       <div className="flex h-screen items-center justify-center">
-        <div className="size-8 animate-spin rounded-full border-2 border-zinc-600 border-t-zinc-300" />
+        <div className="size-8 animate-spin rounded-full border-2 border-muted border-t-foreground" />
       </div>
     )
   }
@@ -52,10 +53,10 @@ function AppRoutes() {
         <Route index element={<DashboardPage />} />
         <Route path="projects" element={<ProjectListPage />} />
         <Route path="projects/:id" element={<ProjectDetailPage />} />
-        <Route path="builds" element={<BuildListPage />} />
         <Route path="builds/:id" element={<BuildDetailPage />} />
         <Route path="servers" element={<ServerListPage />} />
         <Route path="users" element={<UserListPage />} />
+        <Route path="dictionaries" element={<DictionaryListPage />} />
         <Route path="audit-logs" element={<AuditLogsPage />} />
         <Route path="settings" element={<SettingsPage />} />
       </Route>
@@ -66,9 +67,11 @@ function AppRoutes() {
 
 export default function App() {
   return (
-    <BrowserRouter>
-      <AppRoutes />
-      <Toaster position="top-right" richColors />
-    </BrowserRouter>
+    <ThemeProvider attribute="class" defaultTheme="dark" enableColorScheme>
+      <BrowserRouter>
+        <AppRoutes />
+        <Toaster position="top-right" richColors />
+      </BrowserRouter>
+    </ThemeProvider>
   )
 }

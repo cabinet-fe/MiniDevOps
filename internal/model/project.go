@@ -6,7 +6,6 @@ type Project struct {
 	ID                 uint          `json:"id" gorm:"primaryKey"`
 	Name               string        `json:"name" gorm:"uniqueIndex;size:100;not null"`
 	Description        string        `json:"description" gorm:"size:500"`
-	GroupName          string        `json:"group_name" gorm:"size:100;index"`
 	Tags               string        `json:"tags" gorm:"size:500"`
 	RepoURL            string        `json:"repo_url" gorm:"size:500;not null"`
 	RepoAuthType       string        `json:"repo_auth_type" gorm:"size:20;default:none"`

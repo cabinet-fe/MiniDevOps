@@ -205,7 +205,7 @@ export function ServerFormDialog({
 
         {loading ? (
           <DialogBody className="flex items-center justify-center py-10">
-            <div className="size-8 animate-spin rounded-full border-2 border-zinc-600 border-t-zinc-300" />
+            <div className="size-8 animate-spin rounded-full border-2 border-muted border-t-foreground" />
           </DialogBody>
         ) : (
           <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
