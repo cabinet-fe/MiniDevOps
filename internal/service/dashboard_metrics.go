@@ -9,7 +9,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 )
 
@@ -212,24 +211,6 @@ func parseMemoryUsage(r io.Reader) (uint64, uint64, float64, error) {
 	usage := float64(used) / float64(total) * 100
 
 	return total, used, roundSingleDecimal(usage), nil
-}
-
-func readDiskUsage(path string) (uint64, uint64, float64, error) {
-	var fs syscall.Statfs_t
-	if err := syscall.Statfs(path, &fs); err != nil {
-		return 0, 0, 0, err
-	}
-
-	total := fs.Blocks * uint64(fs.Bsize)
-	free := fs.Bavail * uint64(fs.Bsize)
-	if total == 0 {
-		return 0, 0, 0, nil
-	}
-
-	used := total - free
-	usage := float64(used) / float64(total) * 100
-
-	return total, free, roundSingleDecimal(usage), nil
 }
 
 func roundSingleDecimal(value float64) float64 {
