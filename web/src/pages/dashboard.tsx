@@ -338,6 +338,7 @@ export function DashboardPage() {
                           #{build.build_number} {build.project_name}
                         </p>
                         <p className="mt-0.5 text-xs text-muted-foreground">
+                          {build.environment_name ? `${build.environment_name} · ` : ''}
                           {STAGE_LABELS[build.current_stage] ?? build.current_stage}
                         </p>
                       </div>
@@ -373,6 +374,7 @@ export function DashboardPage() {
                   <thead>
                     <tr className="border-b border-border text-left text-xs text-muted-foreground">
                       <th className="pb-2 pr-3 font-medium">构建</th>
+                      <th className="pb-2 pr-3 font-medium">环境</th>
                       <th className="pb-2 pr-3 font-medium">状态</th>
                       <th className="pb-2 pr-3 font-medium">分支</th>
                       <th className="pb-2 pr-3 font-medium text-right">耗时</th>
@@ -389,6 +391,9 @@ export function DashboardPage() {
                               <span className="font-mono">#{build.build_number}</span>{' '}
                               <span className="text-muted-foreground">{build.project_name}</span>
                             </Link>
+                          </td>
+                          <td className="py-2 pr-3 text-muted-foreground">
+                            {build.environment_name || '-'}
                           </td>
                           <td className="py-2 pr-3">
                             <Badge className={cn('text-[11px] text-white', statusInfo.color)}>

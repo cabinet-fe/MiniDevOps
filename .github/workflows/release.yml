@@ -53,10 +53,14 @@ jobs:
         run: |
           go build -ldflags "-s -w -X main.version=${GITHUB_REF_NAME}" \
             -o buildflow-${{ matrix.suffix }} ./cmd/server
+          go build -ldflags "-s -w -X main.version=${GITHUB_REF_NAME}" \
+            -o buildflow-agent-${{ matrix.suffix }} ./cmd/agent
       - uses: actions/upload-artifact@v7
         with:
           name: buildflow-${{ matrix.suffix }}
-          path: buildflow-${{ matrix.suffix }}
+          path: |
+            buildflow-${{ matrix.suffix }}
+            buildflow-agent-${{ matrix.suffix }}
 
   publish:
     needs: binaries

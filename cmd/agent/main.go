@@ -18,6 +18,8 @@ import (
 	"time"
 )
 
+var version = "dev"
+
 func main() {
 	addr := flag.String("addr", getenv("BUILDFLOW_AGENT_ADDR", ":9091"), "agent listen address")
 	token := flag.String("token", getenv("BUILDFLOW_AGENT_TOKEN", ""), "agent bearer token")
@@ -73,7 +75,7 @@ func healthzHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	fmt.Fprintf(w, "ok (%s)", runtime.GOOS)
+	fmt.Fprintf(w, "ok (%s %s)", runtime.GOOS, version)
 }
 
 func uploadHandler(w http.ResponseWriter, r *http.Request) {

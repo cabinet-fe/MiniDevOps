@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -15,10 +16,11 @@ import (
 	"time"
 
 	"golang.org/x/crypto/ssh"
+	"golang.org/x/crypto/ssh/agent"
 )
 
-// CreateSSHClientConfig creates ssh.ClientConfig from ServerInfo (password or key auth)
-func CreateSSHClientConfig(server ServerInfo) (*ssh.ClientConfig, error) {
+// SSHAuthMethods builds auth methods for SSH: PEM private key, password, and/or SSH agent when key auth has no embedded key.
+func SSHAuthMethods(server ServerInfo) ([]ssh.AuthMethod, error) {
 	var authMethods []ssh.AuthMethod
 
 	if server.AuthType == "key" && server.PrivateKey != "" {
@@ -33,8 +35,34 @@ func CreateSSHClientConfig(server ServerInfo) (*ssh.ClientConfig, error) {
 		authMethods = append(authMethods, ssh.Password(server.Password))
 	}
 
+	if server.AuthType == "key" && server.PrivateKey == "" {
+		authMethods = append(authMethods, sshAgentAuthMethods()...)
+	}
+
 	if len(authMethods) == 0 {
-		return nil, fmt.Errorf("no auth method available (password or private key required)")
+		return nil, fmt.Errorf("no auth method available (password, private key, or SSH agent required)")
+	}
+	return authMethods, nil
+}
+
+func sshAgentAuthMethods() []ssh.AuthMethod {
+	sock := os.Getenv("SSH_AUTH_SOCK")
+	if sock == "" {
+		return nil
+	}
+	conn, err := net.Dial("unix", sock)
+	if err != nil {
+		return nil
+	}
+	aclient := agent.NewClient(conn)
+	return []ssh.AuthMethod{ssh.PublicKeysCallback(aclient.Signers)}
+}
+
+// CreateSSHClientConfig creates ssh.ClientConfig from ServerInfo (password or key auth)
+func CreateSSHClientConfig(server ServerInfo) (*ssh.ClientConfig, error) {
+	authMethods, err := SSHAuthMethods(server)
+	if err != nil {
+		return nil, err
 	}
 
 	config := &ssh.ClientConfig{

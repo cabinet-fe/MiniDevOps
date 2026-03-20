@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"buildflow/internal/deployer"
 	"buildflow/internal/model"
 	"buildflow/internal/pkg"
 	"buildflow/internal/repository"
@@ -182,19 +183,18 @@ func (s *ServerService) testSSHConnection(server *model.Server) (string, error) 
 		addr = server.Host + ":22"
 	}
 
-	var authMethods []ssh.AuthMethod
-	if server.AuthType == "key" && server.PrivateKey != "" {
-		signer, err := ssh.ParsePrivateKey([]byte(server.PrivateKey))
-		if err != nil {
-			return "", fmt.Errorf("解析私钥失败: %w", err)
-		}
-		authMethods = append(authMethods, ssh.PublicKeys(signer))
+	info := deployer.ServerInfo{
+		Host:       server.Host,
+		Port:       server.Port,
+		OSType:     server.OSType,
+		Username:   server.Username,
+		AuthType:   server.AuthType,
+		Password:   server.Password,
+		PrivateKey: server.PrivateKey,
 	}
-	if server.AuthType == "password" && server.Password != "" {
-		authMethods = append(authMethods, ssh.Password(server.Password))
-	}
-	if len(authMethods) == 0 {
-		return "", errors.New("无法认证：未配置密码或私钥")
+	authMethods, err := deployer.SSHAuthMethods(info)
+	if err != nil {
+		return "", fmt.Errorf("无法认证：%v（可配置私钥、密码，或设置 SSH_AUTH_SOCK 使用 Agent）", err)
 	}
 
 	config := &ssh.ClientConfig{
@@ -286,9 +286,6 @@ func validateServer(server *model.Server) error {
 		}
 		if server.Username == "" {
 			return errors.New("用户名不能为空")
-		}
-		if strings.TrimSpace(server.PrivateKey) == "" {
-			return errors.New("SSH 私钥不能为空")
 		}
 	case "agent":
 		if server.AgentURL == "" {

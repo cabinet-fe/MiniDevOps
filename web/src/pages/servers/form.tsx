@@ -132,7 +132,6 @@ export function ServerFormDialog({
     }
     if (!isEdit) {
       if (form.auth_type === 'password' && !form.password) return '请输入密码'
-      if (form.auth_type === 'key' && !form.private_key.trim()) return '请输入 SSH 私钥'
       if (form.auth_type === 'agent' && !form.agent_token.trim()) return '请输入 Agent Token'
     }
     if (form.auth_type === 'agent' && !form.agent_url.trim()) {
@@ -355,13 +354,13 @@ export function ServerFormDialog({
               {form.auth_type === 'key' && (
                 <div className="space-y-2">
                   <Label htmlFor="server-private-key">
-                    {isEdit ? 'SSH 私钥（留空表示不变）' : 'SSH 私钥 *'}
+                    {isEdit ? 'SSH 私钥（留空表示不变）' : 'SSH 私钥（可选）'}
                   </Label>
                   <Textarea
                     id="server-private-key"
                     value={form.private_key}
                     onChange={(e) => setField('private_key', e.target.value)}
-                    placeholder="-----BEGIN OPENSSH PRIVATE KEY-----"
+                    placeholder="留空则使用运行环境的 SSH Agent（如已配置 authorized_keys）；或粘贴 PEM 私钥"
                     rows={5}
                     className="font-mono text-xs"
                   />
