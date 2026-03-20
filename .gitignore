@@ -5,3 +5,4 @@ cmd/server/dist/
 web/dist/
 buildflow
 buildflow-linux
+./buildflow-*

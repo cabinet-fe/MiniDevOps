@@ -14,6 +14,7 @@ import { UserListPage } from '@/pages/users/list'
 import { AuditLogsPage } from '@/pages/audit-logs'
 import { DictionaryListPage } from '@/pages/dictionaries/list'
 import { SettingsPage } from '@/pages/settings'
+import { ProjectManualPage } from '@/pages/project-manual'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, fetchMe } = useAuthStore()
@@ -51,6 +52,7 @@ function AppRoutes() {
         }
       >
         <Route index element={<DashboardPage />} />
+        <Route path="manual" element={<ProjectManualPage />} />
         <Route path="projects" element={<ProjectListPage />} />
         <Route path="projects/:id" element={<ProjectDetailPage />} />
         <Route path="builds/:id" element={<BuildDetailPage />} />

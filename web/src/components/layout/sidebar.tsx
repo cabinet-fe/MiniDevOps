@@ -8,6 +8,7 @@ import {
   FileText,
   Settings,
   BookOpen,
+  BookOpenText,
   Rocket,
   ChevronsLeft,
   ChevronsRight,
@@ -24,6 +25,7 @@ const NAV_GROUPS = [
     label: '概览',
     items: [
       { path: '/', label: '仪表盘', icon: LayoutDashboard, roles: [] as string[] },
+      { path: '/manual', label: '项目手册', icon: BookOpenText, roles: [] as string[] },
     ],
   },
   {
