@@ -83,7 +83,7 @@ EOF
 | `build.artifact_dir` | 构建产物目录 | `./data/artifacts` |
 | `build.log_dir` | 构建日志目录 | `./data/logs` |
 | `build.cache_dir` | 构建缓存目录 | `./data/caches` |
-| `encryption.key` | AES-GCM 加密密钥（64 位 hex，**生产环境务必修改**） | — |
+| `encryption.key` | AES-GCM（敏感字段）与登录可选 AES-CBC 共用密钥（64 位 hex，**生产环境务必修改**）。嵌入二进制会在响应 `index.html` 时注入该密钥到 `window.__BUILDFLOW_ENCRYPTION_KEY__`，与运行时配置一致；本地开发或非 Go 托管时可在 `web/.env` 设 `VITE_BUILDFLOW_ENCRYPTION_KEY` 对齐 | — |
 | `admin.username` | 初始管理员用户名 | `admin` |
 | `admin.password` | 初始管理员密码（**首次启动后请修改**） | — |
 
@@ -104,7 +104,7 @@ EOF
 make dev
 ```
 
-开发模式下后端使用 `-tags dev` 编译，不嵌入前端资源。访问 `http://localhost:8070` 使用前端（Vite 自动代理 API 请求到后端）。
+开发模式下后端使用 `-tags dev` 编译，不嵌入前端资源。访问 `http://localhost:8070` 使用前端（Vite 自动代理 API 请求到后端）。密文登录：开发依赖 `web/.env` 中的 `VITE_BUILDFLOW_ENCRYPTION_KEY` 与后端一致；**生产嵌入二进制**由服务端在返回的 `index.html` 中注入运行时 `encryption.key`，修改 `config.yaml` 后重启即可，无需为改密钥而重编前端（CI 中仍可注入 `VITE_*` 作为构建校验或静态托管场景的备用）。
 
 ### 构建
 

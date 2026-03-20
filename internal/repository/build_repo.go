@@ -34,7 +34,7 @@ func (r *BuildRepository) List(projectID uint, environmentID *uint, page, pageSi
 		query = query.Where("environment_id = ?", *environmentID)
 	}
 	query.Count(&total)
-	err := query.Offset((page-1)*pageSize).Limit(pageSize).Order("created_at DESC").Find(&builds).Error
+	err := query.Offset((page - 1) * pageSize).Limit(pageSize).Order("created_at DESC").Find(&builds).Error
 	return builds, total, err
 }
 
@@ -42,7 +42,7 @@ func (r *BuildRepository) ListAll(page, pageSize int) ([]model.Build, int64, err
 	var builds []model.Build
 	var total int64
 	r.db.Model(&model.Build{}).Count(&total)
-	err := r.db.Offset((page-1)*pageSize).Limit(pageSize).Order("created_at DESC").Find(&builds).Error
+	err := r.db.Offset((page - 1) * pageSize).Limit(pageSize).Order("created_at DESC").Find(&builds).Error
 	return builds, total, err
 }
 
@@ -62,6 +62,30 @@ func (r *BuildRepository) FindActiveBuilds() ([]model.Build, error) {
 	var builds []model.Build
 	err := r.db.Where("status IN ?", []string{"pending", "cloning", "building", "deploying"}).Find(&builds).Error
 	return builds, err
+}
+
+func (r *BuildRepository) CountActive() (int64, error) {
+	var count int64
+	err := r.db.Model(&model.Build{}).
+		Where("status IN ?", []string{"pending", "cloning", "building", "deploying"}).
+		Count(&count).Error
+	return count, err
+}
+
+// CountSuccessRateInDays returns success count and total builds in the last `days` days (from midnight).
+func (r *BuildRepository) CountSuccessRateInDays(days int) (success int64, total int64, err error) {
+	from := time.Now().AddDate(0, 0, -days).Truncate(24 * time.Hour)
+	var result struct {
+		Total   int64 `gorm:"column:total"`
+		Success int64 `gorm:"column:success"`
+	}
+	err = r.db.Model(&model.Build{}).Where("created_at >= ?", from).
+		Select("COUNT(*) as total, COALESCE(SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END), 0) as success").
+		Scan(&result).Error
+	if err != nil {
+		return 0, 0, err
+	}
+	return result.Success, result.Total, nil
 }
 
 func (r *BuildRepository) CountToday() (int64, error) {

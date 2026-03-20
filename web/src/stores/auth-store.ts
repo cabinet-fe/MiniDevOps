@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { api } from '@/lib/api'
+import { encryptLoginPassword } from '@/lib/login-crypto'
 
 interface User {
   id: number
@@ -27,7 +28,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   isAuthenticated: !!localStorage.getItem('access_token'),
   
   login: async (username, password) => {
-    const res = await api.post<{ access_token: string; user: User }>('/auth/login', { username, password })
+    const password_cipher = await encryptLoginPassword(password)
+    const res = await api.post<{ access_token: string; user: User }>('/auth/login', {
+      username,
+      password_cipher,
+    })
     if (res.code !== 0) throw new Error(res.message)
     localStorage.setItem('access_token', res.data!.access_token)
     set({ token: res.data!.access_token, user: res.data!.user, isAuthenticated: true })

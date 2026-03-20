@@ -8,6 +8,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 )
@@ -17,10 +18,23 @@ type cpuSnapshot struct {
 	total uint64
 }
 
+// cpuUsageState caches the last /proc/stat aggregate line so we can compute usage
+// from the delta to the current sample without sleeping on every request (the old
+// 150ms sleep dominated latency for /dashboard/stats and /dashboard/system-resources).
+var (
+	cpuUsageMu        sync.Mutex
+	cpuLastAgg        cpuSnapshot
+	cpuLastAggAt      time.Time
+	cpuLastAggValid   bool
+	cpuBootstrapSleep = 50 * time.Millisecond
+	cpuSampleMinGap   = 10 * time.Millisecond
+	cpuSampleMaxGap   = 30 * time.Second
+)
+
 func collectDashboardSystemResources(diskPath string) DashboardSystemResources {
 	resources := DashboardSystemResources{}
 
-	if usage, err := readCPUUsage("/proc/stat", 150*time.Millisecond); err == nil {
+	if usage, err := readCPUUsage("/proc/stat"); err == nil {
 		resources.CPUUsagePercent = usage
 	}
 
@@ -48,20 +62,39 @@ func collectDashboardSystemResources(diskPath string) DashboardSystemResources {
 	return resources
 }
 
-func readCPUUsage(path string, interval time.Duration) (float64, error) {
-	first, err := readCPUStatFile(path)
+func readCPUUsage(path string) (float64, error) {
+	current, err := readCPUStatFile(path)
 	if err != nil {
 		return 0, err
 	}
 
-	time.Sleep(interval)
+	cpuUsageMu.Lock()
+	if cpuLastAggValid {
+		gap := time.Since(cpuLastAggAt)
+		if gap >= cpuSampleMinGap && gap <= cpuSampleMaxGap {
+			usage := calculateCPUUsage(cpuLastAgg, current)
+			cpuLastAgg = current
+			cpuLastAggAt = time.Now()
+			cpuUsageMu.Unlock()
+			return usage, nil
+		}
+	}
+	cpuUsageMu.Unlock()
+
+	time.Sleep(cpuBootstrapSleep)
 
 	second, err := readCPUStatFile(path)
 	if err != nil {
 		return 0, err
 	}
 
-	return calculateCPUUsage(first, second), nil
+	cpuUsageMu.Lock()
+	defer cpuUsageMu.Unlock()
+	usage := calculateCPUUsage(current, second)
+	cpuLastAgg = second
+	cpuLastAggAt = time.Now()
+	cpuLastAggValid = true
+	return usage, nil
 }
 
 func readCPUStatFile(path string) (cpuSnapshot, error) {

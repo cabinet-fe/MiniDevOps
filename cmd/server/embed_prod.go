@@ -3,7 +3,9 @@
 package main
 
 import (
+	"bytes"
 	"embed"
+	"encoding/json"
 	"io/fs"
 	"net/http"
 	"strings"
@@ -18,12 +20,39 @@ func init() {
 	gin.SetMode(gin.ReleaseMode)
 }
 
-func serveSPA(r *gin.Engine) {
+func injectEncryptionKey(html []byte, keyHex string) []byte {
+	keyJSON, err := json.Marshal(keyHex)
+	if err != nil {
+		keyJSON = []byte(`""`)
+	}
+	snippet := `<script>window.__BUILDFLOW_ENCRYPTION_KEY__=` + string(keyJSON) + `</script>`
+	const marker = "</head>"
+	idx := bytes.Index(html, []byte(marker))
+	if idx < 0 {
+		return html
+	}
+	out := make([]byte, 0, len(html)+len(snippet))
+	out = append(out, html[:idx]...)
+	out = append(out, snippet...)
+	out = append(out, html[idx:]...)
+	return out
+}
+
+func serveSPA(r *gin.Engine, encryptionKeyHex string) {
 	distFS, err := fs.Sub(webFS, "dist")
 	if err != nil {
 		return
 	}
+	indexHTML, err := fs.ReadFile(distFS, "index.html")
+	if err != nil {
+		return
+	}
 	staticServer := http.FileServer(http.FS(distFS))
+
+	serveIndex := func(c *gin.Context) {
+		html := injectEncryptionKey(indexHTML, encryptionKeyHex)
+		c.Data(http.StatusOK, "text/html; charset=utf-8", html)
+	}
 
 	r.NoRoute(func(c *gin.Context) {
 		path := c.Request.URL.Path
@@ -33,9 +62,8 @@ func serveSPA(r *gin.Engine) {
 		}
 
 		trimmedPath := strings.TrimPrefix(path, "/")
-		if trimmedPath == "" {
-			c.Request.URL.Path = "/"
-			staticServer.ServeHTTP(c.Writer, c.Request)
+		if trimmedPath == "" || trimmedPath == "index.html" {
+			serveIndex(c)
 			return
 		}
 
@@ -45,7 +73,6 @@ func serveSPA(r *gin.Engine) {
 			return
 		}
 
-		c.Request.URL.Path = "/"
-		staticServer.ServeHTTP(c.Writer, c.Request)
+		serveIndex(c)
 	})
 }

@@ -220,8 +220,8 @@ func (p *Pipeline) Execute(ctx context.Context, buildID uint) {
 	}
 
 	// Select interpreter based on build script type
-	interpreter := "sh"
-	interpreterArgs := []string{"-c", env.BuildScript}
+	var interpreter string
+	var interpreterArgs []string
 	switch env.BuildScriptType {
 	case "node":
 		interpreter = "node"

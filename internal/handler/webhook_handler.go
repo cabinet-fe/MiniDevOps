@@ -251,7 +251,7 @@ func parseBitbucketWebhook(c *gin.Context, body []byte) (*webhookEvent, error) {
 	}
 	change := payload.Push.Changes[0]
 	if change.New == nil {
-		return nil, fmt.Errorf("Bitbucket payload 缺少分支信息")
+		return nil, fmt.Errorf("bitbucket payload 缺少分支信息")
 	}
 	return &webhookEvent{
 		Ref:           "refs/heads/" + change.New.Name,

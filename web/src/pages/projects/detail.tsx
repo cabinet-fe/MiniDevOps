@@ -265,7 +265,7 @@ export function ProjectDetailPage() {
         return [env.id, items] as const;
       }),
     );
-    setProject(res.data);
+    setProject({ ...res.data, environments: envs });
     setBuildsByEnv(Object.fromEntries(buildPairs));
     setLoading(false);
   }, [projectId]);

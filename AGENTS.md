@@ -44,7 +44,7 @@ make clean               # 删除 buildflow 二进制、dist、data 目录
 | WebSocket | gorilla/websocket | 1.5 |
 | 定时任务 | robfig/cron/v3 | 3.0 |
 | SFTP | pkg/sftp | — |
-| 加密 | AES-GCM + bcrypt | — |
+| 加密 | AES-GCM（敏感字段存储）+ 登录可选 AES-256-CBC（`password_cipher`）+ bcrypt | — |
 | 前端框架 | React | 19 |
 | 构建工具 | Vite | 8.x |
 | CSS | Tailwind CSS | 4.x |
@@ -178,6 +178,7 @@ SSH 连接支持密码、密钥、SSH Agent 三种认证。`path.go` 处理 Wind
 - 统一响应：`{ code: int, message: string, data?: T }`
 - 分页响应：`{ items, total, page, page_size, total_pages }`
 - 认证：Bearer JWT，access_token（2h） + refresh_token（168h）
+- 登录：`POST /api/v1/auth/login` 支持 `password`（明文，可选）与 `password_cipher`（hex，可选）。若 `password_cipher` 非空则仅解密该字段（AES-256-CBC，格式为 `hex(IV(16 字节) || PKCS#7 密文)`）；否则使用 `password`。解密失败返回 400「登录参数无效」，与凭据错误 401 区分。前端仅提交 `password_cipher`（`web/src/lib/login-crypto.ts`）：密钥来源 **优先** `window.__BUILDFLOW_ENCRYPTION_KEY__`（嵌入二进制由 Go 在返回的 `index.html` 中注入，与**运行时** `encryption.key` 一致，改配置重启即可，无需重编前端）；否则使用 `VITE_BUILDFLOW_ENCRYPTION_KEY`（dev、`vite preview`、非 Go 托管静态资源等，见 `web/.env`）。**安全上下文**（HTTPS、`localhost` 等，即存在 `crypto.subtle`）下用 **Web Crypto** 加密；**非安全上下文**（如纯 HTTP 内网 IP）下用 **`crypto-es`**（AES-256-CBC）；无有效密钥或加密失败时抛错，不再回退为明文 `password`。
 - RBAC 角色：`admin`（全权限）、`ops`（运维操作）、`dev`（只读 + 触发构建）
 - WebSocket：`/ws/` 前缀，token 通过查询参数传递
 - Webhook：`POST /api/v1/webhook/:projectId/:secret`（公开，无需认证）

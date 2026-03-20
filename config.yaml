@@ -23,4 +23,4 @@ encryption:
 admin:
   username: "admin"
   password: "admin123"
-  display_name: "Administrator"
+  display_name: "管理员"

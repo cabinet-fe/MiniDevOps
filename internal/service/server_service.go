@@ -292,13 +292,13 @@ func validateServer(server *model.Server) error {
 		}
 	case "agent":
 		if server.AgentURL == "" {
-			return errors.New("Agent URL 不能为空")
+			return errors.New("agent URL 不能为空")
 		}
 		if _, err := url.ParseRequestURI(server.AgentURL); err != nil {
-			return fmt.Errorf("Agent URL 不合法: %w", err)
+			return fmt.Errorf("agent URL 不合法: %w", err)
 		}
 		if strings.TrimSpace(server.AgentToken) == "" {
-			return errors.New("Agent Token 不能为空")
+			return errors.New("agent token 不能为空")
 		}
 	default:
 		return errors.New("不支持的认证方式")
@@ -321,7 +321,7 @@ func testAgentConnection(server *model.Server) (string, error) {
 	client := &http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("Agent 连接失败: %w", err)
+		return "", fmt.Errorf("agent 连接失败: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -331,7 +331,7 @@ func testAgentConnection(server *model.Server) (string, error) {
 		if message == "" {
 			message = resp.Status
 		}
-		return "", fmt.Errorf("Agent 健康检查失败: %s", message)
+		return "", fmt.Errorf("agent 健康检查失败: %s", message)
 	}
 
 	message := strings.TrimSpace(string(body))

@@ -2,6 +2,7 @@ package handler
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 
@@ -22,14 +23,30 @@ func NewAuthHandler(us *service.UserService, as *service.AuthService) *AuthHandl
 // POST /api/v1/auth/login
 func (h *AuthHandler) Login(c *gin.Context) {
 	var req struct {
-		Username string `json:"username" binding:"required"`
-		Password string `json:"password" binding:"required"`
+		Username       string `json:"username" binding:"required"`
+		Password       string `json:"password"`
+		PasswordCipher string `json:"password_cipher"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		pkg.Error(c, http.StatusBadRequest, "参数错误")
 		return
 	}
-	user, err := h.userService.Authenticate(req.Username, req.Password)
+	var password string
+	if strings.TrimSpace(req.PasswordCipher) != "" {
+		p, err := pkg.DecryptLoginPasswordCipher(strings.TrimSpace(req.PasswordCipher))
+		if err != nil {
+			pkg.Error(c, http.StatusBadRequest, "登录参数无效")
+			return
+		}
+		password = p
+	} else {
+		if req.Password == "" {
+			pkg.Error(c, http.StatusBadRequest, "参数错误")
+			return
+		}
+		password = req.Password
+	}
+	user, err := h.userService.Authenticate(req.Username, password)
 	if err != nil {
 		pkg.Error(c, http.StatusUnauthorized, err.Error())
 		return

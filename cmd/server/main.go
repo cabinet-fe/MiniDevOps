@@ -28,7 +28,12 @@ var version = "dev"
 
 func main() {
 	configPath := flag.String("config", "config.yaml", "path to config file")
+	showVersion := flag.Bool("version", false, "print version and exit")
 	flag.Parse()
+	if *showVersion {
+		fmt.Println(version)
+		os.Exit(0)
+	}
 
 	// Load config
 	cfg, err := config.Load(*configPath)
@@ -44,6 +49,7 @@ func main() {
 		logger, _ = zap.NewDevelopment()
 	}
 	defer logger.Sync()
+	logger.Info("BuildFlow server", zap.String("version", version))
 
 	// Init encryption
 	if err := pkg.InitEncryption(cfg.Encryption.Key); err != nil {
@@ -233,8 +239,7 @@ func main() {
 	r.GET("/ws/builds/:id/logs", wsHandler.HandleBuildLogs)
 	r.GET("/ws/notifications", wsHandler.HandleNotifications)
 
-	// Serve frontend SPA
-	serveSPA(r)
+	serveSPA(r, cfg.Encryption.Key)
 
 	// Create data directories
 	os.MkdirAll(cfg.Build.WorkspaceDir, 0755)

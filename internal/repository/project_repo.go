@@ -52,6 +52,27 @@ func (r *ProjectRepository) ListAll(createdBy *uint) ([]model.Project, error) {
 	return projects, err
 }
 
+// ListProjectTagsWithEnvCounts returns each project's tags string and environment count for dashboard tag summary (avoids loading full Environment rows).
+func (r *ProjectRepository) ListProjectTagsWithEnvCounts(createdBy *uint) ([]struct {
+	Tags     string
+	EnvCount int64 `gorm:"column:env_count"`
+}, error) {
+	var rows []struct {
+		Tags     string
+		EnvCount int64 `gorm:"column:env_count"`
+	}
+	q := r.db.Model(&model.Project{}).
+		Select("projects.tags, COUNT(environments.id) as env_count").
+		Joins("LEFT JOIN environments ON environments.project_id = projects.id").
+		Group("projects.id").
+		Order("projects.name ASC")
+	if createdBy != nil {
+		q = q.Where("projects.created_by = ?", *createdBy)
+	}
+	err := q.Scan(&rows).Error
+	return rows, err
+}
+
 func (r *ProjectRepository) Update(project *model.Project) error {
 	return r.db.Save(project).Error
 }

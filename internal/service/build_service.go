@@ -211,35 +211,22 @@ func (s *BuildService) GetDashboardStats() (*DashboardStats, error) {
 	if err != nil {
 		return nil, err
 	}
-	activeBuilds, err := s.repo.FindActiveBuilds()
+	activeCount64, err := s.repo.CountActive()
 	if err != nil {
 		return nil, err
 	}
-	// Success rate: total builds with status success / total finished builds
-	// Build repo doesn't have CountByStatus - we'd need to add it or compute from trend
-	// For simplicity, use 0 if no data
 	var successRate float64
-	trend, err := s.repo.CountByStatusInDays(30)
-	if err == nil && len(trend) > 0 {
-		var total, success int64
-		for _, r := range trend {
-			total += r.Count
-			if r.Status == "success" {
-				success += r.Count
-			}
-		}
-		if total > 0 {
-			successRate = float64(success) / float64(total) * 100
-		}
+	if success, total, err := s.repo.CountSuccessRateInDays(30); err == nil && total > 0 {
+		successRate = float64(success) / float64(total) * 100
 	}
-	projects, err := s.projectRepo.ListAll(nil)
+	projRows, err := s.projectRepo.ListProjectTagsWithEnvCounts(nil)
 	if err != nil {
 		return nil, err
 	}
 	tagStats := make(map[string]*ProjectTagSummary)
-	for _, project := range projects {
-		tags := strings.Split(project.Tags, ",")
-		if project.Tags == "" {
+	for _, row := range projRows {
+		tags := strings.Split(row.Tags, ",")
+		if row.Tags == "" {
 			tags = []string{"未标记"}
 		}
 		for _, tag := range tags {
@@ -251,7 +238,7 @@ func (s *BuildService) GetDashboardStats() (*DashboardStats, error) {
 				tagStats[tag] = &ProjectTagSummary{Tag: tag}
 			}
 			tagStats[tag].ProjectCount++
-			tagStats[tag].EnvironmentCount += len(project.Environments)
+			tagStats[tag].EnvironmentCount += int(row.EnvCount)
 		}
 	}
 	tagSummary := make([]ProjectTagSummary, 0, len(tagStats))
@@ -271,7 +258,7 @@ func (s *BuildService) GetDashboardStats() (*DashboardStats, error) {
 		TotalProjects:   totalProjects,
 		TodayBuilds:     todayBuilds,
 		SuccessRate:     successRate,
-		ActiveCount:     len(activeBuilds),
+		ActiveCount:     int(activeCount64),
 		TagSummary:      tagSummary,
 		SystemResources: collectDashboardSystemResources(diskPath),
 	}, nil
