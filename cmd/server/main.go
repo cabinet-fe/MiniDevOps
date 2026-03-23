@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/gin-contrib/gzip"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 
@@ -119,7 +120,11 @@ func main() {
 
 	// Setup Gin
 	r := gin.Default()
+	r.Use(gzip.Gzip(gzip.DefaultCompression))
 	r.Use(middleware.CORSGin(middleware.CORSConfig{}))
+
+	// Audit middleware (must be before route registration)
+	r.Use(middleware.Audit(db))
 
 	// API routes
 	api := r.Group("/api/v1")
@@ -231,9 +236,6 @@ func main() {
 		// Webhook (public, secret-verified)
 		api.POST("/webhook/:projectId/:secret", webhookHandler.Handle)
 	}
-
-	// Audit middleware on state-changing routes
-	r.Use(middleware.Audit(db))
 
 	// WebSocket routes
 	r.GET("/ws/builds/:id/logs", wsHandler.HandleBuildLogs)

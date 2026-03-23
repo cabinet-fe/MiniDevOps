@@ -13,6 +13,32 @@ export default defineConfig({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (!id.includes("node_modules")) {
+            return;
+          }
+          if (id.includes("react-dom") || id.includes("/react/")) {
+            return "react-vendor";
+          }
+          if (id.includes("react-router")) {
+            return "router";
+          }
+          if (id.includes("recharts") || id.includes("d3-")) {
+            return "charts";
+          }
+          if (id.includes("codemirror") || id.includes("@codemirror")) {
+            return "codemirror";
+          }
+          if (id.includes("echarts")) {
+            return "echarts";
+          }
+        },
+      },
+    },
+  },
   server: {
     proxy: {
       "/api": "http://localhost:8080",
