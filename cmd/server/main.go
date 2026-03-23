@@ -67,6 +67,7 @@ func main() {
 	userRepo := repository.NewUserRepository(db)
 	serverRepo := repository.NewServerRepository(db)
 	projectRepo := repository.NewProjectRepository(db)
+	credentialRepo := repository.NewCredentialRepository(db)
 	envRepo := repository.NewEnvironmentRepository(db)
 	envVarRepo := repository.NewEnvVarRepository(db)
 	varGroupRepo := repository.NewVarGroupRepository(db)
@@ -82,7 +83,8 @@ func main() {
 	}
 	userService := service.NewUserService(userRepo)
 	serverService := service.NewServerService(serverRepo, envRepo)
-	projectService := service.NewProjectService(projectRepo, envRepo, buildRepo, envVarRepo, varGroupRepo)
+	credentialService := service.NewCredentialService(credentialRepo, projectRepo, userRepo)
+	projectService := service.NewProjectService(projectRepo, credentialRepo, envRepo, buildRepo, envVarRepo, varGroupRepo)
 	buildService := service.NewBuildService(buildRepo, projectRepo, envRepo, userRepo)
 	notifService := service.NewNotificationService(notifRepo)
 	auditService := service.NewAuditService(auditRepo)
@@ -93,7 +95,7 @@ func main() {
 
 	// Init build pipeline and scheduler
 	pipeline := engine.NewPipeline(
-		buildRepo, projectRepo, envRepo, envVarRepo, varGroupRepo, serverRepo, notifRepo,
+		buildRepo, projectRepo, credentialRepo, envRepo, envVarRepo, varGroupRepo, serverRepo, notifRepo,
 		hub, logger,
 		cfg.Build.WorkspaceDir, cfg.Build.ArtifactDir, cfg.Build.LogDir, cfg.Build.CacheDir,
 	)
@@ -110,7 +112,8 @@ func main() {
 	authHandler := handler.NewAuthHandler(userService, authService)
 	userHandler := handler.NewUserHandler(userService)
 	serverHandler := handler.NewServerHandler(serverService)
-	projectHandler := handler.NewProjectHandler(projectService, cronScheduler)
+	credentialHandler := handler.NewCredentialHandler(credentialService)
+	projectHandler := handler.NewProjectHandler(projectService, credentialService, cronScheduler)
 	buildHandler := handler.NewBuildHandler(buildService, scheduler)
 	webhookHandler := handler.NewWebhookHandler(projectService, buildService, envRepo, scheduler)
 	notifHandler := handler.NewNotificationHandler(notifService)
@@ -160,6 +163,14 @@ func main() {
 				servers.DELETE("/:id", serverHandler.Delete)
 				servers.POST("/:id/test", serverHandler.TestConnection)
 			}
+
+			// Projects
+			auth.GET("/credentials", credentialHandler.List)
+			auth.POST("/credentials", credentialHandler.Create)
+			auth.GET("/credentials/select", credentialHandler.ListForSelect)
+			auth.GET("/credentials/:id", credentialHandler.GetByID)
+			auth.PUT("/credentials/:id", credentialHandler.Update)
+			auth.DELETE("/credentials/:id", credentialHandler.Delete)
 
 			// Projects
 			auth.GET("/projects", projectHandler.List)

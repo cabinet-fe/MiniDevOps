@@ -115,6 +115,7 @@ const RUNNING_BUILD_STATUSES = new Set(["pending", "cloning", "building", "deplo
 
 function formatRepoAuthType(value: string): string {
   if (!value || value === "none") return "无需认证";
+  if (value === "credential") return "凭证";
   return value;
 }
 

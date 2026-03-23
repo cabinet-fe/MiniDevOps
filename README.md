@@ -89,6 +89,23 @@ EOF
 
 所有配置项均可通过环境变量覆盖，前缀为 `BUILDFLOW_`，例如 `BUILDFLOW_SERVER_PORT=9090`。
 
+### 数据库迁移（仓库凭证）
+
+从旧版本（项目内直接保存 `repo_username/repo_password`）升级到新版本（独立凭证表）时，无需手动执行 SQL：
+
+1. 应用启动时会通过 GORM `AutoMigrate` 自动创建 `credentials` 表，并为 `projects` 表新增 `credential_id` 字段。
+2. 启动后会自动扫描历史项目：`repo_auth_type != none` 且存在 `repo_password` 的记录会被迁移为独立凭证，并自动回填 `projects.credential_id`。
+3. 迁移逻辑是幂等的，重复启动不会重复迁移同一项目。
+
+建议线上升级步骤：
+
+1. 停止旧版本服务。
+2. 备份数据库文件（默认 `data/db.sqlite`）。
+3. 部署并启动新版本，等待自动迁移完成。
+4. 验证项目凭证是否已迁移成功（进入「凭证」页面检查）。
+
+回滚方案：停止新版本，恢复备份数据库文件，并切回旧版本二进制。
+
 ## 开发指南
 
 ### 环境要求

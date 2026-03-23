@@ -26,19 +26,20 @@ import (
 )
 
 type Pipeline struct {
-	buildRepo    *repository.BuildRepository
-	projectRepo  *repository.ProjectRepository
-	envRepo      *repository.EnvironmentRepository
-	envVarRepo   *repository.EnvVarRepository
-	varGroupRepo *repository.VarGroupRepository
-	serverRepo   *repository.ServerRepository
-	notifRepo    *repository.NotificationRepository
-	hub          *ws.Hub
-	logger       *zap.Logger
-	workspaceDir string
-	artifactDir  string
-	logDir       string
-	cacheDir     string
+	buildRepo      *repository.BuildRepository
+	projectRepo    *repository.ProjectRepository
+	credentialRepo *repository.CredentialRepository
+	envRepo        *repository.EnvironmentRepository
+	envVarRepo     *repository.EnvVarRepository
+	varGroupRepo   *repository.VarGroupRepository
+	serverRepo     *repository.ServerRepository
+	notifRepo      *repository.NotificationRepository
+	hub            *ws.Hub
+	logger         *zap.Logger
+	workspaceDir   string
+	artifactDir    string
+	logDir         string
+	cacheDir       string
 }
 
 type notificationMessage struct {
@@ -57,6 +58,7 @@ type notificationMessage struct {
 func NewPipeline(
 	buildRepo *repository.BuildRepository,
 	projectRepo *repository.ProjectRepository,
+	credentialRepo *repository.CredentialRepository,
 	envRepo *repository.EnvironmentRepository,
 	envVarRepo *repository.EnvVarRepository,
 	varGroupRepo *repository.VarGroupRepository,
@@ -67,12 +69,20 @@ func NewPipeline(
 	workspaceDir, artifactDir, logDir, cacheDir string,
 ) *Pipeline {
 	return &Pipeline{
-		buildRepo: buildRepo, projectRepo: projectRepo, envRepo: envRepo,
-		envVarRepo: envVarRepo, varGroupRepo: varGroupRepo,
-		serverRepo: serverRepo, notifRepo: notifRepo,
-		hub: hub, logger: logger,
-		workspaceDir: workspaceDir, artifactDir: artifactDir, logDir: logDir,
-		cacheDir: cacheDir,
+		buildRepo:      buildRepo,
+		projectRepo:    projectRepo,
+		credentialRepo: credentialRepo,
+		envRepo:        envRepo,
+		envVarRepo:     envVarRepo,
+		varGroupRepo:   varGroupRepo,
+		serverRepo:     serverRepo,
+		notifRepo:      notifRepo,
+		hub:            hub,
+		logger:         logger,
+		workspaceDir:   workspaceDir,
+		artifactDir:    artifactDir,
+		logDir:         logDir,
+		cacheDir:       cacheDir,
 	}
 }
 
@@ -137,9 +147,11 @@ func (p *Pipeline) Execute(ctx context.Context, buildID uint) {
 	writeLine("=== Stage: Cloning ===")
 	workDir := filepath.Join(p.workspaceDir, fmt.Sprintf("project-%d", project.ID), fmt.Sprintf("env-%d", env.ID))
 
-	repoPassword := ""
-	if project.RepoPassword != "" {
-		repoPassword, _ = pkg.Decrypt(project.RepoPassword)
+	authType, repoUsername, repoPassword, err := p.resolveProjectGitAuth(project)
+	if err != nil {
+		p.failBuild(build, "仓库凭证错误: "+err.Error())
+		writeLine("ERROR: " + err.Error())
+		return
 	}
 
 	// Use build-level branch override if specified, otherwise use env default
@@ -148,7 +160,7 @@ func (p *Pipeline) Execute(ctx context.Context, buildID uint) {
 		branch = build.Branch
 	}
 
-	err = GitCloneOrPull(ctx, workDir, project.RepoURL, project.RepoAuthType, project.RepoUsername, repoPassword, branch, writeLine)
+	err = GitCloneOrPull(ctx, workDir, project.RepoURL, authType, repoUsername, repoPassword, branch, writeLine)
 	if err != nil {
 		if ctx.Err() != nil {
 			p.cancelBuild(build)
@@ -564,6 +576,35 @@ func decryptPipelineValue(value string, isSecret bool) (string, error) {
 		return value, nil
 	}
 	return pkg.Decrypt(value)
+}
+
+func (p *Pipeline) resolveProjectGitAuth(project *model.Project) (string, string, string, error) {
+	switch strings.ToLower(strings.TrimSpace(project.RepoAuthType)) {
+	case "", "none":
+		return "none", "", "", nil
+	case "credential":
+		if project.CredentialID == nil || *project.CredentialID == 0 {
+			return "", "", "", fmt.Errorf("project credential is empty")
+		}
+		credential, err := p.credentialRepo.FindByID(*project.CredentialID)
+		if err != nil {
+			return "", "", "", err
+		}
+		secret := ""
+		if credential.Password != "" {
+			secret, err = pkg.Decrypt(credential.Password)
+			if err != nil {
+				return "", "", "", err
+			}
+		}
+		authType := "password"
+		if strings.ToLower(strings.TrimSpace(credential.Type)) == "token" {
+			authType = "token"
+		}
+		return authType, credential.Username, secret, nil
+	default:
+		return "none", "", "", nil
+	}
 }
 
 func artifactArchiveName(buildNumber int, format string) string {

@@ -3,13 +3,16 @@ package model
 import "time"
 
 type Project struct {
-	ID                 uint          `json:"id" gorm:"primaryKey"`
-	Name               string        `json:"name" gorm:"uniqueIndex;size:100;not null"`
-	Description        string        `json:"description" gorm:"size:500"`
-	Tags               string        `json:"tags" gorm:"size:500"`
-	RepoURL            string        `json:"repo_url" gorm:"size:500;not null"`
-	RepoAuthType       string        `json:"repo_auth_type" gorm:"size:20;default:none"`
-	RepoUsername       string        `json:"repo_username" gorm:"size:200"`
+	ID           uint   `json:"id" gorm:"primaryKey"`
+	Name         string `json:"name" gorm:"uniqueIndex;size:100;not null"`
+	Description  string `json:"description" gorm:"size:500"`
+	Tags         string `json:"tags" gorm:"size:500"`
+	RepoURL      string `json:"repo_url" gorm:"size:500;not null"`
+	RepoAuthType string `json:"repo_auth_type" gorm:"size:20;default:none"`
+	CredentialID *uint  `json:"credential_id"`
+	// Deprecated: kept for compatibility and migration fallback.
+	RepoUsername string `json:"repo_username" gorm:"size:200"`
+	// Deprecated: kept for compatibility and migration fallback.
 	RepoPassword       string        `json:"-" gorm:"size:1000"`
 	MaxArtifacts       int           `json:"max_artifacts" gorm:"default:5"`
 	ArtifactFormat     string        `json:"artifact_format" gorm:"size:20;default:gzip"`

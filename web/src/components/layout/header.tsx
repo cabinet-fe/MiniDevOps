@@ -1,5 +1,21 @@
 import { Link, useLocation } from 'react-router'
-import { PanelLeft, ChevronRight, Sun, Moon } from 'lucide-react'
+import {
+  PanelLeft,
+  ChevronRight,
+  Sun,
+  Moon,
+  LayoutDashboard,
+  FolderGit2,
+  Server,
+  Users,
+  FileText,
+  Settings,
+  BookOpenText,
+  KeyRound,
+  BookOpen,
+  Hammer,
+  type LucideIcon,
+} from 'lucide-react'
 import { useTheme } from 'next-themes'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -12,43 +28,49 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { Separator } from '@/components/ui/separator'
 import { useAuthStore } from '@/stores/auth-store'
 
-const ROUTE_TITLES: Record<string, string> = {
-  '/': '仪表盘',
-  '/projects': '项目',
-  '/servers': '服务器',
-  '/users': '用户',
-  '/audit-logs': '审计日志',
-  '/settings': '设置',
+const ROUTE_META: Record<string, { label: string; icon: LucideIcon }> = {
+  '/': { label: '仪表盘', icon: LayoutDashboard },
+  '/projects': { label: '项目', icon: FolderGit2 },
+  '/credentials': { label: '凭证', icon: KeyRound },
+  '/servers': { label: '服务器', icon: Server },
+  '/users': { label: '用户', icon: Users },
+  '/audit-logs': { label: '审计日志', icon: FileText },
+  '/settings': { label: '设置', icon: Settings },
+  '/manual': { label: '项目手册', icon: BookOpenText },
+  '/dictionaries': { label: '数据字典', icon: BookOpen },
 }
 
-function getBreadcrumb(pathname: string): { label: string; href?: string }[] {
+function getBreadcrumb(pathname: string): { label: string; href?: string; icon?: LucideIcon }[] {
   const segments = pathname.split('/').filter(Boolean)
-  if (segments.length === 0) return [{ label: '仪表盘' }]
+  if (segments.length === 0) return [{ label: '仪表盘', icon: LayoutDashboard }]
 
-  const crumbs: { label: string; href?: string }[] = []
+  const crumbs: { label: string; href?: string; icon?: LucideIcon }[] = []
   let current = ''
 
   for (let i = 0; i < segments.length; i++) {
     current += '/' + segments[i]
     const key = current
-    if (ROUTE_TITLES[key]) {
+    const meta = ROUTE_META[key]
+    if (meta) {
       crumbs.push({
-        label: ROUTE_TITLES[key],
+        label: meta.label,
+        icon: i === 0 ? meta.icon : undefined,
         href: i < segments.length - 1 ? key : undefined,
       })
     } else if (/^\d+$/.test(segments[i])) {
       crumbs.push({ label: `#${segments[i]}` })
     } else if (segments[i] === 'builds' && segments[i + 1]) {
-      crumbs.push({ label: `Build #${segments[i + 1]}` })
+      crumbs.push({ label: `Build #${segments[i + 1]}`, icon: Hammer })
       i++
     } else {
       crumbs.push({ label: segments[i] })
     }
   }
 
-  return crumbs.length > 0 ? crumbs : [{ label: '仪表盘' }]
+  return crumbs.length > 0 ? crumbs : [{ label: '仪表盘', icon: LayoutDashboard }]
 }
 
 interface HeaderProps {
@@ -63,7 +85,7 @@ export function Header({ onMenuClick }: HeaderProps) {
   const { theme, setTheme } = useTheme()
 
   return (
-    <header className="flex h-11 shrink-0 items-center justify-between border-b border-border bg-card/90 px-4 backdrop-blur-sm">
+    <header className="flex h-12 shrink-0 items-center justify-between border-b border-border/60 bg-background/80 px-4 shadow-[0_1px_3px_0_rgba(0,0,0,0.04)] backdrop-blur-md dark:shadow-[0_1px_3px_0_rgba(0,0,0,0.2)]">
       <div className="flex items-center gap-2">
         <Button
           variant="ghost"
@@ -73,40 +95,51 @@ export function Header({ onMenuClick }: HeaderProps) {
         >
           <PanelLeft className="size-4" />
         </Button>
-        <nav className="flex items-center gap-1 text-sm">
-          {breadcrumb.map((crumb, i) => (
-            <span key={i} className="flex items-center gap-1">
-              {i > 0 && (
-                <ChevronRight className="size-3.5 text-muted-foreground/50" />
-              )}
-              {crumb.href ? (
-                <Link
-                  to={crumb.href}
-                  className="text-muted-foreground transition-colors hover:text-foreground"
-                >
-                  {crumb.label}
-                </Link>
-              ) : (
-                <span
-                  className={cn(
-                    i === breadcrumb.length - 1
-                      ? 'font-medium text-foreground'
-                      : 'text-muted-foreground'
-                  )}
-                >
-                  {crumb.label}
-                </span>
-              )}
-            </span>
-          ))}
+        <nav className="flex items-center gap-1.5 text-sm">
+          {breadcrumb.map((crumb, i) => {
+            const Icon = crumb.icon
+            return (
+              <span key={i} className="flex items-center gap-1.5">
+                {i > 0 && (
+                  <ChevronRight className="size-3 text-muted-foreground/40" />
+                )}
+                {crumb.href ? (
+                  <Link
+                    to={crumb.href}
+                    className="flex items-center gap-1.5 text-muted-foreground transition-colors hover:text-foreground"
+                  >
+                    {Icon && <Icon className="size-3.5 text-emerald-500/70" />}
+                    {crumb.label}
+                  </Link>
+                ) : (
+                  <span
+                    className={cn(
+                      'flex items-center gap-1.5',
+                      i === breadcrumb.length - 1
+                        ? 'font-semibold text-foreground'
+                        : 'text-muted-foreground'
+                    )}
+                  >
+                    {Icon && (
+                      <Icon className={cn(
+                        'size-3.5',
+                        i === breadcrumb.length - 1 ? 'text-emerald-500' : 'text-emerald-500/70'
+                      )} />
+                    )}
+                    {crumb.label}
+                  </span>
+                )}
+              </span>
+            )
+          })}
         </nav>
       </div>
 
-      <div className="flex items-center gap-1.5">
+      <div className="flex items-center gap-1">
         <Button
           variant="ghost"
           size="icon"
-          className="size-8"
+          className="size-8 text-muted-foreground hover:bg-accent hover:text-foreground"
           onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
         >
           <Sun className="size-4 rotate-0 scale-100 transition-transform dark:-rotate-90 dark:scale-0" />
@@ -114,15 +147,21 @@ export function Header({ onMenuClick }: HeaderProps) {
           <span className="sr-only">切换主题</span>
         </Button>
         <NotificationBell />
+
+        <Separator orientation="vertical" className="mx-1.5 h-5" />
+
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" className="relative h-8 w-8 rounded-full">
-              <Avatar className="size-7">
+            <Button variant="ghost" className="relative h-8 gap-2 rounded-full pl-1 pr-2">
+              <Avatar className="size-6">
                 <AvatarImage src={user?.avatar} alt={user?.display_name} />
-                <AvatarFallback className="bg-gradient-to-br from-emerald-500 to-teal-600 text-xs text-white">
+                <AvatarFallback className="bg-gradient-to-br from-emerald-500 to-teal-600 text-[10px] font-medium text-white">
                   {user?.display_name?.slice(0, 2).toUpperCase() ?? 'U'}
                 </AvatarFallback>
               </Avatar>
+              <span className="hidden text-sm font-medium text-foreground md:inline">
+                {user?.display_name}
+              </span>
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-52">

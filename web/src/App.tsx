@@ -17,6 +17,9 @@ const ProjectListPage = lazy(() =>
 const ProjectDetailPage = lazy(() =>
   import('@/pages/projects/detail').then((m) => ({ default: m.ProjectDetailPage })),
 )
+const CredentialListPage = lazy(() =>
+  import('@/pages/credentials/list').then((m) => ({ default: m.CredentialListPage })),
+)
 const BuildDetailPage = lazy(() =>
   import('@/pages/builds/detail').then((m) => ({ default: m.BuildDetailPage })),
 )
@@ -127,6 +130,14 @@ function AppRoutes() {
           element={
             <Suspense fallback={<RouteFallback />}>
               <ProjectDetailPage />
+            </Suspense>
+          }
+        />
+        <Route
+          path="credentials"
+          element={
+            <Suspense fallback={<RouteFallback />}>
+              <CredentialListPage />
             </Suspense>
           }
         />

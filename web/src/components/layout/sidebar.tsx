@@ -10,6 +10,7 @@ import {
   BookOpen,
   BookOpenText,
   Rocket,
+  KeyRound,
   ChevronsLeft,
   ChevronsRight,
 } from 'lucide-react'
@@ -32,6 +33,7 @@ const NAV_GROUPS = [
     label: '资源',
     items: [
       { path: '/projects', label: '项目', icon: FolderGit2, roles: [] as string[] },
+      { path: '/credentials', label: '凭证', icon: KeyRound, roles: [] as string[] },
       { path: '/servers', label: '服务器', icon: Server, roles: [] as string[] },
     ],
   },

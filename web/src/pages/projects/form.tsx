@@ -44,8 +44,7 @@ interface ProjectPayload {
   tags: string
   repo_url: string
   repo_auth_type: string
-  repo_username: string
-  repo_password: string
+  credential_id: number | null
   max_artifacts: number
   artifact_format: string
   webhook_type: string
@@ -54,7 +53,7 @@ interface ProjectPayload {
   webhook_message_path: string
 }
 
-interface ProjectDetail extends Omit<ProjectPayload, 'repo_password'> {
+interface ProjectDetail extends ProjectPayload {
   id: number
 }
 
@@ -64,8 +63,7 @@ const DEFAULT_FORM: ProjectPayload = {
   tags: '',
   repo_url: '',
   repo_auth_type: 'none',
-  repo_username: '',
-  repo_password: '',
+  credential_id: null,
   max_artifacts: 5,
   artifact_format: 'gzip',
   webhook_type: 'auto',
@@ -77,6 +75,12 @@ const DEFAULT_FORM: ProjectPayload = {
 interface DictTagOption {
   label: string
   value: string
+}
+
+interface CredentialOption {
+  id: number
+  name: string
+  type: string
 }
 
 interface ProjectFormDialogProps {
@@ -99,6 +103,7 @@ export function ProjectFormDialog({
   const [error, setError] = useState('')
   const [form, setForm] = useState<ProjectPayload>(DEFAULT_FORM)
   const [tagOptions, setTagOptions] = useState<DictTagOption[]>([])
+  const [credentialOptions, setCredentialOptions] = useState<CredentialOption[]>([])
   const [tagPopoverOpen, setTagPopoverOpen] = useState(false)
 
   useEffect(() => {
@@ -113,6 +118,14 @@ export function ProjectFormDialog({
       .then((res) => {
         if (res.code === 0 && res.data) {
           setTagOptions(res.data)
+        }
+      })
+
+    api
+      .get<CredentialOption[]>('/credentials/select')
+      .then((res) => {
+        if (res.code === 0 && res.data) {
+          setCredentialOptions(res.data)
         }
       })
 
@@ -131,8 +144,7 @@ export function ProjectFormDialog({
           tags: res.data.tags || '',
           repo_url: res.data.repo_url || '',
           repo_auth_type: res.data.repo_auth_type || 'none',
-          repo_username: res.data.repo_username || '',
-          repo_password: '',
+          credential_id: res.data.credential_id ?? null,
           max_artifacts: res.data.max_artifacts || 5,
           artifact_format: res.data.artifact_format || 'gzip',
           webhook_type: res.data.webhook_type || 'auto',
@@ -180,8 +192,8 @@ export function ProjectFormDialog({
     if (!form.name.trim()) return '请输入项目名称'
     if (!form.repo_url.trim()) return '请输入仓库地址'
     if (form.max_artifacts < 1) return '构建产物保留数量必须大于 0'
-    if (!isEdit && form.repo_auth_type !== 'none' && !form.repo_password.trim()) {
-      return '请填写仓库认证信息'
+    if (form.repo_auth_type === 'credential' && !form.credential_id) {
+      return '请选择仓库凭证'
     }
     if (form.webhook_type === 'generic' && !form.webhook_ref_path.trim()) {
       return '通用 Webhook 必须配置 ref JSONPath'
@@ -207,8 +219,7 @@ export function ProjectFormDialog({
         tags: form.tags.trim(),
         repo_url: form.repo_url.trim(),
         repo_auth_type: form.repo_auth_type,
-        repo_username: form.repo_auth_type === 'none' ? '' : form.repo_username.trim(),
-        repo_password: form.repo_auth_type === 'none' ? '' : form.repo_password,
+        credential_id: form.repo_auth_type === 'credential' ? form.credential_id : null,
         max_artifacts: form.max_artifacts,
         artifact_format: form.artifact_format,
         webhook_type: form.webhook_type,
@@ -428,8 +439,7 @@ export function ProjectFormDialog({
                         setForm((prev) => ({
                           ...prev,
                           repo_auth_type: value,
-                          repo_username: '',
-                          repo_password: '',
+                          credential_id: null,
                         }))
                         return
                       }
@@ -467,26 +477,32 @@ export function ProjectFormDialog({
               </div>
 
               {form.repo_auth_type !== 'none' && (
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="project-repo-username">用户名</Label>
-                    <Input
-                      id="project-repo-username"
-                      value={form.repo_username}
-                      onChange={(e) => setField('repo_username', e.target.value)}
-                      placeholder="仓库用户名"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="project-repo-password">{isEdit ? '更新凭证' : '凭证'} *</Label>
-                    <Input
-                      id="project-repo-password"
-                      type="password"
-                      value={form.repo_password}
-                      onChange={(e) => setField('repo_password', e.target.value)}
-                      placeholder={isEdit ? '留空则保持不变' : '输入密码或 Token'}
-                    />
-                  </div>
+                <div className="space-y-2">
+                  <Label>仓库凭证 *</Label>
+                  <Select
+                    value={form.credential_id ? String(form.credential_id) : ''}
+                    onValueChange={(value) => setField('credential_id', Number(value))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="请选择凭证" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {credentialOptions.map((item) => (
+                        <SelectItem key={item.id} value={String(item.id)}>
+                          {item.name} ({item.type === 'token' ? 'Token' : '用户名/密码'})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-muted-foreground text-xs">
+                    若未找到目标凭证，请先到「凭证」页面创建。
+                  </p>
+                </div>
+              )}
+
+              {form.repo_auth_type === 'none' && (
+                <div className="rounded-lg border border-dashed border-border p-3 text-xs text-muted-foreground">
+                  当前仓库配置为无需认证，将直接使用匿名方式访问代码仓库。
                 </div>
               )}
 

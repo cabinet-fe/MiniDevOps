@@ -83,7 +83,8 @@ func buildAuthURL(repoURL, authType, username, password string) string {
 		return repoURL
 	}
 	if authType == "token" {
-		u.User = url.UserPassword(username, password)
+		platform := DetectPlatform(repoURL)
+		u = platform.BuildTokenAuthURL(u, username, password)
 	} else {
 		u.User = url.UserPassword(username, password)
 	}

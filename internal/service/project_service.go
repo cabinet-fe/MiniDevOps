@@ -17,26 +17,29 @@ import (
 )
 
 type ProjectService struct {
-	repo         *repository.ProjectRepository
-	envRepo      *repository.EnvironmentRepository
-	buildRepo    *repository.BuildRepository
-	envVarRepo   *repository.EnvVarRepository
-	varGroupRepo *repository.VarGroupRepository
+	repo           *repository.ProjectRepository
+	credentialRepo *repository.CredentialRepository
+	envRepo        *repository.EnvironmentRepository
+	buildRepo      *repository.BuildRepository
+	envVarRepo     *repository.EnvVarRepository
+	varGroupRepo   *repository.VarGroupRepository
 }
 
 func NewProjectService(
 	repo *repository.ProjectRepository,
+	credentialRepo *repository.CredentialRepository,
 	envRepo *repository.EnvironmentRepository,
 	buildRepo *repository.BuildRepository,
 	envVarRepo *repository.EnvVarRepository,
 	varGroupRepo *repository.VarGroupRepository,
 ) *ProjectService {
 	return &ProjectService{
-		repo:         repo,
-		envRepo:      envRepo,
-		buildRepo:    buildRepo,
-		envVarRepo:   envVarRepo,
-		varGroupRepo: varGroupRepo,
+		repo:           repo,
+		credentialRepo: credentialRepo,
+		envRepo:        envRepo,
+		buildRepo:      buildRepo,
+		envVarRepo:     envVarRepo,
+		varGroupRepo:   varGroupRepo,
 	}
 }
 
@@ -57,14 +60,13 @@ func (s *ProjectService) Create(project *model.Project) error {
 	if project.WebhookType == "" {
 		project.WebhookType = "auto"
 	}
-	project.ArtifactFormat = normalizeProjectArtifactFormat(project.ArtifactFormat)
-	if project.RepoPassword != "" {
-		enc, err := pkg.Encrypt(project.RepoPassword)
-		if err != nil {
-			return err
-		}
-		project.RepoPassword = enc
+	project.RepoAuthType = normalizeRepoAuthType(project.RepoAuthType)
+	if err := s.validateProjectCredential(project); err != nil {
+		return err
 	}
+	project.ArtifactFormat = normalizeProjectArtifactFormat(project.ArtifactFormat)
+	project.RepoUsername = ""
+	project.RepoPassword = ""
 	return s.repo.Create(project)
 }
 
@@ -92,18 +94,21 @@ func (s *ProjectService) Update(project *model.Project) error {
 	if err != nil {
 		return err
 	}
-	if project.RepoPassword != "" && project.RepoPassword != existing.RepoPassword {
-		enc, err := pkg.Encrypt(project.RepoPassword)
-		if err != nil {
-			return err
-		}
-		project.RepoPassword = enc
-	} else {
-		project.RepoPassword = existing.RepoPassword
-	}
 	if project.WebhookType == "" {
 		project.WebhookType = existing.WebhookType
 	}
+	if project.RepoAuthType == "" {
+		project.RepoAuthType = existing.RepoAuthType
+	}
+	if project.CredentialID == nil {
+		project.CredentialID = existing.CredentialID
+	}
+	project.RepoAuthType = normalizeRepoAuthType(project.RepoAuthType)
+	if err := s.validateProjectCredential(project); err != nil {
+		return err
+	}
+	project.RepoUsername = ""
+	project.RepoPassword = ""
 	project.ArtifactFormat = normalizeProjectArtifactFormat(project.ArtifactFormat)
 	return s.repo.Update(project)
 }
@@ -138,6 +143,7 @@ type ProjectExport struct {
 	Tags               string              `json:"tags"`
 	RepoURL            string              `json:"repo_url"`
 	RepoAuthType       string              `json:"repo_auth_type"`
+	CredentialID       *uint               `json:"credential_id,omitempty"`
 	RepoUsername       string              `json:"repo_username"`
 	MaxArtifacts       int                 `json:"max_artifacts"`
 	ArtifactFormat     string              `json:"artifact_format"`
@@ -183,6 +189,7 @@ func (s *ProjectService) Export(id uint) ([]byte, error) {
 		Tags:               project.Tags,
 		RepoURL:            project.RepoURL,
 		RepoAuthType:       project.RepoAuthType,
+		CredentialID:       project.CredentialID,
 		RepoUsername:       project.RepoUsername,
 		MaxArtifacts:       project.MaxArtifacts,
 		ArtifactFormat:     normalizeProjectArtifactFormat(project.ArtifactFormat),
@@ -249,6 +256,7 @@ func (s *ProjectService) Import(data []byte, createdBy uint) (*model.Project, er
 		Tags:               exp.Tags,
 		RepoURL:            exp.RepoURL,
 		RepoAuthType:       exp.RepoAuthType,
+		CredentialID:       exp.CredentialID,
 		RepoUsername:       exp.RepoUsername,
 		MaxArtifacts:       exp.MaxArtifacts,
 		ArtifactFormat:     normalizeProjectArtifactFormat(exp.ArtifactFormat),
@@ -301,6 +309,32 @@ func (s *ProjectService) Import(data []byte, createdBy uint) (*model.Project, er
 	return s.repo.FindByID(project.ID)
 }
 
+func (s *ProjectService) ResolveRepoAuth(project *model.Project) (string, string, string, error) {
+	authType := normalizeRepoAuthType(project.RepoAuthType)
+	if authType == "none" {
+		return "none", "", "", nil
+	}
+	if project.CredentialID == nil || *project.CredentialID == 0 {
+		return "", "", "", errors.New("项目未配置凭证")
+	}
+	credential, err := s.credentialRepo.FindByID(*project.CredentialID)
+	if err != nil {
+		return "", "", "", err
+	}
+	password := ""
+	if credential.Password != "" {
+		password, err = pkg.Decrypt(credential.Password)
+		if err != nil {
+			return "", "", "", err
+		}
+	}
+	gitAuthType := "password"
+	if normalizeCredentialType(credential.Type) == "token" {
+		gitAuthType = "token"
+	}
+	return gitAuthType, credential.Username, password, nil
+}
+
 func normalizeProjectArtifactFormat(format string) string {
 	switch strings.ToLower(strings.TrimSpace(format)) {
 	case "zip":
@@ -308,6 +342,29 @@ func normalizeProjectArtifactFormat(format string) string {
 	default:
 		return "gzip"
 	}
+}
+
+func normalizeRepoAuthType(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "credential":
+		return "credential"
+	default:
+		return "none"
+	}
+}
+
+func (s *ProjectService) validateProjectCredential(project *model.Project) error {
+	if project.RepoAuthType != "credential" {
+		project.CredentialID = nil
+		return nil
+	}
+	if project.CredentialID == nil || *project.CredentialID == 0 {
+		return errors.New("请选择仓库凭证")
+	}
+	if _, err := s.credentialRepo.FindByID(*project.CredentialID); err != nil {
+		return errors.New("仓库凭证不存在")
+	}
+	return nil
 }
 
 func (s *ProjectService) ListEnvironments(projectID uint) ([]model.Environment, error) {

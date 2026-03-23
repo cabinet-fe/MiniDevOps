@@ -86,3 +86,9 @@ func (r *ProjectRepository) Count() (int64, error) {
 	err := r.db.Model(&model.Project{}).Count(&count).Error
 	return count, err
 }
+
+func (r *ProjectRepository) CountByCredentialID(credentialID uint) (int64, error) {
+	var count int64
+	err := r.db.Model(&model.Project{}).Where("credential_id = ?", credentialID).Count(&count).Error
+	return count, err
+}

@@ -23,12 +23,13 @@ type CronNotifier interface {
 }
 
 type ProjectHandler struct {
-	projectService *service.ProjectService
-	cronNotifier   CronNotifier
+	projectService    *service.ProjectService
+	credentialService *service.CredentialService
+	cronNotifier      CronNotifier
 }
 
-func NewProjectHandler(ps *service.ProjectService, cn CronNotifier) *ProjectHandler {
-	return &ProjectHandler{projectService: ps, cronNotifier: cn}
+func NewProjectHandler(ps *service.ProjectService, cs *service.CredentialService, cn CronNotifier) *ProjectHandler {
+	return &ProjectHandler{projectService: ps, credentialService: cs, cronNotifier: cn}
 }
 
 // GET /api/v1/projects - list (pass role and user_id for filtering)
@@ -52,8 +53,7 @@ func (h *ProjectHandler) Create(c *gin.Context) {
 		Tags               string `json:"tags"`
 		RepoURL            string `json:"repo_url" binding:"required"`
 		RepoAuthType       string `json:"repo_auth_type"`
-		RepoUsername       string `json:"repo_username"`
-		RepoPassword       string `json:"repo_password"`
+		CredentialID       *uint  `json:"credential_id"`
 		MaxArtifacts       int    `json:"max_artifacts"`
 		ArtifactFormat     string `json:"artifact_format"`
 		WebhookType        string `json:"webhook_type"`
@@ -75,8 +75,7 @@ func (h *ProjectHandler) Create(c *gin.Context) {
 		Tags:               req.Tags,
 		RepoURL:            req.RepoURL,
 		RepoAuthType:       req.RepoAuthType,
-		RepoUsername:       req.RepoUsername,
-		RepoPassword:       req.RepoPassword,
+		CredentialID:       req.CredentialID,
 		MaxArtifacts:       req.MaxArtifacts,
 		ArtifactFormat:     req.ArtifactFormat,
 		WebhookType:        req.WebhookType,
@@ -84,6 +83,17 @@ func (h *ProjectHandler) Create(c *gin.Context) {
 		WebhookCommitPath:  req.WebhookCommitPath,
 		WebhookMessagePath: req.WebhookMessagePath,
 		CreatedBy:          middleware.GetUserID(c),
+	}
+	if project.RepoAuthType == "credential" && project.CredentialID != nil {
+		allowed, err := h.credentialService.CanUseCredential(*project.CredentialID, middleware.GetUserID(c), middleware.GetRole(c))
+		if err != nil {
+			pkg.Error(c, http.StatusInternalServerError, "校验凭证失败")
+			return
+		}
+		if !allowed {
+			pkg.Error(c, http.StatusForbidden, "无权使用该凭证")
+			return
+		}
 	}
 	if err := h.projectService.Create(project); err != nil {
 		pkg.Error(c, http.StatusBadRequest, err.Error())
@@ -125,8 +135,7 @@ func (h *ProjectHandler) Update(c *gin.Context) {
 		Tags               *string `json:"tags"`
 		RepoURL            *string `json:"repo_url"`
 		RepoAuthType       *string `json:"repo_auth_type"`
-		RepoUsername       *string `json:"repo_username"`
-		RepoPassword       *string `json:"repo_password"`
+		CredentialID       *uint   `json:"credential_id"`
 		MaxArtifacts       *int    `json:"max_artifacts"`
 		ArtifactFormat     *string `json:"artifact_format"`
 		WebhookType        *string `json:"webhook_type"`
@@ -153,11 +162,8 @@ func (h *ProjectHandler) Update(c *gin.Context) {
 	if req.RepoAuthType != nil {
 		project.RepoAuthType = *req.RepoAuthType
 	}
-	if req.RepoUsername != nil {
-		project.RepoUsername = *req.RepoUsername
-	}
-	if req.RepoPassword != nil {
-		project.RepoPassword = *req.RepoPassword
+	if req.CredentialID != nil {
+		project.CredentialID = req.CredentialID
 	}
 	if req.MaxArtifacts != nil {
 		project.MaxArtifacts = *req.MaxArtifacts
@@ -177,8 +183,19 @@ func (h *ProjectHandler) Update(c *gin.Context) {
 	if req.WebhookMessagePath != nil {
 		project.WebhookMessagePath = *req.WebhookMessagePath
 	}
+	if project.RepoAuthType == "credential" && project.CredentialID != nil {
+		allowed, err := h.credentialService.CanUseCredential(*project.CredentialID, middleware.GetUserID(c), middleware.GetRole(c))
+		if err != nil {
+			pkg.Error(c, http.StatusInternalServerError, "校验凭证失败")
+			return
+		}
+		if !allowed {
+			pkg.Error(c, http.StatusForbidden, "无权使用该凭证")
+			return
+		}
+	}
 	if err := h.projectService.Update(project); err != nil {
-		pkg.Error(c, http.StatusInternalServerError, "更新失败")
+		pkg.Error(c, http.StatusBadRequest, err.Error())
 		return
 	}
 	pkg.Success(c, project)
@@ -610,11 +627,12 @@ func (h *ProjectHandler) ListBranches(c *gin.Context) {
 		pkg.Error(c, http.StatusNotFound, "项目不存在")
 		return
 	}
-	repoPassword := ""
-	if project.RepoPassword != "" {
-		repoPassword, _ = pkg.Decrypt(project.RepoPassword)
+	authType, username, password, err := h.projectService.ResolveRepoAuth(project)
+	if err != nil {
+		pkg.Error(c, http.StatusBadRequest, "获取凭证失败: "+err.Error())
+		return
 	}
-	branches, err := engine.GitListBranches(project.RepoURL, project.RepoAuthType, project.RepoUsername, repoPassword)
+	branches, err := engine.GitListBranches(project.RepoURL, authType, username, password)
 	if err != nil {
 		pkg.Error(c, http.StatusInternalServerError, "获取分支列表失败: "+err.Error())
 		return

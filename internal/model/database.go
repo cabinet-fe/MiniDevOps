@@ -4,10 +4,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"buildflow/internal/config"
-	"golang.org/x/crypto/bcrypt"
 	"github.com/glebarez/sqlite"
+	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 )
@@ -42,6 +43,7 @@ func InitDB() (*gorm.DB, error) {
 	if err := db.AutoMigrate(
 		&User{},
 		&Server{},
+		&Credential{},
 		&Project{},
 		&Environment{},
 		&EnvVar{},
@@ -55,6 +57,10 @@ func InitDB() (*gorm.DB, error) {
 		&DictItem{},
 	); err != nil {
 		return nil, fmt.Errorf("auto migrating: %w", err)
+	}
+
+	if err := migrateProjectRepoCredentials(db); err != nil {
+		return nil, fmt.Errorf("migrate project credentials: %w", err)
 	}
 
 	// Drop legacy group_name column from projects table if it still exists
@@ -103,4 +109,75 @@ func InitDB() (*gorm.DB, error) {
 	}
 
 	return db, nil
+}
+
+func migrateProjectRepoCredentials(db *gorm.DB) error {
+	var projects []Project
+	if err := db.
+		Where("repo_auth_type <> ? AND repo_auth_type <> ? AND repo_password <> '' AND credential_id IS NULL", "none", "credential").
+		Find(&projects).Error; err != nil {
+		return err
+	}
+	if len(projects) == 0 {
+		return nil
+	}
+
+	return db.Transaction(func(tx *gorm.DB) error {
+		for i := range projects {
+			project := &projects[i]
+			if strings.TrimSpace(project.RepoPassword) == "" {
+				continue
+			}
+
+			credentialType := "password"
+			if strings.TrimSpace(project.RepoAuthType) == "token" {
+				credentialType = "token"
+			}
+
+			baseName := strings.TrimSpace(project.Name) + "-仓库凭证"
+			if strings.TrimSpace(project.Name) == "" {
+				baseName = "仓库凭证"
+			}
+			name, err := nextCredentialName(tx, baseName, project.CreatedBy)
+			if err != nil {
+				return err
+			}
+
+			credential := &Credential{
+				Name:        name,
+				Type:        credentialType,
+				Username:    project.RepoUsername,
+				Password:    project.RepoPassword,
+				Description: "由历史项目仓库认证自动迁移",
+				CreatedBy:   project.CreatedBy,
+			}
+			if err := tx.Create(credential).Error; err != nil {
+				return err
+			}
+
+			if err := tx.Model(&Project{}).Where("id = ?", project.ID).Updates(map[string]interface{}{
+				"credential_id":  credential.ID,
+				"repo_auth_type": "credential",
+				"repo_username":  "",
+				"repo_password":  "",
+			}).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
+func nextCredentialName(tx *gorm.DB, baseName string, createdBy uint) (string, error) {
+	name := baseName
+	for i := 0; ; i++ {
+		var count int64
+		if err := tx.Model(&Credential{}).Where("name = ? AND created_by = ?", name, createdBy).Count(&count).Error; err != nil {
+			return "", err
+		}
+		if count == 0 {
+			return name, nil
+		}
+		name = fmt.Sprintf("%s-%d", baseName, i+1)
+	}
 }
