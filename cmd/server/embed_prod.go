@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"io/fs"
 	"net/http"
+	"path"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -38,6 +39,42 @@ func injectEncryptionKey(html []byte, keyHex string) []byte {
 	return out
 }
 
+const (
+	noStoreCacheControl  = "no-cache, no-store, must-revalidate"
+	shortTTLCacheControl = "public, max-age=3600"
+	longTTLCacheControl  = "public, max-age=31536000, immutable"
+)
+
+func hasBuildFingerprint(filePath string) bool {
+	fileName := path.Base(filePath)
+	extIdx := strings.LastIndex(fileName, ".")
+	if extIdx <= 0 {
+		return false
+	}
+	nameWithoutExt := fileName[:extIdx]
+	sepIdx := strings.LastIndex(nameWithoutExt, "-")
+	if sepIdx < 0 || sepIdx == len(nameWithoutExt)-1 {
+		return false
+	}
+	fingerprint := nameWithoutExt[sepIdx+1:]
+	if len(fingerprint) < 8 {
+		return false
+	}
+	for _, ch := range fingerprint {
+		if (ch < '0' || ch > '9') && (ch < 'a' || ch > 'z') && (ch < 'A' || ch > 'Z') {
+			return false
+		}
+	}
+	return true
+}
+
+func cacheControlForStaticFile(filePath string) string {
+	if hasBuildFingerprint(filePath) {
+		return longTTLCacheControl
+	}
+	return shortTTLCacheControl
+}
+
 func serveSPA(r *gin.Engine, encryptionKeyHex string) {
 	distFS, err := fs.Sub(webFS, "dist")
 	if err != nil {
@@ -51,6 +88,9 @@ func serveSPA(r *gin.Engine, encryptionKeyHex string) {
 
 	serveIndex := func(c *gin.Context) {
 		html := injectEncryptionKey(indexHTML, encryptionKeyHex)
+		c.Header("Cache-Control", noStoreCacheControl)
+		c.Header("Pragma", "no-cache")
+		c.Header("Expires", "0")
 		c.Data(http.StatusOK, "text/html; charset=utf-8", html)
 	}
 
@@ -68,6 +108,7 @@ func serveSPA(r *gin.Engine, encryptionKeyHex string) {
 		}
 
 		if fileInfo, err := fs.Stat(distFS, trimmedPath); err == nil && !fileInfo.IsDir() {
+			c.Header("Cache-Control", cacheControlForStaticFile(trimmedPath))
 			c.Request.URL.Path = path
 			staticServer.ServeHTTP(c.Writer, c.Request)
 			return
