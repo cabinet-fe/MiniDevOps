@@ -56,27 +56,28 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		pkg.Error(c, http.StatusInternalServerError, "生成Token失败")
 		return
 	}
-	c.SetCookie("refresh_token", refreshToken, 7*24*3600, "/", "", false, true)
 	pkg.Success(c, gin.H{
-		"access_token": accessToken,
-		"user":         user,
+		"access_token":  accessToken,
+		"refresh_token": refreshToken,
+		"user":          user,
 	})
 }
 
 // POST /api/v1/auth/logout
 func (h *AuthHandler) Logout(c *gin.Context) {
-	c.SetCookie("refresh_token", "", -1, "/", "", false, true)
 	pkg.Success(c, nil)
 }
 
 // POST /api/v1/auth/refresh
 func (h *AuthHandler) Refresh(c *gin.Context) {
-	refreshToken, err := c.Cookie("refresh_token")
-	if err != nil {
+	var req struct {
+		RefreshToken string `json:"refresh_token" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
 		pkg.Error(c, http.StatusUnauthorized, "请重新登录")
 		return
 	}
-	claims, err := h.authService.ParseRefreshToken(refreshToken)
+	claims, err := h.authService.ParseRefreshToken(req.RefreshToken)
 	if err != nil {
 		pkg.Error(c, http.StatusUnauthorized, "Token已过期，请重新登录")
 		return
@@ -92,8 +93,11 @@ func (h *AuthHandler) Refresh(c *gin.Context) {
 		pkg.Error(c, http.StatusInternalServerError, "生成Token失败")
 		return
 	}
-	c.SetCookie("refresh_token", newRefreshToken, 7*24*3600, "/", "", false, true)
-	pkg.Success(c, gin.H{"access_token": accessToken, "user": user})
+	pkg.Success(c, gin.H{
+		"access_token":  accessToken,
+		"refresh_token": newRefreshToken,
+		"user":          user,
+	})
 }
 
 // GET /api/v1/auth/me

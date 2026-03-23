@@ -144,7 +144,6 @@ export function SettingsPage() {
       const res = await fetch('/api/v1/system/backup', {
         method: 'POST',
         headers: token ? { Authorization: `Bearer ${token}` } : {},
-        credentials: 'include',
       })
       if (!res.ok) {
         const data = await res.json().catch(() => ({}))
@@ -178,7 +177,6 @@ export function SettingsPage() {
       const res = await fetch('/api/v1/system/restore', {
         method: 'POST',
         headers: token ? { Authorization: `Bearer ${token}` } : {},
-        credentials: 'include',
         body: formData,
       })
       const data = await res.json().catch(() => ({}))
@@ -208,7 +206,6 @@ export function SettingsPage() {
       const res = await fetch('/api/v1/projects/import', {
         method: 'POST',
         headers: token ? { Authorization: `Bearer ${token}` } : {},
-        credentials: 'include',
         body: formData,
       })
       const data = await res.json().catch(() => ({}))

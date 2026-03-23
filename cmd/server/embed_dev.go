@@ -10,7 +10,7 @@ import (
 )
 
 func init() {
-	gin.SetMode(gin.DebugMode)
+	gin.SetMode(gin.ReleaseMode)
 }
 
 func serveSPA(r *gin.Engine, _ string) {
