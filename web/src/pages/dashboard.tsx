@@ -4,7 +4,6 @@ import {
   ArrowUpRight,
   Clock3,
   Cpu,
-  Activity,
   HardDrive,
   MemoryStick,
 } from "lucide-react";
@@ -21,7 +20,6 @@ interface DashboardSystemResources {
   memory_used_bytes: number;
   memory_total_bytes: number;
   memory_usage_percent: number;
-  app_memory_used_bytes: number;
   disk_free_bytes: number;
   disk_total_bytes: number;
   disk_usage_percent: number;
@@ -63,7 +61,6 @@ const EMPTY_RESOURCES: DashboardSystemResources = {
   memory_used_bytes: 0,
   memory_total_bytes: 0,
   memory_usage_percent: 0,
-  app_memory_used_bytes: 0,
   disk_free_bytes: 0,
   disk_total_bytes: 0,
   disk_usage_percent: 0,
@@ -80,10 +77,6 @@ const STAGE_LABELS: Record<string, string> = {
 };
 
 const POLL_INTERVAL_MS = 2000;
-
-function clampPercent(value: number) {
-  return Math.max(0, Math.min(100, value));
-}
 
 function formatBytes(bytes: number) {
   if (!bytes) return "0 B";
@@ -301,30 +294,17 @@ export function DashboardPage() {
       key: "memory",
       label: "系统使用内存",
       value: resources.memory_total_bytes
-        ? `${formatBytes(resources.memory_used_bytes)}`
+        ? `${formatBytes(resources.memory_used_bytes)} / 总计 ${formatBytes(resources.memory_total_bytes)}`
         : "未采集",
       percent: resources.memory_usage_percent,
       icon: MemoryStick,
       color: "#22d3ee",
     },
     {
-      key: "app_memory",
-      label: "本应用使用内存",
-      value: resources.app_memory_used_bytes
-        ? formatBytes(resources.app_memory_used_bytes)
-        : "未采集",
-      percent:
-        resources.memory_total_bytes > 0
-          ? clampPercent((resources.app_memory_used_bytes / resources.memory_total_bytes) * 100)
-          : 0,
-      icon: Activity,
-      color: "#f472b6",
-    },
-    {
       key: "disk",
       label: "磁盘使用",
       value: resources.disk_total_bytes
-        ? `${formatBytes(resources.disk_total_bytes - resources.disk_free_bytes)}`
+        ? `${formatBytes(resources.disk_total_bytes - resources.disk_free_bytes)} / 总计 ${formatBytes(resources.disk_total_bytes)}`
         : "未采集",
       percent: resources.disk_total_bytes > 0 ? resources.disk_usage_percent : 0,
       icon: HardDrive,
