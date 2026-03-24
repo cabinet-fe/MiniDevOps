@@ -172,6 +172,8 @@ func main() {
 			auth.PUT("/credentials/:id", credentialHandler.Update)
 			auth.DELETE("/credentials/:id", credentialHandler.Delete)
 
+			auth.GET("/environments", projectHandler.ListEnvironmentsGlobal)
+
 			// Projects
 			auth.GET("/projects", projectHandler.List)
 			auth.POST("/projects", projectHandler.Create)

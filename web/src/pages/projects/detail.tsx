@@ -1,40 +1,16 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router";
-import {
-  Copy,
-  Download,
-  ExternalLink,
-  GitBranch,
-  Loader2,
-  Pencil,
-  Play,
-  Plus,
-  Rocket,
-  RotateCcw,
-  Sparkles,
-} from "lucide-react";
+import { Copy, ExternalLink, GitBranch, Loader2, Pencil, Play, Plus, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { api } from "@/lib/api";
 import type { PaginatedData } from "@/lib/api";
-import { ARTIFACT_FORMATS, BUILD_SCRIPT_TYPES, BUILD_STATUSES } from "@/lib/constants";
+import { EnvironmentBuildsTable, extractFileName } from "@/components/environment-builds-table";
+import { ARTIFACT_FORMATS, BUILD_SCRIPT_TYPES } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 import { ProjectFormDialog } from "@/pages/projects/form";
 import { EnvironmentFormDialog } from "@/pages/projects/environment-form";
@@ -92,27 +68,12 @@ interface Build {
 
 const RUNNING_BUILD_STATUSES = new Set(["pending", "cloning", "building", "deploying"]);
 
+const BUILD_PAGE_SIZE = 20;
+
 function formatRepoAuthType(value: string): string {
   if (!value || value === "none") return "无需认证";
   if (value === "credential") return "凭证";
   return value;
-}
-
-function formatDuration(ms: number): string {
-  if (!ms) return "-";
-  const seconds = Math.floor(ms / 1000);
-  if (seconds < 60) return `${seconds}s`;
-  const minutes = Math.floor(seconds / 60);
-  return `${minutes}m ${seconds % 60}s`;
-}
-
-function formatDateTime(date: string): string {
-  return new Date(date).toLocaleString("zh-CN", {
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
 }
 
 function getArtifactLabel(format: string): string {
@@ -121,11 +82,6 @@ function getArtifactLabel(format: string): string {
 
 function getScriptTypeLabel(type: string): string {
   return BUILD_SCRIPT_TYPES.find((item) => item.value === type)?.label ?? "Bash";
-}
-
-function extractFileName(path: string, fallback: string): string {
-  const segments = path.split("/").filter(Boolean);
-  return segments.at(-1) ?? fallback;
 }
 
 function getExternalHref(value: string): string | undefined {
@@ -147,8 +103,7 @@ function MetaItem({
 }) {
   return (
     <span className="text-muted-foreground">
-      {label}{" "}
-      <span className={cn("text-foreground", mono && "font-mono")}>{value || "-"}</span>
+      {label} <span className={cn("text-foreground", mono && "font-mono")}>{value || "-"}</span>
     </span>
   );
 }
@@ -207,6 +162,11 @@ export function ProjectDetailPage() {
   const projectId = Number(id);
   const [project, setProject] = useState<Project | null>(null);
   const [buildsByEnv, setBuildsByEnv] = useState<Record<number, Build[]>>({});
+  const [buildPageByEnv, setBuildPageByEnv] = useState<Record<number, number>>({});
+  const [buildPaginationByEnv, setBuildPaginationByEnv] = useState<
+    Record<number, { total: number; total_pages: number }>
+  >({});
+  const [buildsLoading, setBuildsLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [triggering, setTriggering] = useState<number | null>(null);
   const [buildActionLoading, setBuildActionLoading] = useState<string | null>(null);
@@ -235,19 +195,51 @@ export function ProjectDetailPage() {
       return;
     }
     const envs = res.data.environments ?? [];
-    const buildPairs = await Promise.all(
-      envs.map(async (env) => {
-        const buildRes = await api.get<PaginatedData<Build>>(
-          `/projects/${projectId}/builds?environment_id=${env.id}&page_size=20`,
-        );
-        const items = buildRes.code === 0 && buildRes.data ? (buildRes.data.items ?? []) : [];
-        return [env.id, items] as const;
-      }),
-    );
     setProject({ ...res.data, environments: envs });
-    setBuildsByEnv(Object.fromEntries(buildPairs));
     setLoading(false);
   }, [projectId]);
+
+  const fetchBuildsForEnv = useCallback(
+    async (envId: number, page: number, opts?: { silent?: boolean }) => {
+      if (!projectId) return;
+      if (!opts?.silent) setBuildsLoading(true);
+      try {
+        const res = await api.get<PaginatedData<Build>>(
+          `/projects/${projectId}/builds?environment_id=${envId}&page=${page}&page_size=${BUILD_PAGE_SIZE}`,
+        );
+        if (res.code !== 0 || !res.data) return;
+        const data = res.data as PaginatedData<Build>;
+        const items = data.items ?? [];
+        setBuildsByEnv((prev) => ({ ...prev, [envId]: items }));
+        setBuildPaginationByEnv((prev) => ({
+          ...prev,
+          [envId]: {
+            total: data.total ?? 0,
+            total_pages: Math.max(
+              1,
+              data.total_pages ?? (Math.ceil((data.total ?? 0) / BUILD_PAGE_SIZE) || 1),
+            ),
+          },
+        }));
+      } finally {
+        if (!opts?.silent) setBuildsLoading(false);
+      }
+    },
+    [projectId],
+  );
+
+  const activeTabRef = useRef(activeTab);
+  const buildPageByEnvRef = useRef(buildPageByEnv);
+  activeTabRef.current = activeTab;
+  buildPageByEnvRef.current = buildPageByEnv;
+
+  const activeEnvId = activeTab ? Number(activeTab) : 0;
+  const currentBuildPage = activeEnvId ? (buildPageByEnv[activeEnvId] ?? 1) : 1;
+
+  useEffect(() => {
+    if (!projectId || !activeEnvId) return;
+    void fetchBuildsForEnv(activeEnvId, currentBuildPage);
+  }, [projectId, activeEnvId, currentBuildPage, fetchBuildsForEnv]);
 
   useEffect(() => {
     if (!project) return;
@@ -272,9 +264,19 @@ export function ProjectDetailPage() {
 
   useEffect(() => {
     if (!projectId || !project) return;
-    const interval = window.setInterval(fetchProject, hasActiveBuilds ? 4000 : 15000);
+    const interval = window.setInterval(
+      () => {
+        void fetchProject();
+        const tab = activeTabRef.current;
+        if (tab) {
+          const eid = Number(tab);
+          void fetchBuildsForEnv(eid, buildPageByEnvRef.current[eid] ?? 1, { silent: true });
+        }
+      },
+      hasActiveBuilds ? 4000 : 15000,
+    );
     return () => window.clearInterval(interval);
-  }, [projectId, project, hasActiveBuilds, fetchProject]);
+  }, [projectId, project, hasActiveBuilds, fetchProject, fetchBuildsForEnv]);
 
   const triggerBuild = async (envId: number, branch?: string, commitHash?: string) => {
     if (!projectId) return;
@@ -289,10 +291,8 @@ export function ProjectDetailPage() {
         return;
       }
       toast.success("构建已触发");
-      setBuildsByEnv((prev) => ({
-        ...prev,
-        [envId]: [res.data!, ...(prev[envId] ?? [])],
-      }));
+      setBuildPageByEnv((prev) => ({ ...prev, [envId]: 1 }));
+      await fetchBuildsForEnv(envId, 1);
     } catch {
       toast.error("触发失败");
     } finally {
@@ -324,8 +324,13 @@ export function ProjectDetailPage() {
         toast.error(res.message || "操作失败");
         return;
       }
-      toast.success(action === "deploy" ? "部署已触发" : "已重新触发构建");
+      toast.success(action === "deploy" ? "开始部署" : "已重新构建");
       await fetchProject();
+      const tab = activeTabRef.current;
+      if (tab) {
+        const eid = Number(tab);
+        await fetchBuildsForEnv(eid, buildPageByEnvRef.current[eid] ?? 1, { silent: true });
+      }
     } catch {
       toast.error("操作失败");
     } finally {
@@ -496,6 +501,11 @@ export function ProjectDetailPage() {
 
               {project.environments.map((env) => {
                 const builds = buildsByEnv[env.id] ?? [];
+                const pagination = buildPaginationByEnv[env.id] ?? {
+                  total: 0,
+                  total_pages: 1,
+                };
+                const envBuildPage = buildPageByEnv[env.id] ?? 1;
                 return (
                   <TabsContent key={env.id} value={String(env.id)}>
                     <CardContent className="space-y-3 pt-4">
@@ -514,22 +524,13 @@ export function ProjectDetailPage() {
                         />
                         <MetaItem label="产物" value={env.build_output_dir || "未配置"} mono />
                         <MetaItem label="部署" value={env.deploy_method || "未部署"} />
-                        {env.deploy_path && (
-                          <MetaItem label="路径" value={env.deploy_path} mono />
-                        )}
+                        {env.deploy_path && <MetaItem label="路径" value={env.deploy_path} mono />}
                         <MetaItem
                           label="Cron"
-                          value={
-                            env.cron_enabled
-                              ? env.cron_expression || "已启用"
-                              : "未启用"
-                          }
+                          value={env.cron_enabled ? env.cron_expression || "已启用" : "未启用"}
                           mono
                         />
-                        <MetaItem
-                          label="变量组"
-                          value={`${env.var_group_ids?.length ?? 0} 个`}
-                        />
+                        <MetaItem label="变量组" value={`${env.var_group_ids?.length ?? 0} 个`} />
                       </div>
 
                       <div className="flex gap-2">
@@ -543,7 +544,7 @@ export function ProjectDetailPage() {
                           ) : (
                             <Play className="size-3.5" />
                           )}
-                          {triggering === env.id ? "触发中" : "触发构建"}
+                          {triggering === env.id ? "构建中" : "构建"}
                         </Button>
                         <Button
                           variant="outline"
@@ -558,42 +559,19 @@ export function ProjectDetailPage() {
                         </Button>
                       </div>
 
-                      <div className="max-h-[420px] overflow-y-auto rounded-md border border-border">
-                        <Table>
-                          <TableHeader className="bg-card sticky top-0 z-10">
-                            <TableRow>
-                              <TableHead className="w-16">编号</TableHead>
-                              <TableHead className="w-20">状态</TableHead>
-                              <TableHead className="w-28">Commit</TableHead>
-                              <TableHead>提交信息</TableHead>
-                              <TableHead className="w-28">耗时 / 时间</TableHead>
-                              <TableHead className="w-28 text-right">操作</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {builds.length === 0 ? (
-                              <TableRow>
-                                <TableCell
-                                  colSpan={6}
-                                  className="text-muted-foreground py-8 text-center text-xs"
-                                >
-                                  暂无构建记录
-                                </TableCell>
-                              </TableRow>
-                            ) : (
-                              builds.map((build) => (
-                                <BuildRow
-                                  key={build.id}
-                                  build={build}
-                                  env={env}
-                                  actionLoading={buildActionLoading}
-                                  onAction={handleBuildAction}
-                                />
-                              ))
-                            )}
-                          </TableBody>
-                        </Table>
-                      </div>
+                      <EnvironmentBuildsTable
+                        env={env}
+                        builds={builds}
+                        loading={buildsLoading && env.id === activeEnvId}
+                        page={envBuildPage}
+                        totalPages={Math.max(1, pagination.total_pages)}
+                        total={pagination.total}
+                        onPageChange={(p) => {
+                          setBuildPageByEnv((prev) => ({ ...prev, [env.id]: p }));
+                        }}
+                        buildActionLoading={buildActionLoading}
+                        onBuildAction={handleBuildAction}
+                      />
                     </CardContent>
                   </TabsContent>
                 );
@@ -617,125 +595,5 @@ export function ProjectDetailPage() {
         />
       </div>
     </TooltipProvider>
-  );
-}
-
-function BuildRow({
-  build,
-  env,
-  actionLoading,
-  onAction,
-}: {
-  build: Build;
-  env: Environment;
-  actionLoading: string | null;
-  onAction: (action: "download" | "deploy" | "retry", build: Build) => void;
-}) {
-  const statusInfo = BUILD_STATUSES[build.status as keyof typeof BUILD_STATUSES] ?? {
-    label: build.status,
-    color: "bg-zinc-500",
-  };
-  const canDownload = build.status === "success" && Boolean(build.artifact_path);
-  const canDeploy = build.status === "success";
-  const canRetry = ["failed", "cancelled"].includes(build.status);
-  const branchDiffers = build.branch && build.branch !== env.branch;
-
-  return (
-    <TableRow>
-      <TableCell className="text-foreground py-1.5 font-mono text-xs font-semibold">
-        #{build.build_number}
-      </TableCell>
-      <TableCell className="py-1.5">
-        <Badge className={cn("text-[10px] text-white", statusInfo.color)}>
-          {statusInfo.label}
-        </Badge>
-      </TableCell>
-      <TableCell className="py-1.5">
-        <span className="text-muted-foreground font-mono text-[11px]">
-          {build.commit_hash ? build.commit_hash.slice(0, 7) : "-"}
-        </span>
-        {branchDiffers && (
-          <span className="text-muted-foreground ml-1.5 text-[10px]">{build.branch}</span>
-        )}
-      </TableCell>
-      <TableCell className="max-w-[240px] py-1.5">
-        <p className="text-muted-foreground truncate text-xs">{build.commit_message || "-"}</p>
-      </TableCell>
-      <TableCell className="text-muted-foreground py-1.5 text-[11px]">
-        <p className="font-mono">{formatDuration(build.duration_ms)}</p>
-        <p className="text-muted-foreground">{formatDateTime(build.created_at)}</p>
-      </TableCell>
-      <TableCell className="py-1.5">
-        <div className="flex justify-end gap-0.5">
-          {canDownload && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon-xs"
-                  disabled={actionLoading === `download:${build.id}`}
-                  onClick={() => onAction("download", build)}
-                >
-                  {actionLoading === `download:${build.id}` ? (
-                    <Loader2 className="size-3 animate-spin" />
-                  ) : (
-                    <Download className="size-3" />
-                  )}
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>下载制品</TooltipContent>
-            </Tooltip>
-          )}
-          {canDeploy && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon-xs"
-                  disabled={actionLoading === `deploy:${build.id}`}
-                  onClick={() => onAction("deploy", build)}
-                >
-                  {actionLoading === `deploy:${build.id}` ? (
-                    <Loader2 className="size-3 animate-spin" />
-                  ) : (
-                    <Rocket className="size-3" />
-                  )}
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>重新部署</TooltipContent>
-            </Tooltip>
-          )}
-          {canRetry && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon-xs"
-                  disabled={actionLoading === `retry:${build.id}`}
-                  onClick={() => onAction("retry", build)}
-                >
-                  {actionLoading === `retry:${build.id}` ? (
-                    <Loader2 className="size-3 animate-spin" />
-                  ) : (
-                    <RotateCcw className="size-3" />
-                  )}
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>重新构建</TooltipContent>
-            </Tooltip>
-          )}
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon-xs" asChild>
-                <Link to={`/builds/${build.id}`}>
-                  <ExternalLink className="size-3" />
-                </Link>
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>查看详情</TooltipContent>
-          </Tooltip>
-        </div>
-      </TableCell>
-    </TableRow>
   );
 }

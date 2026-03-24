@@ -89,6 +89,15 @@ func (s *ProjectService) List(page, pageSize int, role string, createdBy uint) (
 	return s.repo.List(page, pageSize, filter)
 }
 
+// ListEnvironmentsGlobal returns paginated environments across projects (with project_name), respecting dev visibility.
+func (s *ProjectService) ListEnvironmentsGlobal(page, pageSize int, projectID *uint, name string, role string, userID uint) ([]repository.EnvironmentListItem, int64, error) {
+	var filter *uint
+	if role == "dev" {
+		filter = &userID
+	}
+	return s.envRepo.ListJoined(page, pageSize, projectID, strings.TrimSpace(name), filter)
+}
+
 func (s *ProjectService) Update(project *model.Project) error {
 	existing, err := s.repo.FindByID(project.ID)
 	if err != nil {

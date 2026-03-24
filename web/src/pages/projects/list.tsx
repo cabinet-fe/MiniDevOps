@@ -1,23 +1,16 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
-import { Link } from 'react-router'
-import {
-  FolderGit2,
-  LayoutGrid,
-  List,
-  Pencil,
-  Plus,
-  Search,
-} from 'lucide-react'
+import { useState, useEffect, useCallback, useMemo } from "react";
+import { Link } from "react-router";
+import { FolderGit2, LayoutGrid, List, Pencil, Plus, Search } from "lucide-react";
 import {
   useReactTable,
   getCoreRowModel,
   flexRender,
   createColumnHelper,
-} from '@tanstack/react-table'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Badge } from '@/components/ui/badge'
+} from "@tanstack/react-table";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
 import {
   Table,
   TableBody,
@@ -25,126 +18,126 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from '@/components/ui/table'
-import { api } from '@/lib/api'
-import type { PaginatedData } from '@/lib/api'
-import { ProjectFormDialog } from '@/pages/projects/form'
+} from "@/components/ui/table";
+import { api } from "@/lib/api";
+import type { PaginatedData } from "@/lib/api";
+import { ProjectFormDialog } from "@/pages/projects/form";
 
 interface Project {
-  id: number
-  name: string
-  description: string
-  tags: string
-  repo_url: string
-  environments?: { id: number; name: string }[]
+  id: number;
+  name: string;
+  description: string;
+  tags: string;
+  repo_url: string;
+  environments?: { id: number; name: string }[];
 }
 
 function splitTags(tags: string) {
-  return (tags || '')
-    .split(',')
+  return (tags || "")
+    .split(",")
     .map((tag) => tag.trim())
-    .filter(Boolean)
+    .filter(Boolean);
 }
 
 function tagDictLabel(value: string, dict: { label: string; value: string }[]) {
-  return dict.find((d) => d.value === value)?.label ?? value
+  return dict.find((d) => d.value === value)?.label ?? value;
 }
 
 export function ProjectListPage() {
-  const [projects, setProjects] = useState<Project[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
-  const [search, setSearch] = useState('')
-  const [selectedTag, setSelectedTag] = useState('all')
-  const [viewMode, setViewMode] = useState<'card' | 'table'>('card')
-  const [dialogOpen, setDialogOpen] = useState(false)
-  const [editingId, setEditingId] = useState<number | null>(null)
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [search, setSearch] = useState("");
+  const [selectedTag, setSelectedTag] = useState("all");
+  const [viewMode, setViewMode] = useState<"card" | "table">("card");
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editingId, setEditingId] = useState<number | null>(null);
 
   const fetchProjects = useCallback(async () => {
-    setLoading(true)
+    setLoading(true);
     try {
-      const res = await api.get<PaginatedData<Project>>('/projects?page=1&page_size=100')
+      const res = await api.get<PaginatedData<Project>>("/projects?page=1&page_size=100");
       if (res.code === 0 && res.data) {
-        const data = res.data as PaginatedData<Project>
-        setProjects(data.items || [])
+        const data = res.data as PaginatedData<Project>;
+        setProjects(data.items || []);
       }
     } catch {
-      setError('加载失败')
+      setError("加载失败");
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }, [])
+  }, []);
 
   useEffect(() => {
-    fetchProjects()
-  }, [fetchProjects])
+    fetchProjects();
+  }, [fetchProjects]);
 
   const openCreate = () => {
-    setEditingId(null)
-    setDialogOpen(true)
-  }
+    setEditingId(null);
+    setDialogOpen(true);
+  };
 
   const openEdit = (id: number) => {
-    setEditingId(id)
-    setDialogOpen(true)
-  }
+    setEditingId(id);
+    setDialogOpen(true);
+  };
 
   const handleSuccess = () => {
-    fetchProjects()
-  }
+    fetchProjects();
+  };
 
-  const [dictTags, setDictTags] = useState<{ label: string; value: string }[]>([])
+  const [dictTags, setDictTags] = useState<{ label: string; value: string }[]>([]);
 
   useEffect(() => {
     api
-      .get<{ label: string; value: string }[]>('/dictionaries/code/project_tags/items')
+      .get<{ label: string; value: string }[]>("/dictionaries/code/project_tags/items")
       .then((res) => {
         if (res.code === 0 && res.data) {
-          setDictTags(res.data)
+          setDictTags(res.data);
         }
-      })
-  }, [])
+      });
+  }, []);
 
   const allTags = useMemo(() => {
     if (dictTags.length > 0) {
-      return dictTags.map((t) => t.value)
+      return dictTags.map((t) => t.value);
     }
-    const tags = new Set<string>()
+    const tags = new Set<string>();
     for (const project of projects) {
-      splitTags(project.tags).forEach((tag) => tags.add(tag))
+      splitTags(project.tags).forEach((tag) => tags.add(tag));
     }
-    return Array.from(tags).sort((a, b) => a.localeCompare(b, 'zh-CN'))
-  }, [projects, dictTags])
+    return Array.from(tags).sort((a, b) => a.localeCompare(b, "zh-CN"));
+  }, [projects, dictTags]);
 
   const filtered = useMemo(() => {
-    const keyword = search.trim().toLowerCase()
+    const keyword = search.trim().toLowerCase();
     return projects.filter((project) => {
-      const tagList = splitTags(project.tags)
-      const matchTag = selectedTag === 'all' || tagList.includes(selectedTag)
-      if (!matchTag) return false
-      if (!keyword) return true
+      const tagList = splitTags(project.tags);
+      const matchTag = selectedTag === "all" || tagList.includes(selectedTag);
+      if (!matchTag) return false;
+      if (!keyword) return true;
       return (
         project.name.toLowerCase().includes(keyword) ||
-        (project.description || '').toLowerCase().includes(keyword) ||
+        (project.description || "").toLowerCase().includes(keyword) ||
         tagList.some((tag) => {
-          if (tag.toLowerCase().includes(keyword)) return true
+          if (tag.toLowerCase().includes(keyword)) return true;
           if (dictTags.length > 0) {
-            return tagDictLabel(tag, dictTags).toLowerCase().includes(keyword)
+            return tagDictLabel(tag, dictTags).toLowerCase().includes(keyword);
           }
-          return false
+          return false;
         })
-      )
-    })
-  }, [projects, search, selectedTag, dictTags])
+      );
+    });
+  }, [projects, search, selectedTag, dictTags]);
 
-  const columnHelper = createColumnHelper<Project>()
+  const columnHelper = createColumnHelper<Project>();
   const columns = [
-    columnHelper.accessor('name', { header: '项目名称' }),
-    columnHelper.accessor('tags', {
-      header: '标签',
+    columnHelper.accessor("name", { header: "项目名称" }),
+    columnHelper.accessor("tags", {
+      header: "标签",
       cell: ({ getValue }) => {
-        const tags = splitTags(String(getValue()))
-        if (tags.length === 0) return '-'
+        const tags = splitTags(String(getValue()));
+        if (tags.length === 0) return "-";
         return (
           <div className="flex flex-wrap gap-1">
             {tags.map((tag) => (
@@ -153,49 +146,55 @@ export function ProjectListPage() {
               </Badge>
             ))}
           </div>
-        )
+        );
       },
     }),
-    columnHelper.accessor('description', { header: '描述', cell: ({ getValue }) => getValue() || '-' }),
-    columnHelper.accessor((row) => row.environments?.length ?? 0, { header: '环境数', id: 'env_count' }),
+    columnHelper.accessor("description", {
+      header: "描述",
+      cell: ({ getValue }) => getValue() || "-",
+    }),
+    columnHelper.accessor((row) => row.environments?.length ?? 0, {
+      header: "环境数",
+      id: "env_count",
+    }),
     columnHelper.display({
-      id: 'actions',
-      header: '',
+      id: "actions",
+      header: "",
       cell: ({ row }) => (
         <div className="flex gap-1">
           <Button
             variant="ghost"
             size="icon-sm"
             onClick={(e) => {
-              e.preventDefault()
-              e.stopPropagation()
-              openEdit(row.original.id)
+              e.preventDefault();
+              e.stopPropagation();
+              openEdit(row.original.id);
             }}
           >
             <Pencil className="size-4" />
           </Button>
           <Link to={`/projects/${row.original.id}`}>
-            <Button variant="outline" size="sm">
+            <Button variant="ghost" size="sm">
               查看
             </Button>
           </Link>
         </div>
       ),
     }),
-  ]
+  ];
 
   const table = useReactTable({
     data: filtered,
     columns,
     getCoreRowModel: getCoreRowModel(),
-  })
+  });
 
   if (loading) {
     return (
       <div className="flex h-64 items-center justify-center">
         <div className="border-muted size-8 animate-spin rounded-full border-2 border-t-foreground" />
       </div>
-    )
+    );
   }
 
   return (
@@ -224,16 +223,16 @@ export function ProjectListPage() {
           </div>
           <div className="flex gap-1">
             <Button
-              variant={viewMode === 'card' ? 'secondary' : 'ghost'}
+              variant={viewMode === "card" ? "secondary" : "ghost"}
               size="icon"
-              onClick={() => setViewMode('card')}
+              onClick={() => setViewMode("card")}
             >
               <LayoutGrid className="size-4" />
             </Button>
             <Button
-              variant={viewMode === 'table' ? 'secondary' : 'ghost'}
+              variant={viewMode === "table" ? "secondary" : "ghost"}
               size="icon"
-              onClick={() => setViewMode('table')}
+              onClick={() => setViewMode("table")}
             >
               <List className="size-4" />
             </Button>
@@ -243,16 +242,16 @@ export function ProjectListPage() {
         {allTags.length > 0 && (
           <div className="flex flex-wrap gap-2">
             <Button
-              variant={selectedTag === 'all' ? 'secondary' : 'outline'}
+              variant={selectedTag === "all" ? "secondary" : "outline"}
               size="sm"
-              onClick={() => setSelectedTag('all')}
+              onClick={() => setSelectedTag("all")}
             >
               全部标签
             </Button>
             {allTags.map((tag) => (
               <Button
                 key={tag}
-                variant={selectedTag === tag ? 'secondary' : 'outline'}
+                variant={selectedTag === tag ? "secondary" : "outline"}
                 size="sm"
                 onClick={() => setSelectedTag(tag)}
               >
@@ -264,10 +263,12 @@ export function ProjectListPage() {
       </div>
 
       {error && (
-        <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-4 text-red-400">{error}</div>
+        <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-4 text-red-400">
+          {error}
+        </div>
       )}
 
-      {viewMode === 'card' ? (
+      {viewMode === "card" ? (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {filtered.map((project) => (
             <div key={project.id} className="group relative">
@@ -281,7 +282,7 @@ export function ProjectListPage() {
                       <div className="min-w-0 flex-1">
                         <CardTitle className="truncate text-lg">{project.name}</CardTitle>
                         <CardDescription className="line-clamp-2 mt-1">
-                          {project.description || '暂无描述'}
+                          {project.description || "暂无描述"}
                         </CardDescription>
                       </div>
                     </div>
@@ -307,9 +308,9 @@ export function ProjectListPage() {
                 size="icon-sm"
                 className="absolute right-3 top-3 opacity-0 transition-opacity group-hover:opacity-100"
                 onClick={(e) => {
-                  e.preventDefault()
-                  e.stopPropagation()
-                  openEdit(project.id)
+                  e.preventDefault();
+                  e.stopPropagation();
+                  openEdit(project.id);
                 }}
               >
                 <Pencil className="size-4" />
@@ -359,5 +360,5 @@ export function ProjectListPage() {
         onSuccess={handleSuccess}
       />
     </div>
-  )
+  );
 }

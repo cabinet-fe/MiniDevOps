@@ -45,6 +45,27 @@ func (h *ProjectHandler) List(c *gin.Context) {
 	pkg.Paginated(c, projects, total, page, pageSize)
 }
 
+// GET /api/v1/environments - paginated environments across projects (optional project_id, name)
+func (h *ProjectHandler) ListEnvironmentsGlobal(c *gin.Context) {
+	page, pageSize := pkg.GetPage(c)
+	role := middleware.GetRole(c)
+	userID := middleware.GetUserID(c)
+	var projectID *uint
+	if pid := strings.TrimSpace(c.Query("project_id")); pid != "" {
+		if id, err := strconv.ParseUint(pid, 10, 32); err == nil {
+			u := uint(id)
+			projectID = &u
+		}
+	}
+	name := c.Query("name")
+	items, total, err := h.projectService.ListEnvironmentsGlobal(page, pageSize, projectID, name, role, userID)
+	if err != nil {
+		pkg.Error(c, http.StatusInternalServerError, "查询失败")
+		return
+	}
+	pkg.Paginated(c, items, total, page, pageSize)
+}
+
 // POST /api/v1/projects - create (set created_by)
 func (h *ProjectHandler) Create(c *gin.Context) {
 	var req struct {
