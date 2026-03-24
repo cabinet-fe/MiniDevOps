@@ -191,6 +191,7 @@ type DashboardSystemResources struct {
 	MemoryUsedBytes    uint64  `json:"memory_used_bytes"`
 	MemoryTotalBytes   uint64  `json:"memory_total_bytes"`
 	MemoryUsagePercent float64 `json:"memory_usage_percent"`
+	AppMemoryUsedBytes uint64  `json:"app_memory_used_bytes"`
 	DiskFreeBytes      uint64  `json:"disk_free_bytes"`
 	DiskTotalBytes     uint64  `json:"disk_total_bytes"`
 	DiskUsagePercent   float64 `json:"disk_usage_percent"`

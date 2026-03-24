@@ -6,6 +6,7 @@ import (
 	"io"
 	"math"
 	"os"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -57,6 +58,10 @@ func collectDashboardSystemResources(diskPath string) DashboardSystemResources {
 			resources.DiskUsagePercent = usage
 		}
 	}
+
+	var m runtime.MemStats
+	runtime.ReadMemStats(&m)
+	resources.AppMemoryUsedBytes = m.Alloc
 
 	return resources
 }
