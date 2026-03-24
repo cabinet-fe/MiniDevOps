@@ -3,7 +3,8 @@ name: Release
 on:
   push:
     tags:
-      - 'v*'
+      - "v*"
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -47,7 +48,7 @@ jobs:
           path: cmd/server/dist
       - name: Build
         env:
-          CGO_ENABLED: '0'
+          CGO_ENABLED: "0"
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
         run: |
