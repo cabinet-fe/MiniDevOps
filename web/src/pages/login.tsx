@@ -1,12 +1,11 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router";
-import { Factory, Loader2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { useAuthStore } from "@/stores/auth-store";
 import { cn } from "@/lib/utils";
 import { loadSavedCredentials, persistCredentials } from "@/lib/login-persist";
+import { useTheme } from "next-themes";
+import { Sun, Moon } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 export function LoginPage() {
   const saved = loadSavedCredentials();
@@ -17,6 +16,7 @@ export function LoginPage() {
   const [remember, setRemember] = useState(saved.remember);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const { theme, setTheme } = useTheme();
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -41,6 +41,7 @@ export function LoginPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!username || !password) return;
     setError("");
     setLoading(true);
     try {
@@ -48,220 +49,178 @@ export function LoginPage() {
       persistCredentials(remember, username, password);
       navigate("/", { replace: true });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "登录失败");
+      setError(err instanceof Error ? err.message : "错误：登录失败");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="relative flex min-h-screen flex-col overflow-hidden bg-[#0c0c0e] text-zinc-100 md:flex-row">
-      {/* 顶栏：细警示条纹带 */}
-      <div
-        className="pointer-events-none absolute left-0 right-0 top-0 z-[2] h-1.5"
+    <div className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-slate-50 dark:bg-[#0a0a0a] text-slate-900 dark:text-[#33ff00] font-mono selection:bg-slate-900 selection:text-slate-50 dark:selection:bg-[#33ff00] dark:selection:text-[#0a0a0a]">
+      {/* Theme Toggle */}
+      <div className="absolute top-4 right-4 z-[60]">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="size-9 text-slate-500 dark:text-[#1f521f] hover:bg-slate-200 dark:hover:bg-[#1f521f]/20 hover:text-slate-900 dark:hover:text-[#33ff00] border border-transparent hover:border-slate-300 dark:hover:border-[#33ff00]/30 transition-all"
+          onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+          title="切换主题"
+        >
+          <Sun className="size-5 rotate-0 scale-100 transition-transform dark:-rotate-90 dark:scale-0" />
+          <Moon className="absolute size-5 rotate-90 scale-0 transition-transform dark:rotate-0 dark:scale-100" />
+          <span className="sr-only">切换主题</span>
+        </Button>
+      </div>
+
+      {/* CRT Scanline Overlay */}
+      <div 
+        className="pointer-events-none fixed inset-0 z-50 opacity-[0.03] dark:opacity-[0.12]"
         style={{
-          backgroundImage: `repeating-linear-gradient(
-            -45deg,
-            #0a0a0a,
-            #0a0a0a 5px,
-            rgba(234, 179, 8, 0.55) 5px,
-            rgba(234, 179, 8, 0.55) 10px
-          )`,
+          background: "linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06))",
+          backgroundSize: "100% 2px, 3px 100%"
         }}
         aria-hidden
       />
 
-      {/* 背景：暖锈底 + 钢质感网格 + 底影 */}
-      <div
-        className="pointer-events-none absolute inset-0"
-        style={{
-          background: `
-            radial-gradient(ellipse 85% 55% at 50% -8%, rgba(194, 65, 12, 0.14), transparent 52%),
-            radial-gradient(ellipse 70% 45% at 100% 50%, rgba(63, 63, 70, 0.35), transparent 55%),
-            linear-gradient(168deg, #161311 0%, #0a0a0c 42%, #0e0d0c 100%)
-          `,
-        }}
-      />
-      <div
-        className="pointer-events-none absolute inset-0 opacity-[0.42]"
-        style={{
-          backgroundImage: `
-            linear-gradient(95deg, transparent 0%, rgba(161, 161, 170, 0.06) 38%, transparent 72%),
-            repeating-linear-gradient(
-              0deg,
-              transparent,
-              transparent 56px,
-              rgba(82, 82, 91, 0.11) 56px,
-              rgba(82, 82, 91, 0.11) 57px
-            ),
-            repeating-linear-gradient(
-              90deg,
-              transparent,
-              transparent 56px,
-              rgba(63, 63, 70, 0.08) 56px,
-              rgba(63, 63, 70, 0.08) 57px
-            )
-          `,
-        }}
-      />
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_bottom,rgba(0,0,0,0.45),transparent_60%)]" />
+      <style>{`
+        .terminal-glow, .terminal-glow-amber, .terminal-glow-red {
+          text-shadow: none;
+        }
+        .dark .terminal-glow {
+          text-shadow: 0 0 5px rgba(51, 255, 0, 0.5);
+        }
+        .dark .terminal-glow-amber {
+          text-shadow: 0 0 5px rgba(255, 176, 0, 0.5);
+        }
+        .dark .terminal-glow-red {
+          text-shadow: 0 0 5px rgba(255, 51, 51, 0.5);
+        }
+        /* Light mode autofill */
+        input:-webkit-autofill,
+        input:-webkit-autofill:hover, 
+        input:-webkit-autofill:focus, 
+        input:-webkit-autofill:active{
+            -webkit-box-shadow: 0 0 0 30px #f8fafc inset !important;
+            -webkit-text-fill-color: #0f172a !important;
+            caret-color: #0f172a !important;
+        }
+        /* Dark mode autofill */
+        .dark input:-webkit-autofill,
+        .dark input:-webkit-autofill:hover, 
+        .dark input:-webkit-autofill:focus, 
+        .dark input:-webkit-autofill:active{
+            -webkit-box-shadow: 0 0 0 30px #0a0a0a inset !important;
+            -webkit-text-fill-color: #33ff00 !important;
+            caret-color: #33ff00 !important;
+        }
+      `}</style>
 
-      {/* 左侧：车间品牌区 + 侧边警示边条 */}
-      <aside className="relative z-[1] flex flex-none flex-col justify-between border-b border-zinc-700/50 px-8 py-10 md:w-[42%] md:border-b-0 md:border-r md:py-14 lg:px-14">
-        <div
-          className="pointer-events-none absolute bottom-0 left-0 top-0 w-1 md:w-1.5"
-          style={{
-            backgroundImage: `repeating-linear-gradient(
-              45deg,
-              #0a0a0a,
-              #0a0a0a 4px,
-              rgba(234, 179, 8, 0.28) 4px,
-              rgba(234, 179, 8, 0.28) 8px
-            )`,
-          }}
-          aria-hidden
-        />
-        <div>
-          <div className="flex items-center gap-3 font-mono text-sm tracking-[0.2em] text-orange-500/95">
-            <Factory className="size-5 shrink-0 text-orange-400" aria-hidden />
-            <span>BUILDFLOW</span>
-          </div>
-          <p className="mt-3 font-mono text-[10px] uppercase tracking-[0.35em] text-zinc-500">
-            sector · access
-          </p>
-          <h1 className="mt-8 max-w-md font-mono text-3xl font-medium leading-tight tracking-tight text-zinc-50 md:text-4xl">
-            流水线
-            <span className="text-orange-600">.</span>
-            <br />
-            构建与部署
-          </h1>
-          <p className="mt-4 max-w-sm text-sm leading-relaxed text-zinc-400">
-            受控发布、可追溯构建日志与多环境编排。登录以进入控制台。
-          </p>
+      <div className="z-10 w-full max-w-2xl p-4 sm:p-6 md:p-8 terminal-glow">
+        <div className="mb-6 hidden sm:block whitespace-pre text-[10px] sm:text-xs md:text-sm leading-tight text-slate-900 dark:text-[#33ff00]">
+{`   _         _ _    _  __ _                
+  | |__ _  _(_) |__| |/ _| |_____ __ __    
+  | '_ \\ || | | / _\` |  _| / _ \\ V  V /    
+  |_.__/\\_,_|_|_\\__,_|_| |_\\___/\\_/\\_/     
+
+> 系统平台：BuildFlow CI/CD 持续发布与部署系统
+> 核心引擎：调度中心 (Scheduler) 已在线
+> 当前状态：等待认证登入以接管构建管道
+> 核心版本：${import.meta.env.VITE_APP_VERSION || "v1.0.0-dev"}
+================================================`}
         </div>
-        <div className="mt-12 hidden font-mono text-[10px] leading-relaxed text-zinc-500 md:block">
-          <div className="border-l-2 border-orange-700/55 pl-3">
-            <p>PLANT: ops-ready</p>
-            <p className="mt-1 text-zinc-400">AUTH: JWT · WS: channels</p>
-          </div>
+
+        {/* Mobile Header */}
+        <div className="mb-6 block sm:hidden whitespace-pre text-xs leading-tight text-slate-900 dark:text-[#33ff00]">
+{`> 系统平台：BuildFlow CI/CD 部署系统
+> 核心版本：${import.meta.env.VITE_APP_VERSION || "v1.0.0-dev"}
+> 等待认证登入以接管构建管道
+===========================`}
         </div>
-      </aside>
 
-      {/* 右侧：表单 — 钢板面板 */}
-      <main className="relative z-[1] flex flex-1 items-center justify-center px-6 py-12 md:px-12">
-        <div className="w-full max-w-[400px]">
-          <div className="mb-8 md:hidden">
-            <p className="font-mono text-xs tracking-widest text-orange-500/85">BUILDFLOW</p>
-            <p className="mt-1 text-lg font-medium text-zinc-100">登录</p>
-          </div>
+        <div className="border border-slate-300 dark:border-[#1f521f] bg-slate-50 dark:bg-[#0a0a0a] p-1 shadow-sm dark:shadow-none">
+          <div className="border border-dashed border-slate-400 dark:border-[#1f521f] p-4 sm:p-6 md:p-8 bg-white dark:bg-transparent">
+            <h1 className="mb-8 font-bold uppercase tracking-widest text-amber-700 dark:text-[#ffb000] terminal-glow-amber">
+              +--- 登入安全构建调度环境 ---+
+            </h1>
 
-          <div
-            className={cn(
-              "relative rounded-lg border-2 border-zinc-600/70 bg-[#141416]/95 p-8",
-              "shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_20px_50px_rgba(0,0,0,0.55)]",
-              "backdrop-blur-sm",
-            )}
-          >
-            {/* 角码装饰 */}
-            <span
-              className="pointer-events-none absolute left-2 top-2 size-3 border-l-2 border-t-2 border-zinc-500/80"
-              aria-hidden
-            />
-            <span
-              className="pointer-events-none absolute right-2 top-2 size-3 border-r-2 border-t-2 border-zinc-500/80"
-              aria-hidden
-            />
-            <span
-              className="pointer-events-none absolute bottom-2 left-2 size-3 border-b-2 border-l-2 border-zinc-500/80"
-              aria-hidden
-            />
-            <span
-              className="pointer-events-none absolute bottom-2 right-2 size-3 border-b-2 border-r-2 border-zinc-500/80"
-              aria-hidden
-            />
-            <form onSubmit={handleSubmit} className="space-y-5">
+            <form onSubmit={handleSubmit} className="space-y-6">
               {error && (
-                <div
-                  className="rounded border border-red-600/40 bg-red-950/50 px-3 py-2.5 font-mono text-xs text-red-300 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"
-                  role="alert"
-                >
-                  {error}
+                <div className="mb-4 border border-red-500 dark:border-[#ff3333] bg-red-50 dark:bg-transparent p-3 text-red-600 dark:text-[#ff3333] terminal-glow-red uppercase text-sm" role="alert">
+                  [{error}]
                 </div>
               )}
-              <div className="space-y-2">
-                <Label
-                  htmlFor="username"
-                  className="font-mono text-xs uppercase tracking-wider text-zinc-400"
-                >
-                  用户名
-                </Label>
-                <Input
-                  id="username"
-                  type="text"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  placeholder="operator"
-                  required
-                  autoComplete="username"
-                  className="h-11 border-zinc-600/90 bg-zinc-900/90 font-mono text-sm text-zinc-50 shadow-[inset_0_2px_4px_rgba(0,0,0,0.35)] placeholder:text-zinc-500 focus-visible:border-orange-600/60 focus-visible:ring-orange-600/25"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label
-                  htmlFor="password"
-                  className="font-mono text-xs uppercase tracking-wider text-zinc-400"
-                >
-                  密码
-                </Label>
-                <Input
-                  id="password"
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                  required
-                  autoComplete="current-password"
-                  className="h-11 border-zinc-600/90 bg-zinc-900/90 font-mono text-sm text-zinc-50 shadow-[inset_0_2px_4px_rgba(0,0,0,0.35)] placeholder:text-zinc-500 focus-visible:border-orange-600/60 focus-visible:ring-orange-600/25"
-                />
+
+              <div className="grid grid-cols-1 sm:grid-cols-[max-content_1fr] gap-x-4 gap-y-4 sm:gap-y-6 sm:items-center">
+                <label htmlFor="username" className="text-sm md:text-base uppercase flex items-center shrink-0">
+                  认证用户 @buildflow:~$ 
+                </label>
+                <div className="flex-1">
+                  <input
+                    id="username"
+                    type="text"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    required
+                    autoComplete="username"
+                    autoFocus
+                    spellCheck={false}
+                    className="w-full bg-transparent border-none outline-none text-slate-900 dark:text-[#33ff00] focus:ring-0 p-0 text-sm md:text-base selection:bg-slate-900 selection:text-slate-50 dark:selection:bg-[#33ff00] dark:selection:text-[#0a0a0a] caret-slate-900 dark:caret-[#33ff00]"
+                  />
+                </div>
+
+                <label htmlFor="password" className="text-sm md:text-base uppercase flex items-center shrink-0">
+                  访问凭据:
+                </label>
+                <div className="flex-1">
+                  <input
+                    id="password"
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                    autoComplete="current-password"
+                    className="w-full bg-transparent border-none outline-none text-slate-900 dark:text-[#33ff00] focus:ring-0 p-0 text-sm md:text-base tracking-[0.2em] sm:tracking-[0.3em] selection:bg-slate-900 selection:text-slate-50 dark:selection:bg-[#33ff00] dark:selection:text-[#0a0a0a] caret-slate-900 dark:caret-[#33ff00]"
+                  />
+                </div>
               </div>
 
-              <label className="flex cursor-pointer items-start gap-3 rounded border border-transparent px-0 py-1 hover:border-zinc-600/50">
-                <input
-                  type="checkbox"
-                  checked={remember}
-                  onChange={(e) => setRemember(e.target.checked)}
-                  className="mt-0.5 size-4 shrink-0 rounded border-zinc-500 bg-zinc-900 accent-orange-600"
-                />
-                <span className="text-sm leading-snug text-zinc-400">
-                  记住账号密码
-                  <span className="mt-0.5 block font-mono text-[11px] text-zinc-500">
-                    凭据保存在本机浏览器，请勿在公共设备勾选
+              <div className="mt-6 flex items-center gap-3 text-sm text-slate-500 dark:text-[#1f521f] transition-colors hover:text-slate-900 dark:hover:text-[#33ff00]">
+                <button
+                  type="button"
+                  onClick={() => setRemember(!remember)}
+                  className="flex items-center gap-2 outline-none focus:text-amber-700 dark:focus:text-[#ffb000]"
+                >
+                  <span className="font-bold">[{remember ? "X" : " "}]</span>
+                  <span className="uppercase tracking-wider">保持登录状态 (7天)_</span>
+                </button>
+              </div>
+
+              <div className="pt-6 border-t border-dashed border-slate-300 dark:border-[#1f521f] flex flex-col sm:flex-row items-start sm:items-center gap-4">
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="group relative inline-flex items-center outline-none"
+                >
+                  <span className="mr-3 text-amber-700 dark:text-[#ffb000]">&gt;</span>
+                  <span className={cn(
+                    "px-3 py-1.5 uppercase font-bold tracking-widest transition-all",
+                    loading 
+                      ? "text-slate-400 dark:text-[#1f521f]" 
+                      : "bg-slate-100 dark:bg-[#0a0a0a] text-slate-900 dark:text-[#33ff00] border border-slate-900 dark:border-[#33ff00] group-hover:bg-slate-900 group-hover:text-white dark:group-hover:bg-[#33ff00] dark:group-hover:text-[#0a0a0a] group-focus:bg-slate-900 group-focus:text-white dark:group-focus:bg-[#33ff00] dark:group-focus:text-[#0a0a0a]"
+                  )}>
+                    {loading ? "[ 初始化通讯与密钥分发中... ]" : "[ 登入 BuildFlow 流水线 ]"}
                   </span>
-                </span>
-              </label>
-
-              <Button
-                type="submit"
-                disabled={loading}
-                className={cn(
-                  "h-11 w-full font-mono text-sm tracking-wide",
-                  "border border-orange-900/60 bg-orange-700 text-zinc-50 shadow-[0_4px_0_rgba(124,45,18,0.85)] hover:bg-orange-600 active:translate-y-px active:shadow-[0_2px_0_rgba(124,45,18,0.85)]",
-                  loading && "opacity-80",
-                )}
-              >
-                {loading ? (
-                  <>
-                    <Loader2 className="size-4 animate-spin" />
-                    校验中…
-                  </>
-                ) : (
-                  "进入控制台"
-                )}
-              </Button>
+                </button>
+              </div>
             </form>
           </div>
         </div>
-      </main>
+
+        <div className="mt-8 text-xs text-slate-500 dark:text-[#1f521f] text-center space-y-1">
+          <p>BUILDFLOW 集中式构建引擎与工程自动化平台。</p>
+          <p>当前终端的资源配置、构建事件与持续交付行为均受 RBAC 审计追踪。</p>
+        </div>
+      </div>
     </div>
   );
 }

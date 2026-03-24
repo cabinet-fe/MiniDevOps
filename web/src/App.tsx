@@ -197,7 +197,7 @@ function AppRoutes() {
 
 export default function App() {
   return (
-    <ThemeProvider attribute="class" defaultTheme="dark" enableColorScheme>
+    <ThemeProvider attribute="class" defaultTheme="system" enableSystem enableColorScheme>
       <BrowserRouter>
         <AppRoutes />
         <Toaster position="top-right" richColors />

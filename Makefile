@@ -1,6 +1,7 @@
 .PHONY: dev build-linux build-win build-agent-linux build-agent-win clean
 
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
+export VITE_APP_VERSION := $(VERSION)
 LDFLAGS := -s -w -X main.version=$(VERSION)
 
 dev:
