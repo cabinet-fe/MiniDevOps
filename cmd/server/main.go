@@ -214,7 +214,6 @@ func main() {
 			auth.POST("/builds/:id/cancel", buildHandler.Cancel)
 			auth.POST("/builds/:id/deploy", buildHandler.Deploy)
 			auth.GET("/builds/:id/artifact", buildHandler.DownloadArtifact)
-			auth.POST("/builds/:id/rollback", middleware.RequireRole("ops", "admin"), buildHandler.Rollback)
 			auth.POST("/builds/:id/retry", buildHandler.Retry)
 
 			// Dashboard

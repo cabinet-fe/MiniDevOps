@@ -29,6 +29,47 @@ func TestCalculateCPUUsage(t *testing.T) {
 	}
 }
 
+func TestCPUUsagePercentFromWindowsGetSystemTimesDeltas(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name string
+		dk   int64
+		du   int64
+		di   int64
+		want float64
+	}{
+		{
+			name: "idle_like_kernel_tracks_idle",
+			dk:   100, du: 0, di: 100,
+			want: 0,
+		},
+		{
+			name: "half_busy",
+			dk:   40, du: 60, di: 50,
+			want: 50,
+		},
+		{
+			name: "non_positive_total",
+			dk:   -10, du: 5, di: 0,
+			want: 0,
+		},
+		{
+			name: "busy_clamped_to_total",
+			dk:   100, du: 50, di: -20,
+			want: 100,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := cpuUsagePercentFromWindowsGetSystemTimesDeltas(tt.dk, tt.du, tt.di)
+			if got != tt.want {
+				t.Fatalf("expected %.1f, got %.1f", tt.want, got)
+			}
+		})
+	}
+}
+
 func TestParseMemoryUsageUsesMemAvailable(t *testing.T) {
 	meminfo := strings.NewReader(`
 MemTotal:       16384 kB

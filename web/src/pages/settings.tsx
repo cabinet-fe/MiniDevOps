@@ -314,7 +314,7 @@ export function SettingsPage() {
               系统备份
             </CardTitle>
             <CardDescription>
-              导出数据库和配置文件为 tar.gz 压缩包
+              导出数据库和配置文件为 tar.gz 压缩包；数据库为精简快照（不含审计日志、构建记录与通知）。若生成快照失败将提示错误，不会改用整库导出
             </CardDescription>
           </CardHeader>
           <CardContent>

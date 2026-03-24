@@ -133,6 +133,11 @@ func (h *BuildHandler) GetLog(c *gin.Context) {
 	data, err := os.ReadFile(logPath)
 	if err != nil {
 		if os.IsNotExist(err) {
+			switch build.Status {
+			case "pending", "cloning", "building", "deploying":
+				c.Data(http.StatusOK, "text/plain; charset=utf-8", nil)
+				return
+			}
 			pkg.Error(c, http.StatusNotFound, "日志文件不存在")
 			return
 		}
@@ -204,28 +209,6 @@ func (h *BuildHandler) DownloadArtifact(c *gin.Context) {
 	}
 	c.Header("Content-Disposition", "attachment; filename="+filepath.Base(build.ArtifactPath))
 	c.File(path)
-}
-
-// POST /api/v1/builds/:id/rollback - rollback
-func (h *BuildHandler) Rollback(c *gin.Context) {
-	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
-	if err != nil {
-		pkg.Error(c, http.StatusBadRequest, "参数错误")
-		return
-	}
-	build, err := h.buildService.GetByID(uint(id))
-	if err != nil {
-		pkg.Error(c, http.StatusNotFound, "构建不存在")
-		return
-	}
-	if build.Status != "success" {
-		pkg.Error(c, http.StatusBadRequest, "只能回滚到成功的构建")
-		return
-	}
-	if h.scheduler != nil {
-		h.scheduler.Submit(build.ID)
-	}
-	pkg.Success(c, gin.H{"message": "回滚已提交"})
 }
 
 // GET /api/v1/dashboard/stats

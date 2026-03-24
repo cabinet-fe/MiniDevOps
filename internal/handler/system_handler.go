@@ -77,24 +77,40 @@ func (h *SystemHandler) Backup(c *gin.Context) {
 			break
 		}
 	}
+	var slimPath string
+	var slimCleanup func()
+	if st, err := os.Stat(dbPath); err == nil && !st.IsDir() {
+		var err error
+		slimPath, slimCleanup, err = pkg.PrepareSlimSQLiteBackup(dbPath)
+		if err != nil {
+			pkg.Error(c, http.StatusInternalServerError, "生成精简备份失败: "+err.Error())
+			return
+		}
+	}
+	if slimCleanup != nil {
+		defer slimCleanup()
+	}
+
 	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=buildflow-backup-%s.tar.gz", time.Now().Format("20060102-150405")))
 	c.Header("Content-Type", "application/gzip")
 	gw := gzip.NewWriter(c.Writer)
 	defer gw.Close()
 	tw := tar.NewWriter(gw)
 	defer tw.Close()
-	// Add db file
-	if st, err := os.Stat(dbPath); err == nil && !st.IsDir() {
-		f, err := os.Open(dbPath)
-		if err == nil {
-			defer f.Close()
-			hdr := &tar.Header{
-				Name: filepath.Base(dbPath),
-				Mode: 0644,
-				Size: st.Size(),
-			}
-			if err := tw.WriteHeader(hdr); err == nil {
-				io.Copy(tw, f)
+	// Add db file (slim snapshot: omit audit_logs, builds, notifications)
+	if slimPath != "" {
+		if st2, err := os.Stat(slimPath); err == nil && !st2.IsDir() {
+			f, err := os.Open(slimPath)
+			if err == nil {
+				defer f.Close()
+				hdr := &tar.Header{
+					Name: filepath.Base(dbPath),
+					Mode: 0644,
+					Size: st2.Size(),
+				}
+				if err := tw.WriteHeader(hdr); err == nil {
+					io.Copy(tw, f)
+				}
 			}
 		}
 	}

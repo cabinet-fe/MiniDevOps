@@ -6,7 +6,6 @@ import {
   XCircle,
   Download,
   Rocket,
-  Undo2,
   Clock,
   GitCommit,
   User,
@@ -148,9 +147,6 @@ export function BuildDetailPage() {
         case 'deploy':
           res = await api.post(`/builds/${build.id}/deploy`)
           break
-        case 'rollback':
-          res = await api.post(`/builds/${build.id}/rollback`)
-          break
         case 'retry':
           res = await api.post(`/builds/${build.id}/retry`)
           break
@@ -258,15 +254,6 @@ export function BuildDetailPage() {
                   部署
                 </Button>
               )}
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => handleAction('rollback')}
-                disabled={actionLoading === 'rollback'}
-              >
-                <Undo2 className="size-4" />
-                回滚
-              </Button>
             </>
           )}
           {(build.status === 'failed' || build.status === 'cancelled') && (

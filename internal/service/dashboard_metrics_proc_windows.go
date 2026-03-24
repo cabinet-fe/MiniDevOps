@@ -12,8 +12,9 @@ import (
 )
 
 type winCPUSnapshot struct {
-	idle  uint64
-	total uint64
+	idle   uint64
+	kernel uint64
+	user   uint64
 }
 
 var (
@@ -57,20 +58,14 @@ func readWindowsCPUSnapshot() (winCPUSnapshot, error) {
 	i := filetimeTo100ns(&idle)
 	k := filetimeTo100ns(&kernel)
 	u := filetimeTo100ns(&user)
-	return winCPUSnapshot{idle: i, total: i + k + u}, nil
+	return winCPUSnapshot{idle: i, kernel: k, user: u}, nil
 }
 
 func calculateWindowsCPUUsage(prev, cur winCPUSnapshot) float64 {
-	if cur.total <= prev.total {
-		return 0
-	}
-	totalDelta := float64(cur.total - prev.total)
-	idleDelta := float64(cur.idle - prev.idle)
-	usage := (1 - idleDelta/totalDelta) * 100
-	if usage < 0 {
-		return 0
-	}
-	return roundSingleDecimal(usage)
+	dk := int64(cur.kernel) - int64(prev.kernel)
+	du := int64(cur.user) - int64(prev.user)
+	di := int64(cur.idle) - int64(prev.idle)
+	return cpuUsagePercentFromWindowsGetSystemTimesDeltas(dk, du, di)
 }
 
 func fillDashboardCPUUsage(r *DashboardSystemResources) {

@@ -25,6 +25,9 @@ type Scheduler struct {
 }
 
 func NewScheduler(maxConcurrent int, pipeline *Pipeline, logger *zap.Logger) *Scheduler {
+	if maxConcurrent < 1 {
+		maxConcurrent = 1
+	}
 	return &Scheduler{
 		maxConcurrent: maxConcurrent,
 		semaphore:     make(chan struct{}, maxConcurrent),
