@@ -11,24 +11,12 @@ import {
   Plus,
   Rocket,
   RotateCcw,
-  Settings2,
   Sparkles,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Dialog,
-  DialogBody,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Table,
   TableBody,
@@ -44,15 +32,6 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "@/components/ui/command";
 import { api } from "@/lib/api";
 import type { PaginatedData } from "@/lib/api";
 import { ARTIFACT_FORMATS, BUILD_SCRIPT_TYPES, BUILD_STATUSES } from "@/lib/constants";
@@ -232,7 +211,6 @@ export function ProjectDetailPage() {
   const [triggering, setTriggering] = useState<number | null>(null);
   const [buildActionLoading, setBuildActionLoading] = useState<string | null>(null);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
-  const [triggerDialogEnv, setTriggerDialogEnv] = useState<Environment | null>(null);
   const [envFormOpen, setEnvFormOpen] = useState(false);
   const [editingEnv, setEditingEnv] = useState<Environment | null>(null);
   const [activeTab, setActiveTab] = useState<string>("");
@@ -570,14 +548,6 @@ export function ProjectDetailPage() {
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => setTriggerDialogEnv(env)}
-                        >
-                          <Settings2 className="size-3.5" />
-                          高级触发
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
                           onClick={() => {
                             setEditingEnv(env);
                             setEnvFormOpen(true);
@@ -644,19 +614,6 @@ export function ProjectDetailPage() {
           projectId={projectId}
           editEnv={editingEnv}
           onSuccess={() => fetchProject()}
-        />
-        <TriggerBuildDialog
-          env={triggerDialogEnv}
-          open={!!triggerDialogEnv}
-          onOpenChange={(open) => {
-            if (!open) setTriggerDialogEnv(null);
-          }}
-          onTrigger={(envId, branch, commitHash) => {
-            setTriggerDialogEnv(null);
-            triggerBuild(envId, branch, commitHash);
-          }}
-          triggering={triggering}
-          projectId={projectId}
         />
       </div>
     </TooltipProvider>
@@ -780,137 +737,5 @@ function BuildRow({
         </div>
       </TableCell>
     </TableRow>
-  );
-}
-
-function TriggerBuildDialog({
-  env,
-  open,
-  onOpenChange,
-  onTrigger,
-  triggering,
-  projectId,
-}: {
-  env: Environment | null;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  onTrigger: (envId: number, branch?: string, commitHash?: string) => void;
-  triggering: number | null;
-  projectId: number;
-}) {
-  const [branch, setBranch] = useState("");
-  const [commitHash, setCommitHash] = useState("");
-  const [branches, setBranches] = useState<string[]>([]);
-  const [branchesLoading, setBranchesLoading] = useState(false);
-  const [branchPopoverOpen, setBranchPopoverOpen] = useState(false);
-
-  useEffect(() => {
-    if (!open) {
-      setBranch("");
-      setCommitHash("");
-      setBranches([]);
-      return;
-    }
-    setBranchesLoading(true);
-    api
-      .get<string[]>(`/projects/${projectId}/branches`)
-      .then((res) => {
-        if (res.code === 0 && res.data) {
-          setBranches(Array.isArray(res.data) ? res.data : []);
-        }
-      })
-      .finally(() => setBranchesLoading(false));
-  }, [open, projectId]);
-
-  if (!env) return null;
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[460px]">
-        <DialogHeader>
-          <DialogTitle>高级触发 · {env.name}</DialogTitle>
-          <DialogDescription>
-            可指定分支或 Commit，留空则使用环境默认分支（{env.branch}）。
-          </DialogDescription>
-        </DialogHeader>
-        <DialogBody className="space-y-4 py-2">
-          <div className="space-y-2">
-            <Label htmlFor="trigger-branch">分支（可选）</Label>
-            <Popover open={branchPopoverOpen} onOpenChange={setBranchPopoverOpen}>
-              <PopoverTrigger asChild>
-                <Button
-                  variant="outline"
-                  role="combobox"
-                  aria-expanded={branchPopoverOpen}
-                  className="w-full justify-between font-normal"
-                >
-                  {branch || `默认: ${env.branch}`}
-                  {branchesLoading && <Loader2 className="ml-2 size-4 animate-spin" />}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
-                <Command>
-                  <CommandInput
-                    placeholder="搜索或输入分支名..."
-                    value={branch}
-                    onValueChange={(value: string) => setBranch(value)}
-                  />
-                  <CommandList>
-                    <CommandEmpty>
-                      {branchesLoading ? "加载中..." : "无匹配分支，可直接输入"}
-                    </CommandEmpty>
-                    <CommandGroup>
-                      {branches.map((item) => (
-                        <CommandItem
-                          key={item}
-                          value={item}
-                          onSelect={(value: string) => {
-                            setBranch(value);
-                            setBranchPopoverOpen(false);
-                          }}
-                        >
-                          {item}
-                        </CommandItem>
-                      ))}
-                    </CommandGroup>
-                  </CommandList>
-                </Command>
-              </PopoverContent>
-            </Popover>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="trigger-commit">Commit Hash（可选）</Label>
-            <Input
-              id="trigger-commit"
-              value={commitHash}
-              onChange={(e) => setCommitHash(e.target.value)}
-              placeholder="例如: a1b2c3d"
-              className="font-mono"
-            />
-          </div>
-        </DialogBody>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            取消
-          </Button>
-          <Button
-            onClick={() => onTrigger(env.id, branch || undefined, commitHash || undefined)}
-            disabled={triggering === env.id}
-          >
-            {triggering === env.id ? (
-              <>
-                <Loader2 className="size-4 animate-spin" />
-                触发中
-              </>
-            ) : (
-              <>
-                <Play className="size-4" />
-                触发构建
-              </>
-            )}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
   );
 }

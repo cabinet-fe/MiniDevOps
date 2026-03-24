@@ -17,6 +17,9 @@ const ProjectListPage = lazy(() =>
 const ProjectDetailPage = lazy(() =>
   import('@/pages/projects/detail').then((m) => ({ default: m.ProjectDetailPage })),
 )
+const EnvironmentListPage = lazy(() =>
+  import('@/pages/environments/list').then((m) => ({ default: m.EnvironmentListPage })),
+)
 const CredentialListPage = lazy(() =>
   import('@/pages/credentials/list').then((m) => ({ default: m.CredentialListPage })),
 )
@@ -130,6 +133,14 @@ function AppRoutes() {
           element={
             <Suspense fallback={<RouteFallback />}>
               <ProjectDetailPage />
+            </Suspense>
+          }
+        />
+        <Route
+          path="environments"
+          element={
+            <Suspense fallback={<RouteFallback />}>
+              <EnvironmentListPage />
             </Suspense>
           }
         />

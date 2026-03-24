@@ -14,6 +14,7 @@ import {
   KeyRound,
   BookOpen,
   Hammer,
+  Layers,
   type LucideIcon,
 } from 'lucide-react'
 import { useTheme } from 'next-themes'
@@ -34,6 +35,7 @@ import { useAuthStore } from '@/stores/auth-store'
 const ROUTE_META: Record<string, { label: string; icon: LucideIcon }> = {
   '/': { label: '仪表盘', icon: LayoutDashboard },
   '/projects': { label: '项目', icon: FolderGit2 },
+  '/environments': { label: '环境', icon: Layers },
   '/credentials': { label: '凭证', icon: KeyRound },
   '/servers': { label: '服务器', icon: Server },
   '/users': { label: '用户', icon: Users },
