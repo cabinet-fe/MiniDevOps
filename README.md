@@ -20,19 +20,24 @@
 
 ### 二进制部署
 
-从 [Releases](../../releases) 下载对应平台的二进制文件：
+从 [Releases](../../releases) 下载对应平台的二进制文件。系统分为 **主控 (Server)** 与 **执行端 (Agent)** 两部分。
 
-| 文件 | 平台 |
-|------|------|
-| `buildflow-linux-amd64` | Linux x86_64 |
-| `buildflow-linux-arm64` | Linux ARM64 |
-| `buildflow-windows-amd64.exe` | Windows x64 |
+#### 1. 发布文件说明
+
+| 文件类型 | 文件名示例 | 平台 | 说明 |
+|----------|------------|------|------|
+| **Server** | `buildflow-linux-amd64` | Linux x86_64 | 包含 UI 与核心调度逻辑，通常部署在管理机。 |
+| **Server** | `buildflow-windows-amd64.exe` | Windows x64 | — |
+| **Agent** | `buildflow-agent-linux-amd64` | Linux x86_64 | 部署在目标生产服务器，接收并部署产物。 |
+| **Agent** | `buildflow-agent-windows-amd64.exe` | Windows x64 | — |
+
+#### 2. 主控启动（以 Linux 为例）
 
 ```bash
-# 下载（以 Linux x86_64 为例）
+# 1. 赋予执行权限
 chmod +x buildflow-linux-amd64
 
-# 创建配置文件
+# 2. 创建配置文件 config.yaml
 cat > config.yaml << 'EOF'
 server:
   port: 8080
@@ -43,11 +48,8 @@ database:
 
 jwt:
   secret: "your-secret-key-change-this"
-  access_ttl: "2h"
-  refresh_ttl: "168h"
 
 build:
-  max_concurrent: 3
   workspace_dir: "./data/workspaces"
   artifact_dir: "./data/artifacts"
   log_dir: "./data/logs"
@@ -59,14 +61,34 @@ encryption:
 admin:
   username: "admin"
   password: "admin123"
-  display_name: "Administrator"
 EOF
 
-# 启动
+# 3. 运行主控
 ./buildflow-linux-amd64 --config config.yaml
 ```
 
 启动后访问 `http://localhost:8080`，使用配置文件中的管理员账号登录。
+
+#### 3. 目录与持久化说明
+
+应用启动后会在同级或配置指定的路径下生成 `data/` 目录，其结构及用途如下：
+
+| 目录/文件 | 说明 |
+|-----------|------|
+| `data/db.sqlite` | SQLite 数据库文件，存储所有项目、环境、用户及审计数据。**务必定期备份**。 |
+| `data/workspaces/` | Git 工作区。每个环境对应一个目录，用于存放克隆的代码及执行构建。 |
+| `data/artifacts/` | 产物归档区。存储历史构建生成的压缩包（Zip/Gzip），支持按需回滚部署。 |
+| `data/logs/` | 实时日志存储。记录每次构建的完整输出，支持通过 WebSocket 实时查看。 |
+| `data/caches/` | 构建缓存。通过配置环境的缓存路径（如 `node_modules`），在清理后仍可保留。 |
+
+#### 4. 执行端启动 (Agent)
+
+若需使用 Agent 模式部署，请在目标机器上运行：
+
+```bash
+./buildflow-agent-linux-amd64 -addr :9091 -token YOUR_SECRET_TOKEN
+```
+然后在主控的「服务器管理」中添加该地址与 Token 即可。
 
 ### 配置说明
 
@@ -83,28 +105,11 @@ EOF
 | `build.artifact_dir` | 构建产物目录 | `./data/artifacts` |
 | `build.log_dir` | 构建日志目录 | `./data/logs` |
 | `build.cache_dir` | 构建缓存目录 | `./data/caches` |
-| `encryption.key` | AES-GCM（敏感字段）与登录可选 AES-CBC 共用密钥（64 位 hex，**生产环境务必修改**）。嵌入二进制会在响应 `index.html` 时注入该密钥到 `window.__BUILDFLOW_ENCRYPTION_KEY__`，与运行时配置一致；本地开发或非 Go 托管时可在 `web/.env` 设 `VITE_BUILDFLOW_ENCRYPTION_KEY` 对齐 | — |
+| `encryption.key` | AES-GCM 密钥（64 位 hex，**生产环境务必修改**）。用于加密凭据及敏感变量。 | — |
 | `admin.username` | 初始管理员用户名 | `admin` |
 | `admin.password` | 初始管理员密码（**首次启动后请修改**） | — |
 
 所有配置项均可通过环境变量覆盖，前缀为 `BUILDFLOW_`，例如 `BUILDFLOW_SERVER_PORT=9090`。
-
-### 数据库迁移（仓库凭证）
-
-从旧版本（项目内直接保存 `repo_username/repo_password`）升级到新版本（独立凭证表）时，无需手动执行 SQL：
-
-1. 应用启动时会通过 GORM `AutoMigrate` 自动创建 `credentials` 表，并为 `projects` 表新增 `credential_id` 字段。
-2. 启动后会自动扫描历史项目：`repo_auth_type != none` 且存在 `repo_password` 的记录会被迁移为独立凭证，并自动回填 `projects.credential_id`。
-3. 迁移逻辑是幂等的，重复启动不会重复迁移同一项目。
-
-建议线上升级步骤：
-
-1. 停止旧版本服务。
-2. 备份数据库文件（默认 `data/db.sqlite`）。
-3. 部署并启动新版本，等待自动迁移完成。
-4. 验证项目凭证是否已迁移成功（进入「凭证」页面检查）。
-
-回滚方案：停止新版本，恢复备份数据库文件，并切回旧版本二进制。
 
 ## 开发指南
 
@@ -121,7 +126,7 @@ EOF
 make dev
 ```
 
-开发模式下后端使用 `-tags dev` 编译，不嵌入前端资源。访问 `http://localhost:8070` 使用前端（Vite 自动代理 API 请求到后端）。密文登录：开发依赖 `web/.env` 中的 `VITE_BUILDFLOW_ENCRYPTION_KEY` 与后端一致；**生产嵌入二进制**由服务端在返回的 `index.html` 中注入运行时 `encryption.key`，修改 `config.yaml` 后重启即可，无需为改密钥而重编前端（CI 中仍可注入 `VITE_*` 作为构建校验或静态托管场景的备用）。
+开发模式下后端使用 `-tags dev` 编译，不嵌入前端资源。访问 `http://localhost:8070` 使用前端（Vite 自动代理 API 请求到后端）。
 
 ### 构建
 
@@ -132,6 +137,10 @@ make build-linux
 # 构建 Windows amd64 二进制
 make build-win
 
+# 构建 Agent 二进制
+make build-agent-linux
+make build-agent-win
+
 # 清理构建产物
 make clean
 ```
@@ -139,20 +148,22 @@ make clean
 ### 项目结构
 
 ```
-├── cmd/server/          # 入口，embed 前端产物
+├── cmd/
+│   ├── server/          # 主控入口，embed 前端产物
+│   └── agent/           # 执行端入口，极简部署工具
 ├── internal/
 │   ├── config/          # 配置加载
 │   ├── model/           # GORM 模型 + DB 初始化
 │   ├── repository/      # 数据访问层
 │   ├── service/         # 业务逻辑层
-│   ├── handler/         # HTTP 处理器（Gin）
-│   ├── middleware/       # 认证、RBAC、CORS、审计
-│   ├── engine/          # 构建引擎（Pipeline、Scheduler、Cron）
-│   ├── deployer/        # 部署器（Rsync/SFTP/SCP/Agent）
+│   ├── handler/         # HTTP 处理器 (Gin)
+│   ├── middleware/      # 认证、RBAC、CORS、审计
+│   ├── engine/          # 构建引擎 (Pipeline、Scheduler、Cron)
+│   ├── deployer/        # 部署器 (Rsync/SFTP/SCP/Agent)
 │   ├── pkg/             # 通用工具（加密、响应封装）
 │   └── ws/              # WebSocket Hub
-├── web/                 # React 前端（Vite + shadcn/ui）
-├── config.yaml          # 运行时配置
+├── web/                 # React 前端 (Vite + shadcn/ui)
+├── config.yaml          # 运行时配置示例
 └── Makefile
 ```
 
