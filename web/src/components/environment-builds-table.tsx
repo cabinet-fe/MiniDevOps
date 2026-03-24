@@ -82,7 +82,7 @@ function BuildRow({
     color: "bg-zinc-500",
   };
   const canDownload = build.status === "success" && Boolean(build.artifact_path);
-  const canDeploy = build.status === "success";
+  const canDeploy = build.status === "success" && Boolean(build.artifact_path);
   const canRetry = ["failed", "cancelled"].includes(build.status);
   const branchDiffers = build.branch && build.branch !== env.branch;
 

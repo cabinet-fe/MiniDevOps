@@ -83,12 +83,43 @@ EOF
 
 #### 4. 执行端启动 (Agent)
 
-若需使用 Agent 模式部署，请在目标机器上运行：
+若环境部署方式选择 **HTTP Agent**，需在目标机器上运行 `buildflow-agent`。主控通过 HTTP 将构建产物推送到 Agent，由 Agent 解压到指定目录并可执行部署后脚本；Agent 与主控之间使用 **Bearer Token** 鉴权（请求头 `Authorization: Bearer <token>`），请确保主控「服务器管理」里填写的 Token 与 Agent 侧配置**完全一致**（明文一致即可，数据库存储为加密字段，部署时会自动解密后使用）。
+
+**配置方式（优先级由低到高：YAML 文件 → 环境变量 → 命令行参数）**
+
+| 来源 | 说明 |
+|------|------|
+| 默认配置文件 | 与可执行文件同目录下的 `buildflow-agent.yaml`（也可用 `-config` 指定路径）。不存在则忽略，不报错。 |
+| 环境变量 | `BUILDFLOW_AGENT_ADDR`、`BUILDFLOW_AGENT_TOKEN`、`BUILDFLOW_AGENT_TLS_CERT`、`BUILDFLOW_AGENT_TLS_KEY` |
+| 命令行 | `-addr`、`-token`、`-tls-cert`、`-tls-key`、`-config` |
+
+YAML 示例（与二进制放在同一目录时无需 `-config`）：
+
+```yaml
+addr: ":9091"
+token: "YOUR_SECRET_TOKEN"
+# 可选：启用 HTTPS
+# tls_cert: "/path/to/cert.pem"
+# tls_key: "/path/to/key.pem"
+```
+
+最小启动示例（仅用命令行）：
 
 ```bash
+chmod +x buildflow-agent-linux-amd64
 ./buildflow-agent-linux-amd64 -addr :9091 -token YOUR_SECRET_TOKEN
 ```
-然后在主控的「服务器管理」中添加该地址与 Token 即可。
+
+使用同目录配置文件时：
+
+```bash
+./buildflow-agent-linux-amd64
+# 等价于读取 ./buildflow-agent.yaml 中的 addr / token 等
+```
+
+**与主控对接**：在「服务器管理」中新增服务器，部署方式选 **Agent**，填写 Agent 监听地址（如 `http://192.168.1.10:9091`；若 Agent 使用 HTTPS 则填 `https://...`）、以及上述 Token。保存后可用连接测试确认可达。
+
+**自检**：Agent 启动后访问 `GET /healthz`（需携带相同 Bearer Token）应返回健康信息。
 
 ### 配置说明
 

@@ -159,26 +159,23 @@ func (h *BuildHandler) Cancel(c *gin.Context) {
 	pkg.Success(c, nil)
 }
 
-// POST /api/v1/builds/:id/deploy - manual deploy
+// POST /api/v1/builds/:id/deploy - deploy existing artifact only (new build record, no re-clone/build)
 func (h *BuildHandler) Deploy(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
 		pkg.Error(c, http.StatusBadRequest, "参数错误")
 		return
 	}
-	build, err := h.buildService.GetByID(uint(id))
+	userID := middleware.GetUserID(c)
+	build, err := h.buildService.TriggerDeployBuild(uint(id), userID)
 	if err != nil {
-		pkg.Error(c, http.StatusNotFound, "构建不存在")
-		return
-	}
-	if build.Status != "success" {
-		pkg.Error(c, http.StatusBadRequest, "只有成功的构建才能部署")
+		pkg.Error(c, http.StatusBadRequest, err.Error())
 		return
 	}
 	if h.scheduler != nil {
 		h.scheduler.Submit(build.ID)
 	}
-	pkg.Success(c, gin.H{"message": "部署已提交"})
+	pkg.Created(c, build)
 }
 
 // GET /api/v1/builds/:id/artifact - download artifact file

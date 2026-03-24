@@ -15,12 +15,11 @@ import {
   Activity,
   Code2,
 } from 'lucide-react'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
-  BUILD_SCRIPT_TYPES,
   DEPLOY_METHODS,
   REPO_AUTH_TYPES,
   ARTIFACT_FORMATS,
@@ -286,16 +285,47 @@ export function ProjectManualPage() {
           {/* Agent */}
           <Section id="agent" title="独立 Agent 部署" icon={Rocket}>
             <p>
-              Agent 是一个极小的二进制程序，部署在生产服务器上，作为 BuildFlow 主控的接收端。
+              Agent 是一个极小的二进制程序，部署在生产服务器上，作为 BuildFlow 主控的接收端。主控将构建产物通过 HTTP 推送到 Agent，Agent 负责解压到目标路径，并可执行部署后脚本；鉴权方式为 <code>Authorization: Bearer &lt;token&gt;</code>。
+            </p>
+            <p className="text-xs">
+              在「服务器管理」中新增服务器、部署方式选择 <strong>Agent</strong> 时，填写的访问地址与 Token 必须与 Agent 进程中的配置一致。界面保存的 Token 在库内加密存储，部署时会解密后与 Agent 校验，请保证与 Agent 侧明文配置相同。
             </p>
             <div className="space-y-4">
               <div className="space-y-2">
-                <h4 className="text-sm font-medium text-foreground">启动参数示例：</h4>
-                <div className="rounded-lg bg-black/90 p-4 font-mono text-xs text-white">
-                  <div># 启动并设置监听端口与 Token</div>
-                  <div className="mt-1">./buildflow-agent -addr :9091 -token YOUR_SECRET_TOKEN</div>
+                <h4 className="text-sm font-medium text-foreground">配置优先级（后者覆盖前者）</h4>
+                <p className="text-xs">
+                  同目录默认配置文件 <code>buildflow-agent.yaml</code>（可用 <code>-config</code> 指定路径）→ 环境变量 → 命令行参数。未提供配置文件时仅使用环境变量与命令行。
+                </p>
+              </div>
+              <div className="rounded-lg border bg-background p-4 space-y-2">
+                <h4 className="text-sm font-medium text-foreground">环境变量</h4>
+                <ul className="text-xs space-y-1">
+                  <li><code>BUILDFLOW_AGENT_ADDR</code> — 监听地址，如 <code>:9091</code></li>
+                  <li><code>BUILDFLOW_AGENT_TOKEN</code> — 与主控「服务器管理」中 Token 一致</li>
+                  <li><code>BUILDFLOW_AGENT_TLS_CERT</code> / <code>BUILDFLOW_AGENT_TLS_KEY</code> — 可选，启用 HTTPS</li>
+                </ul>
+              </div>
+              <div className="space-y-2">
+                <h4 className="text-sm font-medium text-foreground">YAML 示例（与可执行文件同目录）</h4>
+                <div className="rounded-lg bg-black/90 p-4 font-mono text-xs text-white whitespace-pre">
+{`addr: ":9091"
+token: "YOUR_SECRET_TOKEN"
+# tls_cert: "/path/to/cert.pem"
+# tls_key: "/path/to/key.pem"`}
                 </div>
               </div>
+              <div className="space-y-2">
+                <h4 className="text-sm font-medium text-foreground">命令行示例</h4>
+                <div className="rounded-lg bg-black/90 p-4 font-mono text-xs text-white">
+                  <div># 显式指定监听与 Token</div>
+                  <div className="mt-1">./buildflow-agent -addr :9091 -token YOUR_SECRET_TOKEN</div>
+                  <div className="mt-3 text-white/70"># 使用默认路径下的 buildflow-agent.yaml</div>
+                  <div className="mt-1">./buildflow-agent</div>
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                启动后可请求 <code>GET /healthz</code>（携带相同 Bearer Token）做健康检查。
+              </p>
               <div className="rounded-lg border border-primary/20 bg-primary/5 p-4">
                 <h4 className="mb-2 flex items-center gap-2 text-sm font-medium text-primary">
                   <ShieldCheck className="h-4 w-4" /> 为什么使用 Agent？

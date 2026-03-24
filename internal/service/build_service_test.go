@@ -117,3 +117,47 @@ func TestGetBuildDetailFallsBackToEnvironmentBranchAndInferredStage(t *testing.T
 		t.Fatalf("expected inferred current stage building, got %q", detail.CurrentStage)
 	}
 }
+
+func TestTriggerDeployBuildCopiesArtifactAndTriggerType(t *testing.T) {
+	db := newBuildServiceTestDB(t)
+	envRepo := repository.NewEnvironmentRepository(db)
+	buildRepo := repository.NewBuildRepository(db)
+
+	env := &model.Environment{ProjectID: 1, Name: "dev", Branch: "main"}
+	if err := envRepo.Create(env); err != nil {
+		t.Fatalf("create env: %v", err)
+	}
+
+	src := &model.Build{
+		ProjectID:     1,
+		EnvironmentID: env.ID,
+		BuildNumber:   1,
+		Status:        "success",
+		CurrentStage:  "success",
+		TriggerType:   "manual",
+		Branch:        "main",
+		CommitHash:    "abc1234",
+		ArtifactPath:  "project-1/build-001.tar.gz",
+	}
+	if err := buildRepo.Create(src); err != nil {
+		t.Fatalf("create source build: %v", err)
+	}
+
+	svc := NewBuildService(buildRepo, nil, envRepo, nil)
+	out, err := svc.TriggerDeployBuild(src.ID, 2)
+	if err != nil {
+		t.Fatalf("trigger deploy: %v", err)
+	}
+	if out.TriggerType != "deploy" {
+		t.Fatalf("expected trigger deploy, got %q", out.TriggerType)
+	}
+	if out.ArtifactPath != src.ArtifactPath {
+		t.Fatalf("artifact path not copied")
+	}
+	if out.BuildNumber != 2 {
+		t.Fatalf("expected build number 2, got %d", out.BuildNumber)
+	}
+	if out.TriggeredBy != 2 {
+		t.Fatalf("expected triggered_by 2")
+	}
+}

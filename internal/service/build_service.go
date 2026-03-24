@@ -5,6 +5,7 @@ import (
 	"buildflow/internal/config"
 	"buildflow/internal/model"
 	"buildflow/internal/repository"
+	"fmt"
 	"os"
 	"sort"
 	"strings"
@@ -93,6 +94,8 @@ func inferBuildStageFromLog(logPath string) string {
 			stage = "building"
 		case strings.Contains(line, "=== Stage: Deploying ==="):
 			stage = "deploying"
+		case strings.Contains(line, "=== 仅部署：使用已有产物 ==="):
+			stage = "deploying"
 		case strings.Contains(line, "=== Build completed successfully ==="):
 			stage = "success"
 		}
@@ -125,6 +128,41 @@ func (s *BuildService) TriggerBuild(projectID, environmentID, triggeredBy uint, 
 		Branch:        branch,
 		CommitHash:    commitHash,
 		CommitMessage: commitMessage,
+	}
+	if err := s.repo.Create(build); err != nil {
+		return nil, err
+	}
+	return build, nil
+}
+
+// TriggerDeployBuild creates a new build that only publishes an existing artifact (no clone/build).
+func (s *BuildService) TriggerDeployBuild(sourceBuildID uint, triggeredBy uint) (*model.Build, error) {
+	src, err := s.repo.FindByID(sourceBuildID)
+	if err != nil {
+		return nil, err
+	}
+	if src.Status != "success" {
+		return nil, fmt.Errorf("只有成功的构建才能部署")
+	}
+	if strings.TrimSpace(src.ArtifactPath) == "" {
+		return nil, fmt.Errorf("该构建没有产物，无法部署")
+	}
+	num, err := s.repo.GetNextBuildNumber(src.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	build := &model.Build{
+		ProjectID:     src.ProjectID,
+		EnvironmentID: src.EnvironmentID,
+		BuildNumber:   num,
+		Status:        "pending",
+		CurrentStage:  "pending",
+		TriggerType:   "deploy",
+		TriggeredBy:   triggeredBy,
+		Branch:        src.Branch,
+		CommitHash:    src.CommitHash,
+		CommitMessage: src.CommitMessage,
+		ArtifactPath:  src.ArtifactPath,
 	}
 	if err := s.repo.Create(build); err != nil {
 		return nil, err

@@ -7,6 +7,7 @@ import (
 	"compress/gzip"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -115,7 +116,11 @@ func (p *Pipeline) Execute(ctx context.Context, buildID uint) {
 
 	now := time.Now()
 	build.StartedAt = &now
-	p.updateStage(build, "cloning")
+	if build.TriggerType == "deploy" {
+		p.updateStage(build, "deploying")
+	} else {
+		p.updateStage(build, "cloning")
+	}
 
 	// Setup log file
 	logDir := filepath.Join(p.logDir, fmt.Sprintf("project-%d", project.ID))
@@ -141,6 +146,11 @@ func (p *Pipeline) Execute(ctx context.Context, buildID uint) {
 		defer logMu.Unlock()
 		logFile.WriteString(line + "\n")
 		p.hub.BroadcastToChannel(channel, []byte(line))
+	}
+
+	if build.TriggerType == "deploy" {
+		p.executeDeployOnly(ctx, build, project, env, writeLine)
+		return
 	}
 
 	// Stage 1: Git clone/pull
@@ -335,83 +345,139 @@ func (p *Pipeline) Execute(ctx context.Context, buildID uint) {
 		p.cleanupArtifacts(project)
 	}
 
-	// Stage 4: Deploy
-	if env.DeployServerID != nil && env.DeployPath != "" {
+	sourceDir := filepath.Join(workDir, env.BuildOutputDir)
+	if env.BuildOutputDir == "" {
+		sourceDir = workDir
+	}
+	if err := p.deployFromSource(ctx, build, project, env, sourceDir, writeLine, true); err != nil {
 		if ctx.Err() != nil {
 			p.cancelBuild(build)
 			return
 		}
-		p.updateStage(build, "deploying")
-		writeLine("=== Stage: Deploying ===")
-
-		server, err := p.serverRepo.FindByID(*env.DeployServerID)
-		if err != nil {
-			p.failBuild(build, "服务器不存在")
-			writeLine("ERROR: Server not found")
-			return
-		}
-
-		password := ""
-		if server.Password != "" {
-			password, _ = pkg.Decrypt(server.Password)
-		}
-		privateKey := ""
-		if server.PrivateKey != "" {
-			privateKey, _ = pkg.Decrypt(server.PrivateKey)
-		}
-
-		sourceDir := filepath.Join(workDir, env.BuildOutputDir)
-		if env.BuildOutputDir == "" {
-			sourceDir = workDir
-		}
-
-		d := deployer.NewDeployer(env.DeployMethod)
-		deployOpts := deployer.DeployOptions{
-			SourceDir:     sourceDir,
-			ArchiveFormat: normalizeArtifactFormat(project.ArtifactFormat),
-			Server: deployer.ServerInfo{
-				Host:       server.Host,
-				Port:       server.Port,
-				OSType:     server.OSType,
-				Username:   server.Username,
-				AuthType:   server.AuthType,
-				Password:   password,
-				PrivateKey: privateKey,
-				AgentURL:   server.AgentURL,
-				AgentToken: server.AgentToken,
-			},
-			RemotePath: env.DeployPath,
-			Logger:     writeLine,
-		}
-
-		if err := d.Deploy(ctx, deployOpts); err != nil {
-			if ctx.Err() != nil {
-				p.cancelBuild(build)
-				return
-			}
-			p.failBuild(build, "部署失败: "+err.Error())
-			writeLine("ERROR: Deploy failed: " + err.Error())
-			return
-		}
-		writeLine("Deploy completed successfully")
-
-		// Post-deploy script
-		if env.PostDeployScript != "" {
-			writeLine("=== Executing post-deploy script ===")
-			if err := deployer.ExecuteRemoteScriptInDir(ctx, deployOpts.Server, deployOpts.RemotePath, env.PostDeployScript, writeLine); err != nil {
-				if ctx.Err() != nil {
-					p.cancelBuild(build)
-					return
-				}
-				p.failBuild(build, "部署后脚本失败: "+err.Error())
-				writeLine("ERROR: Post-deploy script failed: " + err.Error())
-				return
-			}
-			writeLine("Post-deploy script completed")
-		}
+		p.failBuild(build, err.Error())
+		writeLine("ERROR: " + err.Error())
+		return
 	}
 
-	// Success
+	p.finishBuildSuccess(build, writeLine)
+}
+
+func decryptServerSecrets(server *model.Server) (password, privateKey, agentToken string) {
+	if server.Password != "" {
+		password, _ = pkg.Decrypt(server.Password)
+	}
+	if server.PrivateKey != "" {
+		privateKey, _ = pkg.Decrypt(server.PrivateKey)
+	}
+	if server.AgentToken != "" {
+		agentToken, _ = pkg.Decrypt(server.AgentToken)
+	}
+	return password, privateKey, agentToken
+}
+
+// deployFromSource runs deploy and optional post-deploy script.
+// When skipIfNoDeploy is true and no deploy target is configured, returns nil.
+// When skipIfNoDeploy is false, missing deploy configuration returns an error.
+func (p *Pipeline) deployFromSource(ctx context.Context, build *model.Build, project *model.Project, env *model.Environment, sourceDir string, writeLine func(string), skipIfNoDeploy bool) error {
+	if env.DeployServerID == nil || strings.TrimSpace(env.DeployPath) == "" {
+		if skipIfNoDeploy {
+			return nil
+		}
+		return fmt.Errorf("环境未配置部署服务器或路径")
+	}
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+	p.updateStage(build, "deploying")
+	writeLine("=== Stage: Deploying ===")
+
+	server, err := p.serverRepo.FindByID(*env.DeployServerID)
+	if err != nil {
+		return fmt.Errorf("服务器不存在")
+	}
+
+	password, privateKey, agentToken := decryptServerSecrets(server)
+
+	d := deployer.NewDeployer(env.DeployMethod)
+	deployOpts := deployer.DeployOptions{
+		SourceDir:     sourceDir,
+		ArchiveFormat: normalizeArtifactFormat(project.ArtifactFormat),
+		Server: deployer.ServerInfo{
+			Host:       server.Host,
+			Port:       server.Port,
+			OSType:     server.OSType,
+			Username:   server.Username,
+			AuthType:   server.AuthType,
+			Password:   password,
+			PrivateKey: privateKey,
+			AgentURL:   server.AgentURL,
+			AgentToken: agentToken,
+		},
+		RemotePath: env.DeployPath,
+		Logger:     writeLine,
+	}
+
+	if err := d.Deploy(ctx, deployOpts); err != nil {
+		return fmt.Errorf("部署失败: %w", err)
+	}
+	writeLine("Deploy completed successfully")
+
+	if env.PostDeployScript != "" {
+		writeLine("=== Executing post-deploy script ===")
+		if err := deployer.ExecuteRemoteScriptInDir(ctx, deployOpts.Server, deployOpts.RemotePath, env.PostDeployScript, writeLine); err != nil {
+			return fmt.Errorf("部署后脚本失败: %w", err)
+		}
+		writeLine("Post-deploy script completed")
+	}
+	return nil
+}
+
+func (p *Pipeline) executeDeployOnly(ctx context.Context, build *model.Build, project *model.Project, env *model.Environment, writeLine func(string)) {
+	artifactPath := strings.TrimSpace(build.ArtifactPath)
+	if artifactPath == "" {
+		p.failBuild(build, "该构建没有产物路径")
+		writeLine("ERROR: no artifact_path")
+		return
+	}
+	if !filepath.IsAbs(artifactPath) {
+		artifactPath = filepath.Join(p.artifactDir, artifactPath)
+	}
+	if _, err := os.Stat(artifactPath); err != nil {
+		p.failBuild(build, "产物文件不存在: "+err.Error())
+		writeLine("ERROR: " + err.Error())
+		return
+	}
+	writeLine("=== 仅部署：使用已有产物 ===")
+	writeLine("Artifact: " + artifactPath)
+
+	tmpDir, err := os.MkdirTemp("", "buildflow-deploy-*")
+	if err != nil {
+		p.failBuild(build, "创建临时目录失败: "+err.Error())
+		return
+	}
+	defer os.RemoveAll(tmpDir)
+
+	artifactFormat := normalizeArtifactFormat(project.ArtifactFormat)
+	if err := extractArtifactArchive(artifactPath, tmpDir, artifactFormat); err != nil {
+		p.failBuild(build, "解压产物失败: "+err.Error())
+		writeLine("ERROR: " + err.Error())
+		return
+	}
+
+	if err := p.deployFromSource(ctx, build, project, env, tmpDir, writeLine, false); err != nil {
+		if ctx.Err() != nil {
+			p.cancelBuild(build)
+			return
+		}
+		p.failBuild(build, err.Error())
+		writeLine("ERROR: " + err.Error())
+		return
+	}
+
+	p.finishBuildSuccess(build, writeLine)
+}
+
+func (p *Pipeline) finishBuildSuccess(build *model.Build, writeLine func(string)) {
 	finished := time.Now()
 	build.FinishedAt = &finished
 	build.DurationMs = finished.Sub(*build.StartedAt).Milliseconds()
@@ -423,8 +489,6 @@ func (p *Pipeline) Execute(ctx context.Context, buildID uint) {
 		"current_stage": build.CurrentStage,
 	})
 	writeLine(fmt.Sprintf("=== Build #%d finished in %dms ===", build.BuildNumber, build.DurationMs))
-
-	// Notify
 	p.notify(build, "success")
 }
 
@@ -731,6 +795,126 @@ func createZip(targetPath, sourceDir string) error {
 		_, err = io.Copy(dst, src)
 		return err
 	})
+}
+
+func extractArtifactArchive(archivePath, destDir, format string) error {
+	if err := os.MkdirAll(destDir, 0755); err != nil {
+		return err
+	}
+	if normalizeArtifactFormat(format) == "zip" {
+		return extractZipArchiveFile(archivePath, destDir)
+	}
+	return extractTarGzArchiveFile(archivePath, destDir)
+}
+
+func extractTarGzArchiveFile(archivePath, destDir string) error {
+	f, err := os.Open(archivePath)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	gzipReader, err := gzip.NewReader(f)
+	if err != nil {
+		return err
+	}
+	defer gzipReader.Close()
+
+	tarReader := tar.NewReader(gzipReader)
+	for {
+		header, err := tarReader.Next()
+		if errors.Is(err, io.EOF) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+
+		targetPath := filepath.Join(destDir, filepath.Clean(header.Name))
+		relPath, err := filepath.Rel(destDir, targetPath)
+		if err != nil {
+			return err
+		}
+		if strings.HasPrefix(relPath, "..") {
+			return fmt.Errorf("illegal archive path: %s", header.Name)
+		}
+
+		switch header.Typeflag {
+		case tar.TypeDir:
+			if err := os.MkdirAll(targetPath, os.FileMode(header.Mode)); err != nil {
+				return err
+			}
+		case tar.TypeReg, tar.TypeRegA:
+			if err := os.MkdirAll(filepath.Dir(targetPath), 0755); err != nil {
+				return err
+			}
+			out, err := os.OpenFile(targetPath, os.O_CREATE|os.O_RDWR|os.O_TRUNC, os.FileMode(header.Mode))
+			if err != nil {
+				return err
+			}
+			if _, err := io.Copy(out, tarReader); err != nil {
+				out.Close()
+				return err
+			}
+			if err := out.Close(); err != nil {
+				return err
+			}
+		}
+	}
+}
+
+func extractZipArchiveFile(archivePath, destDir string) error {
+	archive, err := zip.OpenReader(archivePath)
+	if err != nil {
+		return err
+	}
+	defer archive.Close()
+
+	for _, file := range archive.File {
+		targetPath := filepath.Join(destDir, filepath.Clean(file.Name))
+		relPath, err := filepath.Rel(destDir, targetPath)
+		if err != nil {
+			return err
+		}
+		if strings.HasPrefix(relPath, "..") {
+			return fmt.Errorf("illegal archive path: %s", file.Name)
+		}
+
+		if file.FileInfo().IsDir() {
+			if err := os.MkdirAll(targetPath, file.Mode()); err != nil {
+				return err
+			}
+			continue
+		}
+
+		if err := os.MkdirAll(filepath.Dir(targetPath), 0755); err != nil {
+			return err
+		}
+
+		reader, err := file.Open()
+		if err != nil {
+			return err
+		}
+		dst, err := os.OpenFile(targetPath, os.O_CREATE|os.O_RDWR|os.O_TRUNC, file.Mode())
+		if err != nil {
+			reader.Close()
+			return err
+		}
+		if _, err := io.Copy(dst, reader); err != nil {
+			dst.Close()
+			reader.Close()
+			return err
+		}
+		if err := dst.Close(); err != nil {
+			reader.Close()
+			return err
+		}
+		if err := reader.Close(); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 // parseCachePaths parses a JSON array string into a list of paths.

@@ -16,37 +16,58 @@ import (
 	"runtime"
 	"strings"
 	"time"
+
+	"gopkg.in/yaml.v3"
 )
 
 var version = "dev"
 
+type agentYAML struct {
+	Addr    string `yaml:"addr"`
+	Token   string `yaml:"token"`
+	TLSCert string `yaml:"tls_cert"`
+	TLSKey  string `yaml:"tls_key"`
+}
+
 func main() {
-	addr := flag.String("addr", getenv("BUILDFLOW_AGENT_ADDR", ":9091"), "agent listen address")
-	token := flag.String("token", getenv("BUILDFLOW_AGENT_TOKEN", ""), "agent bearer token")
-	certFile := flag.String("tls-cert", getenv("BUILDFLOW_AGENT_TLS_CERT", ""), "TLS certificate path")
-	keyFile := flag.String("tls-key", getenv("BUILDFLOW_AGENT_TLS_KEY", ""), "TLS private key path")
+	configPath := flag.String("config", "", "YAML config path (default: <executable-dir>/buildflow-agent.yaml)")
+	addrFlag := flag.String("addr", "", "agent listen address")
+	tokenFlag := flag.String("token", "", "agent bearer token")
+	certFile := flag.String("tls-cert", "", "TLS certificate path")
+	keyFile := flag.String("tls-key", "", "TLS private key path")
 	flag.Parse()
 
-	if strings.TrimSpace(*token) == "" {
-		fmt.Fprintln(os.Stderr, "BUILDFLOW_AGENT_TOKEN or -token is required")
+	cfgPath := strings.TrimSpace(*configPath)
+	if cfgPath == "" {
+		cfgPath = defaultConfigPath()
+	}
+	fileCfg := loadAgentConfigFile(cfgPath)
+
+	addr := pick(*addrFlag, os.Getenv("BUILDFLOW_AGENT_ADDR"), fileCfg.Addr, ":9091")
+	token := pick(*tokenFlag, os.Getenv("BUILDFLOW_AGENT_TOKEN"), fileCfg.Token, "")
+	cert := pick(*certFile, os.Getenv("BUILDFLOW_AGENT_TLS_CERT"), fileCfg.TLSCert, "")
+	key := pick(*keyFile, os.Getenv("BUILDFLOW_AGENT_TLS_KEY"), fileCfg.TLSKey, "")
+
+	if strings.TrimSpace(token) == "" {
+		fmt.Fprintln(os.Stderr, "BUILDFLOW_AGENT_TOKEN, -token, or token in buildflow-agent.yaml is required")
 		os.Exit(1)
 	}
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("/healthz", withAuth(*token, healthzHandler))
-	mux.HandleFunc("/upload", withAuth(*token, uploadHandler))
-	mux.HandleFunc("/exec", withAuth(*token, execHandler))
+	mux.HandleFunc("/healthz", withAuth(token, healthzHandler))
+	mux.HandleFunc("/upload", withAuth(token, uploadHandler))
+	mux.HandleFunc("/exec", withAuth(token, execHandler))
 
 	server := &http.Server{
-		Addr:              *addr,
+		Addr:              addr,
 		Handler:           mux,
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       5 * time.Minute,
 		WriteTimeout:      5 * time.Minute,
 	}
 
-	if *certFile != "" && *keyFile != "" {
-		if err := server.ListenAndServeTLS(*certFile, *keyFile); err != nil && !errors.Is(err, http.ErrServerClosed) {
+	if cert != "" && key != "" {
+		if err := server.ListenAndServeTLS(cert, key); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			fmt.Fprintf(os.Stderr, "agent server failed: %v\n", err)
 			os.Exit(1)
 		}
@@ -57,6 +78,46 @@ func main() {
 		fmt.Fprintf(os.Stderr, "agent server failed: %v\n", err)
 		os.Exit(1)
 	}
+}
+
+func defaultConfigPath() string {
+	exe, err := os.Executable()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(filepath.Dir(exe), "buildflow-agent.yaml")
+}
+
+func loadAgentConfigFile(path string) agentYAML {
+	if path == "" {
+		return agentYAML{}
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return agentYAML{}
+		}
+		fmt.Fprintf(os.Stderr, "read config %s: %v\n", path, err)
+		os.Exit(1)
+	}
+	var cfg agentYAML
+	if err := yaml.Unmarshal(data, &cfg); err != nil {
+		fmt.Fprintf(os.Stderr, "invalid YAML in %s: %v\n", path, err)
+		os.Exit(1)
+	}
+	return cfg
+}
+
+func pick(first string, rest ...string) string {
+	if strings.TrimSpace(first) != "" {
+		return strings.TrimSpace(first)
+	}
+	for _, r := range rest {
+		if strings.TrimSpace(r) != "" {
+			return strings.TrimSpace(r)
+		}
+	}
+	return ""
 }
 
 func withAuth(token string, next http.HandlerFunc) http.HandlerFunc {
@@ -269,14 +330,6 @@ func commandForCurrentOS(script string) *exec.Cmd {
 		return exec.Command("powershell", "-NoProfile", "-NonInteractive", "-Command", script)
 	}
 	return exec.Command("sh", "-lc", script)
-}
-
-func getenv(key, fallback string) string {
-	value := strings.TrimSpace(os.Getenv(key))
-	if value == "" {
-		return fallback
-	}
-	return value
 }
 
 func normalizeArchiveFormat(format string) string {

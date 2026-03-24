@@ -247,15 +247,17 @@ export function BuildDetailPage() {
                   下载产物
                 </Button>
               )}
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => handleAction('deploy')}
-                disabled={actionLoading === 'deploy'}
-              >
-                <Rocket className="size-4" />
-                部署
-              </Button>
+              {build.artifact_path && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleAction('deploy')}
+                  disabled={actionLoading === 'deploy'}
+                >
+                  <Rocket className="size-4" />
+                  部署
+                </Button>
+              )}
               <Button
                 variant="outline"
                 size="sm"
