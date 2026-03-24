@@ -9,6 +9,7 @@ import {
   Loader2,
   Play,
   Search,
+  Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -40,6 +41,7 @@ import {
   DialogBody,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -47,6 +49,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { api } from "@/lib/api";
 import type { PaginatedData } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { useAuthStore } from "@/stores/auth-store";
 
 interface EnvironmentRow {
   id: number;
@@ -75,6 +78,8 @@ const LIST_PAGE_SIZE = 20;
 const DIALOG_PAGE_SIZE = 20;
 
 export function EnvironmentListPage() {
+  const user = useAuthStore((s) => s.user);
+  const canDeleteEnvironment = user?.role === "admin" || user?.role === "ops";
   const [projectOptions, setProjectOptions] = useState<ProjectBrief[]>([]);
   const [projectsLoading, setProjectsLoading] = useState(true);
   const [listItems, setListItems] = useState<EnvironmentListItem[]>([]);
@@ -94,6 +99,8 @@ export function EnvironmentListPage() {
   const [dialogTotalPages, setDialogTotalPages] = useState(1);
   const [dialogLoading, setDialogLoading] = useState(false);
   const [dialogActionLoading, setDialogActionLoading] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<EnvironmentListItem | null>(null);
+  const [deleteSubmitting, setDeleteSubmitting] = useState(false);
 
   useEffect(() => {
     const t = window.setTimeout(() => {
@@ -244,6 +251,33 @@ export function EnvironmentListPage() {
     });
     setDialogPage(1);
     setBuildsDialogOpen(true);
+  };
+
+  const handleConfirmDeleteEnvironment = async () => {
+    if (!deleteTarget) return;
+    setDeleteSubmitting(true);
+    try {
+      const res = await api.delete(`/projects/${deleteTarget.project_id}/envs/${deleteTarget.id}`);
+      if (res.code !== 0) {
+        toast.error(res.message || "删除失败");
+        return;
+      }
+      toast.success("环境已删除");
+      if (
+        buildsDialogRow &&
+        buildsDialogRow.projectId === deleteTarget.project_id &&
+        buildsDialogRow.env.id === deleteTarget.id
+      ) {
+        setBuildsDialogOpen(false);
+        setBuildsDialogRow(null);
+      }
+      setDeleteTarget(null);
+      await loadEnvironmentList();
+    } catch {
+      toast.error("删除失败");
+    } finally {
+      setDeleteSubmitting(false);
+    }
   };
 
   const triggerBuild = async (projectId: number, envId: number) => {
@@ -425,6 +459,17 @@ export function EnvironmentListPage() {
                                 )}
                                 {busy ? "构建中" : "构建"}
                               </Button>
+                              {canDeleteEnvironment && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="border-destructive/40 text-destructive hover:bg-destructive/10"
+                                  onClick={() => setDeleteTarget(row)}
+                                >
+                                  <Trash2 className="size-3.5" />
+                                  删除
+                                </Button>
+                              )}
                             </div>
                           </TableCell>
                         </TableRow>
@@ -464,6 +509,42 @@ export function EnvironmentListPage() {
             )}
           </CardContent>
         </Card>
+
+        <Dialog
+          open={deleteTarget !== null}
+          onOpenChange={(open) => {
+            if (!open && !deleteSubmitting) setDeleteTarget(null);
+          }}
+        >
+          <DialogContent showCloseButton={!deleteSubmitting}>
+            <DialogHeader>
+              <DialogTitle>删除环境</DialogTitle>
+              <DialogDescription>
+                {deleteTarget
+                  ? `将永久删除「${deleteTarget.project_name}」下的环境「${deleteTarget.name}」及其全部构建记录、日志、产物与该环境工作区/缓存目录，且不可恢复。确定继续？`
+                  : ""}
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={deleteSubmitting}
+                onClick={() => setDeleteTarget(null)}
+              >
+                取消
+              </Button>
+              <Button
+                type="button"
+                variant="destructive"
+                disabled={deleteSubmitting}
+                onClick={() => void handleConfirmDeleteEnvironment()}
+              >
+                {deleteSubmitting ? <Loader2 className="size-4 animate-spin" /> : "删除"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         <Dialog
           open={buildsDialogOpen}

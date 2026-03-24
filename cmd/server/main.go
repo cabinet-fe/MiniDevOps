@@ -86,6 +86,11 @@ func main() {
 	credentialService := service.NewCredentialService(credentialRepo, projectRepo, userRepo)
 	projectService := service.NewProjectService(projectRepo, credentialRepo, envRepo, buildRepo, envVarRepo, varGroupRepo)
 	buildService := service.NewBuildService(buildRepo, projectRepo, envRepo, userRepo)
+	if n, err := buildRepo.MarkInterruptedBuilds("服务异常中断，构建未正常结束"); err != nil {
+		logger.Error("reconcile interrupted builds", zap.Error(err))
+	} else if n > 0 {
+		logger.Info("marked interrupted builds as failed", zap.Int64("count", n))
+	}
 	notifService := service.NewNotificationService(notifRepo)
 	auditService := service.NewAuditService(auditRepo)
 	dictService := service.NewDictService(dictRepo)
@@ -123,7 +128,9 @@ func main() {
 
 	// Setup Gin
 	r := gin.Default()
-	r.Use(gzip.Gzip(gzip.DefaultCompression))
+	r.Use(gzip.Gzip(gzip.DefaultCompression, gzip.WithExcludedPaths([]string{
+		"/api/v1/system/backup", // handler already writes gzip; avoid double-compression
+	})))
 	r.Use(middleware.CORSGin(middleware.CORSConfig{}))
 
 	// Audit middleware (must be before route registration)
@@ -179,7 +186,7 @@ func main() {
 			auth.POST("/projects", projectHandler.Create)
 			auth.GET("/projects/:id", projectHandler.GetByID)
 			auth.PUT("/projects/:id", projectHandler.Update)
-			auth.DELETE("/projects/:id", projectHandler.Delete)
+			auth.DELETE("/projects/:id", middleware.RequireRole("ops", "admin"), projectHandler.Delete)
 			auth.GET("/projects/:id/export", middleware.RequireRole("admin"), projectHandler.Export)
 			auth.POST("/projects/import", middleware.RequireRole("admin"), projectHandler.Import)
 
@@ -187,7 +194,7 @@ func main() {
 			auth.GET("/projects/:id/envs", projectHandler.ListEnvironments)
 			auth.POST("/projects/:id/envs", projectHandler.CreateEnvironment)
 			auth.PUT("/projects/:id/envs/:envId", projectHandler.UpdateEnvironment)
-			auth.DELETE("/projects/:id/envs/:envId", projectHandler.DeleteEnvironment)
+			auth.DELETE("/projects/:id/envs/:envId", middleware.RequireRole("ops", "admin"), projectHandler.DeleteEnvironment)
 			auth.GET("/projects/:id/envs/:envId/vars", projectHandler.ListEnvVars)
 			auth.POST("/projects/:id/envs/:envId/vars", projectHandler.CreateEnvVar)
 			auth.PUT("/projects/:id/envs/:envId/vars/:varId", projectHandler.UpdateEnvVar)

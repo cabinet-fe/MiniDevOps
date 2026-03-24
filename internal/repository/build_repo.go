@@ -64,6 +64,48 @@ func (r *BuildRepository) FindActiveBuilds() ([]model.Build, error) {
 	return builds, err
 }
 
+// FindByEnvironmentID returns all builds for an environment (any status).
+func (r *BuildRepository) FindByEnvironmentID(environmentID uint) ([]model.Build, error) {
+	var builds []model.Build
+	err := r.db.Where("environment_id = ?", environmentID).Find(&builds).Error
+	return builds, err
+}
+
+func (r *BuildRepository) DeleteByEnvironmentID(environmentID uint) error {
+	return r.db.Where("environment_id = ?", environmentID).Delete(&model.Build{}).Error
+}
+
+// MarkInterruptedBuilds sets non-terminal builds to failed (e.g. after process crash).
+func (r *BuildRepository) MarkInterruptedBuilds(errMsg string) (int64, error) {
+	builds, err := r.FindActiveBuilds()
+	if err != nil {
+		return 0, err
+	}
+	now := time.Now()
+	var n int64
+	for _, b := range builds {
+		stage := b.CurrentStage
+		if stage == "" {
+			stage = b.Status
+		}
+		durationMs := b.DurationMs
+		if b.StartedAt != nil {
+			durationMs = now.Sub(*b.StartedAt).Milliseconds()
+		}
+		fields := map[string]interface{}{
+			"current_stage":  stage,
+			"error_message":  errMsg,
+			"finished_at":    &now,
+			"duration_ms":    durationMs,
+		}
+		if err := r.UpdateStatus(b.ID, "failed", fields); err != nil {
+			return n, err
+		}
+		n++
+	}
+	return n, nil
+}
+
 func (r *BuildRepository) CountActive() (int64, error) {
 	var count int64
 	err := r.db.Model(&model.Build{}).

@@ -387,7 +387,31 @@ func (s *ProjectService) ListEnvironments(projectID uint) ([]model.Environment, 
 	return envs, nil
 }
 
+func normalizeEnvironmentDeploy(env *model.Environment) error {
+	m := strings.TrimSpace(strings.ToLower(env.DeployMethod))
+	if m == "" {
+		m = "rsync"
+	}
+	switch m {
+	case "rsync", "sftp", "scp", "agent", "local":
+		env.DeployMethod = m
+	default:
+		return fmt.Errorf("不支持的部署方式: %s", strings.TrimSpace(env.DeployMethod))
+	}
+	if m == "local" {
+		env.DeployServerID = nil
+		p := strings.TrimSpace(env.DeployPath)
+		if p != "" && !filepath.IsAbs(p) {
+			return errors.New("本机部署路径须为绝对路径")
+		}
+	}
+	return nil
+}
+
 func (s *ProjectService) CreateEnvironment(env *model.Environment, varGroupIDs []uint) error {
+	if err := normalizeEnvironmentDeploy(env); err != nil {
+		return err
+	}
 	if err := s.envRepo.Create(env); err != nil {
 		return err
 	}
@@ -401,6 +425,9 @@ func (s *ProjectService) CreateEnvironment(env *model.Environment, varGroupIDs [
 }
 
 func (s *ProjectService) UpdateEnvironment(env *model.Environment, varGroupIDs []uint, syncVarGroups bool) error {
+	if err := normalizeEnvironmentDeploy(env); err != nil {
+		return err
+	}
 	existing, err := s.envRepo.FindByID(env.ID)
 	if err != nil {
 		return err
@@ -428,6 +455,27 @@ func (s *ProjectService) DeleteEnvironment(id, projectID uint) error {
 	}
 	if env.ProjectID != projectID {
 		return errors.New("环境不属于该项目")
+	}
+	builds, err := s.buildRepo.FindByEnvironmentID(id)
+	if err != nil {
+		return err
+	}
+	for _, b := range builds {
+		if b.LogPath != "" {
+			_ = os.Remove(b.LogPath)
+		}
+		if b.ArtifactPath != "" {
+			_ = os.Remove(b.ArtifactPath)
+		}
+	}
+	if err := s.buildRepo.DeleteByEnvironmentID(id); err != nil {
+		return err
+	}
+	if config.C != nil {
+		envWS := filepath.Join(config.C.Build.WorkspaceDir, fmt.Sprintf("project-%d", projectID), fmt.Sprintf("env-%d", id))
+		_ = os.RemoveAll(envWS)
+		envCache := filepath.Join(config.C.Build.CacheDir, fmt.Sprintf("project-%d", projectID), fmt.Sprintf("env-%d", id))
+		_ = os.RemoveAll(envCache)
 	}
 	if err := s.envVarRepo.DeleteByEnvironmentID(id); err != nil {
 		return err

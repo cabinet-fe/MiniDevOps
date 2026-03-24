@@ -126,6 +126,15 @@ func (h *WebhookHandler) Handle(c *gin.Context) {
 	commitHash = event.CommitHash
 	commitMessage = event.CommitMessage
 	branch := extractBranchFromRef(ref)
+	var filterEnvID uint
+	if q := strings.TrimSpace(c.Query("environment_id")); q != "" {
+		parsed, err := strconv.ParseUint(q, 10, 32)
+		if err != nil {
+			pkg.Error(c, http.StatusBadRequest, "environment_id 无效")
+			return
+		}
+		filterEnvID = uint(parsed)
+	}
 	envs, err := h.envRepo.ListByProjectID(uint(projectID))
 	if err != nil {
 		pkg.Error(c, http.StatusInternalServerError, "查询环境失败")
@@ -133,6 +142,9 @@ func (h *WebhookHandler) Handle(c *gin.Context) {
 	}
 	var triggered int
 	for _, env := range envs {
+		if filterEnvID != 0 && env.ID != filterEnvID {
+			continue
+		}
 		if env.Branch == branch {
 			build, err := h.buildService.TriggerBuild(uint(projectID), env.ID, 0, "webhook", "", commitHash, commitMessage)
 			if err != nil {
@@ -144,7 +156,11 @@ func (h *WebhookHandler) Handle(c *gin.Context) {
 			triggered++
 		}
 	}
-	pkg.Success(c, gin.H{"triggered": triggered, "branch": branch})
+	out := gin.H{"triggered": triggered, "branch": branch}
+	if filterEnvID != 0 {
+		out["environment_id"] = filterEnvID
+	}
+	pkg.Success(c, out)
 }
 
 func parseWebhookPayload(c *gin.Context, project *model.Project, body []byte) (*webhookEvent, error) {

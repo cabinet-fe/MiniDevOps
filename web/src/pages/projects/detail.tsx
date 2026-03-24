@@ -1,8 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Link, useParams } from "react-router";
-import { Copy, ExternalLink, GitBranch, Loader2, Pencil, Play, Plus, Sparkles } from "lucide-react";
+import { Link, useNavigate, useParams } from "react-router";
+import { Copy, ExternalLink, GitBranch, Loader2, Pencil, Play, Plus, Sparkles, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -10,11 +18,12 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { api } from "@/lib/api";
 import type { PaginatedData } from "@/lib/api";
 import { EnvironmentBuildsTable, extractFileName } from "@/components/environment-builds-table";
-import { ARTIFACT_FORMATS, BUILD_SCRIPT_TYPES } from "@/lib/constants";
-import { cn } from "@/lib/utils";
+import { ARTIFACT_FORMATS, BUILD_SCRIPT_TYPES, DEPLOY_METHODS } from "@/lib/constants";
+import { cn, copyTextToClipboard } from "@/lib/utils";
 import { ProjectFormDialog } from "@/pages/projects/form";
 import { EnvironmentFormDialog } from "@/pages/projects/environment-form";
 import { useNotificationStore } from "@/stores/notification-store";
+import { useAuthStore } from "@/stores/auth-store";
 
 interface Environment {
   id: number;
@@ -121,8 +130,9 @@ function UrlRow({
 }) {
   const handleCopy = async () => {
     if (!value) return;
-    await navigator.clipboard.writeText(value);
-    toast.success(copyLabel);
+    const ok = await copyTextToClipboard(value);
+    if (ok) toast.success(copyLabel);
+    else toast.error("复制失败，请手动复制或检查浏览器权限");
   };
 
   return (
@@ -141,7 +151,7 @@ function UrlRow({
       </span>
       {value && (
         <div className="flex shrink-0 gap-0.5">
-          <Button variant="ghost" size="icon-xs" onClick={handleCopy}>
+          <Button type="button" variant="ghost" size="icon-xs" onClick={handleCopy}>
             <Copy className="size-3" />
           </Button>
           {href && (
@@ -159,6 +169,10 @@ function UrlRow({
 
 export function ProjectDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+  const user = useAuthStore((s) => s.user);
+  const canDeleteProject = user?.role === "admin" || user?.role === "ops";
+  const canDeleteEnvironment = canDeleteProject;
   const projectId = Number(id);
   const [project, setProject] = useState<Project | null>(null);
   const [buildsByEnv, setBuildsByEnv] = useState<Record<number, Build[]>>({});
@@ -175,6 +189,10 @@ export function ProjectDetailPage() {
   const [editingEnv, setEditingEnv] = useState<Environment | null>(null);
   const [activeTab, setActiveTab] = useState<string>("");
   const [dictTags, setDictTags] = useState<{ label: string; value: string }[]>([]);
+  const [deleteProjectOpen, setDeleteProjectOpen] = useState(false);
+  const [deleteProjectLoading, setDeleteProjectLoading] = useState(false);
+  const [deleteEnvTarget, setDeleteEnvTarget] = useState<Environment | null>(null);
+  const [deleteEnvLoading, setDeleteEnvLoading] = useState(false);
   const latestNotification = useNotificationStore((state) => state.latestNotification);
 
   useEffect(() => {
@@ -244,7 +262,11 @@ export function ProjectDetailPage() {
   useEffect(() => {
     if (!project) return;
     const envIds = project.environments.map((e) => String(e.id));
-    if (envIds.length > 0 && (!activeTab || !envIds.includes(activeTab))) {
+    if (envIds.length === 0) {
+      setActiveTab("");
+      return;
+    }
+    if (!activeTab || !envIds.includes(activeTab)) {
       setActiveTab(envIds[0]);
     }
   }, [project, activeTab]);
@@ -297,6 +319,60 @@ export function ProjectDetailPage() {
       toast.error("触发失败");
     } finally {
       setTriggering(null);
+    }
+  };
+
+  const handleDeleteEnvironment = async () => {
+    if (!projectId || !deleteEnvTarget) return;
+    const envId = deleteEnvTarget.id;
+    setDeleteEnvLoading(true);
+    try {
+      const res = await api.delete(`/projects/${projectId}/envs/${envId}`);
+      if (res.code !== 0) {
+        toast.error(res.message || "删除失败");
+        return;
+      }
+      toast.success("环境已删除");
+      setDeleteEnvTarget(null);
+      setBuildsByEnv((prev) => {
+        const next = { ...prev };
+        delete next[envId];
+        return next;
+      });
+      setBuildPageByEnv((prev) => {
+        const next = { ...prev };
+        delete next[envId];
+        return next;
+      });
+      setBuildPaginationByEnv((prev) => {
+        const next = { ...prev };
+        delete next[envId];
+        return next;
+      });
+      await fetchProject();
+    } catch {
+      toast.error("删除失败");
+    } finally {
+      setDeleteEnvLoading(false);
+    }
+  };
+
+  const handleDeleteProject = async () => {
+    if (!projectId) return;
+    setDeleteProjectLoading(true);
+    try {
+      const res = await api.delete(`/projects/${projectId}`);
+      if (res.code !== 0) {
+        toast.error(res.message || "删除失败");
+        return;
+      }
+      toast.success("项目已删除");
+      navigate("/projects");
+    } catch {
+      toast.error("删除失败");
+    } finally {
+      setDeleteProjectLoading(false);
+      setDeleteProjectOpen(false);
     }
   };
 
@@ -386,6 +462,17 @@ export function ProjectDetailPage() {
                   <Pencil className="size-3.5" />
                   编辑
                 </Button>
+                {canDeleteProject && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="border-destructive/40 text-destructive hover:bg-destructive/10"
+                    onClick={() => setDeleteProjectOpen(true)}
+                  >
+                    <Trash2 className="size-3.5" />
+                    删除
+                  </Button>
+                )}
                 <Link to="/projects">
                   <Button variant="ghost" size="sm">
                     返回
@@ -506,6 +593,9 @@ export function ProjectDetailPage() {
                   total_pages: 1,
                 };
                 const envBuildPage = buildPageByEnv[env.id] ?? 1;
+                const envWebhookUrl = project.webhook_secret
+                  ? `${window.location.origin}/api/v1/webhook/${project.id}/${project.webhook_secret}?environment_id=${env.id}`
+                  : "";
                 return (
                   <TabsContent key={env.id} value={String(env.id)}>
                     <CardContent className="space-y-3 pt-4">
@@ -523,7 +613,15 @@ export function ProjectDetailPage() {
                           }
                         />
                         <MetaItem label="产物" value={env.build_output_dir || "未配置"} mono />
-                        <MetaItem label="部署" value={env.deploy_method || "未部署"} />
+                        <MetaItem
+                          label="部署"
+                          value={
+                            env.deploy_method
+                              ? (DEPLOY_METHODS.find((m) => m.value === env.deploy_method)?.label ??
+                                env.deploy_method)
+                              : "未部署"
+                          }
+                        />
                         {env.deploy_path && <MetaItem label="路径" value={env.deploy_path} mono />}
                         <MetaItem
                           label="Cron"
@@ -532,6 +630,15 @@ export function ProjectDetailPage() {
                         />
                         <MetaItem label="变量组" value={`${env.var_group_ids?.length ?? 0} 个`} />
                       </div>
+
+                      {envWebhookUrl ? (
+                        <UrlRow
+                          label={`Webhook · ${env.name}`}
+                          value={envWebhookUrl}
+                          href={envWebhookUrl}
+                          copyLabel="环境 Webhook URL 已复制"
+                        />
+                      ) : null}
 
                       <div className="flex gap-2">
                         <Button
@@ -557,6 +664,17 @@ export function ProjectDetailPage() {
                           <Pencil className="size-3.5" />
                           编辑环境
                         </Button>
+                        {canDeleteEnvironment && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="border-destructive/40 text-destructive hover:bg-destructive/10"
+                            onClick={() => setDeleteEnvTarget(env)}
+                          >
+                            <Trash2 className="size-3.5" />
+                            删除环境
+                          </Button>
+                        )}
                       </div>
 
                       <EnvironmentBuildsTable
@@ -593,6 +711,71 @@ export function ProjectDetailPage() {
           editEnv={editingEnv}
           onSuccess={() => fetchProject()}
         />
+
+        <Dialog open={deleteProjectOpen} onOpenChange={setDeleteProjectOpen}>
+          <DialogContent showCloseButton={!deleteProjectLoading}>
+            <DialogHeader>
+              <DialogTitle>删除项目</DialogTitle>
+              <DialogDescription>
+                将永久删除「{project.name}」及其全部环境、构建记录、日志与产物目录，且不可恢复。确定继续？
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={deleteProjectLoading}
+                onClick={() => setDeleteProjectOpen(false)}
+              >
+                取消
+              </Button>
+              <Button
+                type="button"
+                variant="destructive"
+                disabled={deleteProjectLoading}
+                onClick={() => void handleDeleteProject()}
+              >
+                {deleteProjectLoading ? <Loader2 className="size-4 animate-spin" /> : "删除"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog
+          open={deleteEnvTarget !== null}
+          onOpenChange={(open) => {
+            if (!open && !deleteEnvLoading) setDeleteEnvTarget(null);
+          }}
+        >
+          <DialogContent showCloseButton={!deleteEnvLoading}>
+            <DialogHeader>
+              <DialogTitle>删除环境</DialogTitle>
+              <DialogDescription>
+                {deleteEnvTarget
+                  ? `将永久删除环境「${deleteEnvTarget.name}」及其全部构建记录、日志、产物与该环境工作区/缓存目录，且不可恢复。确定继续？`
+                  : ""}
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={deleteEnvLoading}
+                onClick={() => setDeleteEnvTarget(null)}
+              >
+                取消
+              </Button>
+              <Button
+                type="button"
+                variant="destructive"
+                disabled={deleteEnvLoading}
+                onClick={() => void handleDeleteEnvironment()}
+              >
+                {deleteEnvLoading ? <Loader2 className="size-4 animate-spin" /> : "删除"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </TooltipProvider>
   );

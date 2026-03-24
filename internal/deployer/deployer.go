@@ -36,6 +36,8 @@ func NewDeployer(method string) Deployer {
 		return &SCPDeployer{}
 	case "agent":
 		return &AgentDeployer{}
+	case "local":
+		return &LocalDeployer{}
 	default:
 		return &RsyncDeployer{}
 	}

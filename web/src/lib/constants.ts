@@ -19,6 +19,7 @@ export const DEPLOY_METHODS = [
   { value: "sftp", label: "SFTP" },
   { value: "scp", label: "SCP" },
   { value: "agent", label: "Agent" },
+  { value: "local", label: "本机部署" },
 ];
 
 export const AUTH_TYPES = [

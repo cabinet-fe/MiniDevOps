@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { Link } from "react-router";
-import { FolderGit2, LayoutGrid, List, Pencil, Plus, Search } from "lucide-react";
+import { FolderGit2, LayoutGrid, List, Loader2, Pencil, Plus, Search, Trash2 } from "lucide-react";
+import { toast } from "sonner";
 import {
   useReactTable,
   getCoreRowModel,
@@ -9,6 +10,14 @@ import {
 } from "@tanstack/react-table";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -22,6 +31,7 @@ import {
 import { api } from "@/lib/api";
 import type { PaginatedData } from "@/lib/api";
 import { ProjectFormDialog } from "@/pages/projects/form";
+import { useAuthStore } from "@/stores/auth-store";
 
 interface Project {
   id: number;
@@ -44,6 +54,8 @@ function tagDictLabel(value: string, dict: { label: string; value: string }[]) {
 }
 
 export function ProjectListPage() {
+  const user = useAuthStore((s) => s.user);
+  const canDeleteProject = user?.role === "admin" || user?.role === "ops";
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -52,6 +64,8 @@ export function ProjectListPage() {
   const [viewMode, setViewMode] = useState<"card" | "table">("card");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Project | null>(null);
+  const [deleteSubmitting, setDeleteSubmitting] = useState(false);
 
   const fetchProjects = useCallback(async () => {
     setLoading(true);
@@ -84,6 +98,25 @@ export function ProjectListPage() {
 
   const handleSuccess = () => {
     fetchProjects();
+  };
+
+  const handleConfirmDeleteProject = async () => {
+    if (!deleteTarget) return;
+    setDeleteSubmitting(true);
+    try {
+      const res = await api.delete(`/projects/${deleteTarget.id}`);
+      if (res.code !== 0) {
+        toast.error(res.message || "删除失败");
+        return;
+      }
+      toast.success("项目已删除");
+      setDeleteTarget(null);
+      fetchProjects();
+    } catch {
+      toast.error("删除失败");
+    } finally {
+      setDeleteSubmitting(false);
+    }
   };
 
   const [dictTags, setDictTags] = useState<{ label: string; value: string }[]>([]);
@@ -173,6 +206,20 @@ export function ProjectListPage() {
           >
             <Pencil className="size-4" />
           </Button>
+          {canDeleteProject && (
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              className="text-destructive hover:text-destructive"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setDeleteTarget(row.original);
+              }}
+            >
+              <Trash2 className="size-4" />
+            </Button>
+          )}
           <Link to={`/projects/${row.original.id}`}>
             <Button variant="ghost" size="sm">
               查看
@@ -303,18 +350,33 @@ export function ProjectListPage() {
                   </CardContent>
                 </Card>
               </Link>
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                className="absolute right-3 top-3 opacity-0 transition-opacity group-hover:opacity-100"
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  openEdit(project.id);
-                }}
-              >
-                <Pencil className="size-4" />
-              </Button>
+              <div className="absolute right-2 top-2 z-10 flex gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    openEdit(project.id);
+                  }}
+                >
+                  <Pencil className="size-4" />
+                </Button>
+                {canDeleteProject && (
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    className="text-destructive hover:text-destructive"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setDeleteTarget(project);
+                    }}
+                  >
+                    <Trash2 className="size-4" />
+                  </Button>
+                )}
+              </div>
             </div>
           ))}
         </div>
@@ -352,6 +414,42 @@ export function ProjectListPage() {
           </CardContent>
         </Card>
       )}
+
+      <Dialog
+        open={deleteTarget !== null}
+        onOpenChange={(open) => {
+          if (!open && !deleteSubmitting) setDeleteTarget(null);
+        }}
+      >
+        <DialogContent showCloseButton={!deleteSubmitting}>
+          <DialogHeader>
+            <DialogTitle>删除项目</DialogTitle>
+            <DialogDescription>
+              {deleteTarget
+                ? `将永久删除「${deleteTarget.name}」及其全部环境、构建记录、日志与产物目录，且不可恢复。确定继续？`
+                : ""}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={deleteSubmitting}
+              onClick={() => setDeleteTarget(null)}
+            >
+              取消
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={deleteSubmitting}
+              onClick={() => void handleConfirmDeleteProject()}
+            >
+              {deleteSubmitting ? <Loader2 className="size-4 animate-spin" /> : "删除"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <ProjectFormDialog
         open={dialogOpen}

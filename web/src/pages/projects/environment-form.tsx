@@ -220,10 +220,20 @@ export function EnvironmentFormDialog({
     }))
   }
 
+  const isAbsoluteDeployPath = (p: string) => {
+    const t = p.trim()
+    if (!t) return true
+    if (t.startsWith('/')) return true
+    return /^[A-Za-z]:[\\/]/.test(t)
+  }
+
   const validate = () => {
     if (!form.name.trim()) return '请输入环境名称'
     if (form.cron_enabled && !form.cron_expression.trim()) return '启用定时构建时必须填写 Cron 表达式'
     if (envVars.some((item) => !item.key.trim())) return '环境变量 key 不能为空'
+    if (form.deploy_method === 'local' && form.deploy_path.trim() && !isAbsoluteDeployPath(form.deploy_path)) {
+      return '本机部署路径须为绝对路径（如 /var/www/app 或 C:\\publish）'
+    }
     return ''
   }
 
@@ -458,10 +468,20 @@ export function EnvironmentFormDialog({
               </div>
             </div>
 
-            <div className="grid gap-4 sm:grid-cols-3">
+            <div
+              className={`grid gap-4 ${form.deploy_method === 'local' ? 'sm:grid-cols-2' : 'sm:grid-cols-3'}`}
+            >
               <div className="space-y-2">
                 <Label>部署方式</Label>
-                <Select value={form.deploy_method} onValueChange={(value) => setField('deploy_method', value)}>
+                <Select
+                  value={form.deploy_method}
+                  onValueChange={(value) => {
+                    setField('deploy_method', value)
+                    if (value === 'local') {
+                      setField('deploy_server_id', null)
+                    }
+                  }}
+                >
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
@@ -474,32 +494,36 @@ export function EnvironmentFormDialog({
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-2">
-                <Label>部署服务器</Label>
-                <Select
-                  value={form.deploy_server_id ? String(form.deploy_server_id) : 'none'}
-                  onValueChange={(value) => setField('deploy_server_id', value === 'none' ? null : Number(value))}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">不部署</SelectItem>
-                    {servers.map((server) => (
-                      <SelectItem key={server.id} value={String(server.id)}>
-                        {server.name} ({server.host})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+              {form.deploy_method !== 'local' && (
+                <div className="space-y-2">
+                  <Label>部署服务器</Label>
+                  <Select
+                    value={form.deploy_server_id ? String(form.deploy_server_id) : 'none'}
+                    onValueChange={(value) => setField('deploy_server_id', value === 'none' ? null : Number(value))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">不部署</SelectItem>
+                      {servers.map((server) => (
+                        <SelectItem key={server.id} value={String(server.id)}>
+                          {server.name} ({server.host})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
               <div className="space-y-2">
                 <Label htmlFor="env-deploy-path">部署路径</Label>
                 <Input
                   id="env-deploy-path"
                   value={form.deploy_path}
                   onChange={(e) => setField('deploy_path', e.target.value)}
-                  placeholder="/var/www/html"
+                  placeholder={
+                    form.deploy_method === 'local' ? '/var/www/app（本机绝对路径）' : '/var/www/html'
+                  }
                 />
               </div>
             </div>

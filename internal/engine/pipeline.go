@@ -379,11 +379,30 @@ func decryptServerSecrets(server *model.Server) (password, privateKey, agentToke
 // When skipIfNoDeploy is true and no deploy target is configured, returns nil.
 // When skipIfNoDeploy is false, missing deploy configuration returns an error.
 func (p *Pipeline) deployFromSource(ctx context.Context, build *model.Build, project *model.Project, env *model.Environment, sourceDir string, writeLine func(string), skipIfNoDeploy bool) error {
-	if env.DeployServerID == nil || strings.TrimSpace(env.DeployPath) == "" {
-		if skipIfNoDeploy {
-			return nil
+	method := strings.TrimSpace(strings.ToLower(env.DeployMethod))
+	if method == "" {
+		method = "rsync"
+	}
+	isLocal := method == "local"
+	deployPath := strings.TrimSpace(env.DeployPath)
+
+	if isLocal {
+		if deployPath == "" {
+			if skipIfNoDeploy {
+				return nil
+			}
+			return fmt.Errorf("环境未配置部署路径")
 		}
-		return fmt.Errorf("环境未配置部署服务器或路径")
+		if !filepath.IsAbs(deployPath) {
+			return fmt.Errorf("本机部署路径须为绝对路径")
+		}
+	} else {
+		if env.DeployServerID == nil || deployPath == "" {
+			if skipIfNoDeploy {
+				return nil
+			}
+			return fmt.Errorf("环境未配置部署服务器或路径")
+		}
 	}
 	if ctx.Err() != nil {
 		return ctx.Err()
@@ -391,18 +410,19 @@ func (p *Pipeline) deployFromSource(ctx context.Context, build *model.Build, pro
 	p.updateStage(build, "deploying")
 	writeLine("=== Stage: Deploying ===")
 
-	server, err := p.serverRepo.FindByID(*env.DeployServerID)
-	if err != nil {
-		return fmt.Errorf("服务器不存在")
-	}
-
-	password, privateKey, agentToken := decryptServerSecrets(server)
-
-	d := deployer.NewDeployer(env.DeployMethod)
 	deployOpts := deployer.DeployOptions{
 		SourceDir:     sourceDir,
 		ArchiveFormat: normalizeArtifactFormat(project.ArtifactFormat),
-		Server: deployer.ServerInfo{
+		RemotePath:    deployPath,
+		Logger:        writeLine,
+	}
+	if !isLocal {
+		server, err := p.serverRepo.FindByID(*env.DeployServerID)
+		if err != nil {
+			return fmt.Errorf("服务器不存在")
+		}
+		password, privateKey, agentToken := decryptServerSecrets(server)
+		deployOpts.Server = deployer.ServerInfo{
 			Host:       server.Host,
 			Port:       server.Port,
 			OSType:     server.OSType,
@@ -412,11 +432,10 @@ func (p *Pipeline) deployFromSource(ctx context.Context, build *model.Build, pro
 			PrivateKey: privateKey,
 			AgentURL:   server.AgentURL,
 			AgentToken: agentToken,
-		},
-		RemotePath: env.DeployPath,
-		Logger:     writeLine,
+		}
 	}
 
+	d := deployer.NewDeployer(method)
 	if err := d.Deploy(ctx, deployOpts); err != nil {
 		return fmt.Errorf("部署失败: %w", err)
 	}
@@ -424,7 +443,13 @@ func (p *Pipeline) deployFromSource(ctx context.Context, build *model.Build, pro
 
 	if env.PostDeployScript != "" {
 		writeLine("=== Executing post-deploy script ===")
-		if err := deployer.ExecuteRemoteScriptInDir(ctx, deployOpts.Server, deployOpts.RemotePath, env.PostDeployScript, writeLine); err != nil {
+		var err error
+		if isLocal {
+			err = deployer.ExecuteLocalScriptInDir(ctx, deployOpts.RemotePath, env.PostDeployScript, writeLine)
+		} else {
+			err = deployer.ExecuteRemoteScriptInDir(ctx, deployOpts.Server, deployOpts.RemotePath, env.PostDeployScript, writeLine)
+		}
+		if err != nil {
 			return fmt.Errorf("部署后脚本失败: %w", err)
 		}
 		writeLine("Post-deploy script completed")

@@ -229,6 +229,16 @@ func (h *ProjectHandler) Delete(c *gin.Context) {
 		pkg.Error(c, http.StatusBadRequest, "参数错误")
 		return
 	}
+	project, err := h.projectService.GetByID(uint(id))
+	if err != nil {
+		pkg.Error(c, http.StatusNotFound, "项目不存在")
+		return
+	}
+	if h.cronNotifier != nil {
+		for _, env := range project.Environments {
+			h.cronNotifier.Remove(env.ID)
+		}
+	}
 	if err := h.projectService.Delete(uint(id)); err != nil {
 		pkg.Error(c, http.StatusBadRequest, err.Error())
 		return
@@ -479,6 +489,9 @@ func (h *ProjectHandler) DeleteEnvironment(c *gin.Context) {
 	if err := h.projectService.DeleteEnvironment(uint(envID), uint(projectID)); err != nil {
 		pkg.Error(c, http.StatusBadRequest, err.Error())
 		return
+	}
+	if h.cronNotifier != nil {
+		h.cronNotifier.Remove(uint(envID))
 	}
 	pkg.Success(c, nil)
 }

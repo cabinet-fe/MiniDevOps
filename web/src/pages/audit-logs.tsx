@@ -6,10 +6,13 @@ import {
   createColumnHelper,
   type ColumnDef,
 } from '@tanstack/react-table'
+import { format, isValid, parse } from 'date-fns'
+import { zhCN } from 'date-fns/locale/zh-CN'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
+import { Calendar } from '@/components/ui/calendar'
 import { Badge } from '@/components/ui/badge'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import {
   Table,
   TableBody,
@@ -40,6 +43,7 @@ import {
   ChevronRight,
   FileText,
   Filter,
+  CalendarIcon,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -72,6 +76,48 @@ const RESOURCE_LABELS: Record<string, string> = {
   settings: '设置',
   system: '系统',
   auth: '认证',
+}
+
+function AuditDateField({
+  label,
+  value,
+  onChange,
+}: {
+  label: string
+  value: string
+  onChange: (next: string) => void
+}) {
+  const parsed = value ? parse(value, 'yyyy-MM-dd', new Date()) : undefined
+  const selected = parsed && isValid(parsed) ? parsed : undefined
+
+  return (
+    <div className="space-y-1.5">
+      <label className="text-xs font-medium text-muted-foreground">{label}</label>
+      <Popover>
+        <PopoverTrigger asChild>
+          <Button
+            variant="outline"
+            className={cn(
+              'w-[160px] justify-start text-left font-normal',
+              !selected && 'text-muted-foreground'
+            )}
+          >
+            <CalendarIcon className="mr-2 size-4 shrink-0 opacity-60" />
+            {selected ? format(selected, 'yyyy-MM-dd') : '选择日期'}
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-auto p-0" align="start">
+          <Calendar
+            mode="single"
+            selected={selected}
+            onSelect={(d) => onChange(d ? format(d, 'yyyy-MM-dd') : '')}
+            locale={zhCN}
+            captionLayout="dropdown"
+          />
+        </PopoverContent>
+      </Popover>
+    </div>
+  )
 }
 
 function ActionBadge({ action }: { action: string }) {
@@ -241,24 +287,16 @@ export function AuditLogsPage() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium text-muted-foreground">开始日期</label>
-              <Input
-                type="date"
-                value={fromDate}
-                onChange={(e) => { setFromDate(e.target.value); setPage(1) }}
-                className="w-[150px]"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium text-muted-foreground">结束日期</label>
-              <Input
-                type="date"
-                value={toDate}
-                onChange={(e) => { setToDate(e.target.value); setPage(1) }}
-                className="w-[150px]"
-              />
-            </div>
+            <AuditDateField
+              label="开始日期"
+              value={fromDate}
+              onChange={(v) => { setFromDate(v); setPage(1) }}
+            />
+            <AuditDateField
+              label="结束日期"
+              value={toDate}
+              onChange={(v) => { setToDate(v); setPage(1) }}
+            />
             {(actionFilter || resourceFilter || fromDate || toDate) && (
               <Button
                 variant="ghost"
