@@ -14,7 +14,6 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"go.uber.org/zap"
@@ -249,9 +248,9 @@ func (p *Pipeline) Execute(ctx context.Context, buildID uint) {
 	cmd := exec.CommandContext(ctx, interpreter, interpreterArgs...)
 	cmd.Dir = workDir
 	cmd.Env = envVars
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	configureBuildCmdProc(cmd)
 	cmd.Cancel = func() error {
-		return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+		return killBuildCmdProcess(cmd)
 	}
 
 	stdout, _ := cmd.StdoutPipe()
@@ -265,7 +264,7 @@ func (p *Pipeline) Execute(ctx context.Context, buildID uint) {
 
 	// Ensure any background processes spawned by the script are killed
 	defer func() {
-		_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+		_ = killBuildCmdProcess(cmd)
 	}()
 
 	// Stream output line by line
