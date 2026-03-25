@@ -172,6 +172,8 @@ func parseWebhookPayload(c *gin.Context, project *model.Project, body []byte) (*
 		return parseGitLabWebhook(c, body)
 	case "gitea":
 		return parseGiteaWebhook(c, body)
+	case "gitee":
+		return parseGiteeWebhook(c, body)
 	case "bitbucket":
 		return parseBitbucketWebhook(c, body)
 	case "generic":
@@ -185,6 +187,8 @@ func detectWebhookPlatform(c *gin.Context, project *model.Project) string {
 	switch {
 	case c.GetHeader("X-Gitea-Event") != "":
 		return "gitea"
+	case c.GetHeader("X-Gitee-Event") != "":
+		return "gitee"
 	case c.GetHeader("X-GitHub-Event") != "":
 		return "github"
 	case c.GetHeader("X-Gitlab-Event") != "":
@@ -198,6 +202,30 @@ func detectWebhookPlatform(c *gin.Context, project *model.Project) string {
 	default:
 		return ""
 	}
+}
+
+// parseGiteeWebhook 码云 Push / Tag Push：请求体与 GitHub push 类似（含 ref、after、head_commit）。
+// 请求头 X-Gitee-Event 一般为 Push Hook 或 Tag Push Hook，见 https://help.gitee.com  WebHook 说明。
+func parseGiteeWebhook(c *gin.Context, body []byte) (*webhookEvent, error) {
+	if eventType := c.GetHeader("X-Gitee-Event"); eventType != "" {
+		et := strings.ToLower(strings.TrimSpace(eventType))
+		if et != "push hook" && et != "tag push hook" {
+			return nil, fmt.Errorf("仅支持 Push Hook / Tag Push Hook 事件")
+		}
+	}
+	var payload githubPushPayload
+	if err := json.Unmarshal(body, &payload); err != nil || payload.Ref == "" {
+		return nil, fmt.Errorf("无法解析 Gitee push payload")
+	}
+	commitHash := payload.HeadCommit.ID
+	if commitHash == "" {
+		commitHash = payload.After
+	}
+	return &webhookEvent{
+		Ref:           payload.Ref,
+		CommitHash:    commitHash,
+		CommitMessage: payload.HeadCommit.Message,
+	}, nil
 }
 
 func parseGitHubWebhook(c *gin.Context, body []byte) (*webhookEvent, error) {

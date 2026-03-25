@@ -405,9 +405,17 @@ function CredentialFormDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[560px]">
         {loading ? (
-          <DialogBody className="flex items-center justify-center py-10">
-            <div className="border-muted size-8 animate-spin rounded-full border-2 border-t-foreground" />
-          </DialogBody>
+          <>
+            <DialogHeader>
+              <DialogTitle>{isEdit ? '编辑凭证' : '新建凭证'}</DialogTitle>
+              <DialogDescription>
+                凭证敏感字段只会加密存储，不会在 API 中返回明文。
+              </DialogDescription>
+            </DialogHeader>
+            <DialogBody className="flex items-center justify-center py-10">
+              <div className="border-muted size-8 animate-spin rounded-full border-2 border-t-foreground" />
+            </DialogBody>
+          </>
         ) : (
           <form onSubmit={submit} className="flex min-h-0 flex-1 flex-col">
             <DialogHeader>
@@ -483,6 +491,7 @@ function CredentialFormDialog({
                 <Input
                   id="credential-password"
                   type="password"
+                  autoComplete="current-password"
                   value={form.password}
                   onChange={(e) => setField('password', e.target.value)}
                   placeholder={isEdit ? '留空则保持不变' : `请输入${form.type === 'token' ? 'Token' : '密码'}`}

@@ -17,7 +17,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
-import { Sheet, SheetContent } from '@/components/ui/sheet'
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Separator } from '@/components/ui/separator'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { useAuthStore } from '@/stores/auth-store'
@@ -207,6 +207,10 @@ export function Sidebar({ mobileOpen = false, onMobileOpenChange }: SidebarProps
           className="w-[260px] border-border bg-sidebar p-0"
           showCloseButton={true}
         >
+          <SheetHeader className="sr-only">
+            <SheetTitle>主导航</SheetTitle>
+            <SheetDescription>在窄屏下打开侧栏以访问应用导航</SheetDescription>
+          </SheetHeader>
           <div className="flex h-full flex-col">
             <div className="flex h-14 shrink-0 items-center gap-2.5 border-b border-border px-4">
               <div className="flex size-8 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600 shadow-lg shadow-emerald-500/20">

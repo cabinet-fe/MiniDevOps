@@ -595,6 +595,7 @@ export function SettingsPage() {
                         />
                         <Input
                           type={item.is_secret ? 'password' : 'text'}
+                          autoComplete={item.is_secret ? 'new-password' : 'off'}
                           value={item.value}
                           onChange={(e) => updateVarGroupItem(index, { value: e.target.value, keep_value: false })}
                           placeholder={item.keep_value ? '已存储密文，留空则保持不变' : '变量值'}

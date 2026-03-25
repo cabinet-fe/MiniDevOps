@@ -185,7 +185,30 @@ SSH 连接支持密码、密钥、SSH Agent 三种认证。`path.go` 处理 Wind
 - 登录：`POST /api/v1/auth/login` 支持 `password`（明文，可选）与 `password_cipher`（hex，可选）。若 `password_cipher` 非空则仅解密该字段（AES-256-CBC，格式为 `hex(IV(16 字节) || PKCS#7 密文)`）；否则使用 `password`。解密失败返回 400「登录参数无效」，与凭据错误 401 区分。前端仅提交 `password_cipher`（`web/src/lib/login-crypto.ts`）：密钥来源 **优先** `window.__BUILDFLOW_ENCRYPTION_KEY__`（嵌入二进制由 Go 在返回的 `index.html` 中注入，与**运行时** `encryption.key` 一致，改配置重启即可，无需重编前端）；否则使用 `VITE_BUILDFLOW_ENCRYPTION_KEY`（dev、`vite preview`、非 Go 托管静态资源等，见 `web/.env`）。**安全上下文**（HTTPS、`localhost` 等，即存在 `crypto.subtle`）下用 **Web Crypto** 加密；**非安全上下文**（如纯 HTTP 内网 IP）下用 **`crypto-es`**（AES-256-CBC）；无有效密钥或加密失败时抛错，不再回退为明文 `password`。
 - RBAC 角色：`admin`（全权限）、`ops`（运维操作）、`dev`（只读 + 触发构建）
 - WebSocket：`/ws/` 前缀，token 通过查询参数传递
-- Webhook：`POST /api/v1/webhook/:projectId/:secret`（公开，无需认证）；可选查询参数 `environment_id` 时仅在推送分支与该环境分支一致时触发该环境构建
+- Webhook（公开，无需 JWT；`curl`/CI/代码托管平台均可调用）：
+  - **方法与路径**：`POST /api/v1/webhook/{project_id}/{webhook_secret}`。`{project_id}` 为正整数项目 ID；`{webhook_secret}` 为路径段，须与数据库中该项目的 `webhook_secret` **完全一致**（与「项目」里展示的 Webhook 密钥一致，需正确 URL 编码；含 `/`、`+` 等特殊字符时路径必须编码）。**无** `Authorization` 头。
+  - **查询参数（可选）**：`environment_id` — 无符号十进制整数。若提供：仅处理该 ID 对应环境（且须属于该项目）；仍要求**推送分支**与环境的 **Branch** 字段一致才触发。不提供：遍历该项目下所有环境，对每个「分支名与解析出的分支一致」的环境各触发一次构建。
+  - **请求头 `Content-Type`**：建议 `application/json`；请求体为**原始 JSON 字节**（不能为空或非法 JSON）。
+  - **平台识别（决定如何解析请求体）**：按以下顺序匹配解析器；**手动调用**时至少满足其一即可。
+    1. `X-Gitea-Event` 非空 → **Gitea**（需 `push` 事件，否则 400）。
+    2. `X-Gitee-Event` 非空 → **码云 Gitee**（需 `Push Hook` 或 `Tag Push Hook`，否则 400）。
+    3. `X-GitHub-Event` 非空 → **GitHub**（需 `push`，否则 400）。
+    4. `X-Gitlab-Event` 非空 → **GitLab**（需 `Push Hook`，否则 400）。
+    5. `X-Event-Key` 非空 → **Bitbucket**（需 `repo:push`，否则 400）。
+    6. 以上均无：若项目 `webhook_type` 已设为 `github` / `gitlab` / `gitee` / `gitea` / `bitbucket` / `generic`（且非 `auto`），则**固定**使用该解析器。
+    7. 若项目配置了 `webhook_ref_path`（JSONPath），则走 **generic**。
+    8. 否则 400「无法识别 webhook 平台」。**仅**依赖 `auto` 且无上述头、且未配 `webhook_ref_path` 时，手动请求容易失败，应在项目中指定 `webhook_type` 或携带对应平台请求头。
+  - **请求体字段（解析后用于触发）**：解析得到 `ref`（如 `refs/heads/main`）、可选 `commit` 哈希与说明；分支名为 `ref` 去掉 `refs/heads/` 前缀后的字符串（与环境的 **Branch** 做**字符串相等**比较）。
+    - **GitHub / Gitea / Gitee（Push / Tag Push）**：JSON 至少含 `ref`；提交信息常用 `head_commit.id`、`head_commit.message`，缺省时哈希可用 `after`。码云官方示例见 [Gitee WebHook 推送数据格式说明](https://help.gitee.com/webhook/gitee-webhook-push-data-format)。
+    - **GitLab（Push Hook）**：至少含 `ref`；`checkout_sha` 为提交哈希；`commit.message` 可选。
+    - **Bitbucket（repo:push）**：按服务端结构解析 `push.changes[0].new` 等（见 `webhook_handler.go`）。
+    - **generic**：在项目配置 `webhook_ref_path`（必填）、可选 `webhook_commit_path`、`webhook_message_path`；JSONPath 为点分字段，支持 `field[0]` 数组下标，见 `extractJSONValue`。
+  - **成功响应**（HTTP 200）：`{ "code": 0, "message": "success", "data": { "triggered": <int>, "branch": "<分支名>", "environment_id": <uint> } }`，仅当查询带 `environment_id` 时 `data` 含 `environment_id`。
+  - **失败响应**：HTTP 4xx/5xx，`{ "code": <http码>, "message": "<原因>" }`（如项目不存在 404、密钥错误 401、解析失败 400）。
+  - **手动调用示例**  
+    - GitHub：`curl -sS -X POST 'https://{host}/api/v1/webhook/{project_id}/{secret}' -H 'Content-Type: application/json' -H 'X-GitHub-Event: push' -d '{"ref":"refs/heads/main","after":"abc123","head_commit":{"id":"abc123","message":"manual"}}'`  
+    - 码云：请求体与上类似，请求头使用 `X-Gitee-Event: Push Hook`（标签推送为 `Tag Push Hook`）；仓库 WebHook 还会带 `User-Agent: git-oschina-hook`、`X-Gitee-Token` / `X-Gitee-Timestamp` 等，**无需**与 BuildFlow URL 密钥相同，鉴权仍以路径中的 `webhook_secret` 为准。  
+    可选查询：`?environment_id=3`。
 - 文件下载：直接返回二进制流（产物下载）
 - 重新分发：`POST /api/v1/builds/:id/deploy`（body 可选 `distribution_ids`），对**已成功且有产物**的同一构建记录触发仅分发阶段
 

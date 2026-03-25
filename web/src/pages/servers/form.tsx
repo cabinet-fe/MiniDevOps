@@ -317,6 +317,7 @@ export function ServerFormDialog({
                   <Input
                     id="server-password"
                     type="password"
+                    autoComplete="current-password"
                     value={form.password}
                     onChange={(e) => setField('password', e.target.value)}
                     placeholder={isEdit ? '如不修改可留空' : '请输入 SSH 登录密码'}
@@ -343,6 +344,7 @@ export function ServerFormDialog({
                     <Input
                       id="server-agent-token"
                       type="password"
+                      autoComplete="current-password"
                       value={form.agent_token}
                       onChange={(e) => setField('agent_token', e.target.value)}
                       placeholder={isEdit ? '如不修改可留空' : '请输入 Agent Bearer Token'}

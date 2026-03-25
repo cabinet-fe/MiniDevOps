@@ -275,7 +275,14 @@ export function UserListPage() {
               </div>
               <div>
                 <Label>密码 *</Label>
-                <Input type="password" value={createForm.password} onChange={(e) => setCreateForm((f) => ({ ...f, password: e.target.value }))} placeholder="密码" className="mt-1" />
+                <Input
+                  type="password"
+                  autoComplete="new-password"
+                  value={createForm.password}
+                  onChange={(e) => setCreateForm((f) => ({ ...f, password: e.target.value }))}
+                  placeholder="密码"
+                  className="mt-1"
+                />
               </div>
               <div>
                 <Label>昵称</Label>

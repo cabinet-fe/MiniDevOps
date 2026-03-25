@@ -14,6 +14,7 @@ import {
   Shield,
   Activity,
   Code2,
+  Link2,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
@@ -31,6 +32,7 @@ const toc = [
   { id: 'rbac', label: '角色权限', icon: ShieldCheck },
   { id: 'credential', label: '凭证管理', icon: Key },
   { id: 'project', label: '项目配置', icon: Layers },
+  { id: 'webhook', label: 'Webhook 触发', icon: Link2 },
   { id: 'environment', label: '环境与变量', icon: SettingsIcon },
   { id: 'pipeline', label: '流水线原理', icon: Workflow },
   { id: 'deploy', label: '部署方式', icon: Server },
@@ -208,6 +210,105 @@ export function ProjectManualPage() {
                 。后端会将构建结果打包为此格式以便传输。
               </li>
             </ul>
+          </Section>
+
+          <Separator />
+
+          {/* Webhook */}
+          <Section id="webhook" title="Webhook 触发构建" icon={Link2}>
+            <p>
+              在代码托管平台配置 Push Webhook，或用 <code>curl</code> / CI <strong>手动 POST</strong> 同一接口均可。接口<strong>不需要</strong>登录态与 <code>Authorization</code>，仅校验 URL 中的项目 ID 与密钥。
+            </p>
+
+            <div className="rounded-lg border bg-background p-4 space-y-3 text-xs">
+              <h4 className="text-sm font-medium text-foreground">方法与路径</h4>
+              <p>
+                <code>POST</code> <code>/api/v1/webhook/&#123;project_id&#125;/&#123;webhook_secret&#125;</code>
+              </p>
+              <ul className="!mt-2 space-y-1">
+                <li>
+                  <strong>project_id</strong>：项目数字 ID（正整数），与界面「项目」列表/详情一致。
+                </li>
+                <li>
+                  <strong>webhook_secret</strong>：单一路径段，必须与该项目配置的 Webhook 密钥<strong>完全一致</strong>。若密钥含 <code>/</code>、<code>+</code> 等字符，整段需按 URL 规则编码后再放入路径。
+                </li>
+              </ul>
+            </div>
+
+            <div className="rounded-lg border bg-background p-4 space-y-3 text-xs">
+              <h4 className="text-sm font-medium text-foreground">查询参数（可选）</h4>
+              <ul className="space-y-1">
+                <li>
+                  <code>environment_id</code>：无符号整数。若指定：只考虑该 ID 对应环境（且须属于本项目）；仍要求<strong>推送分支名</strong>与环境的<strong>分支（Branch）</strong>字段一致才触发。若不指定：遍历本项目下所有环境，对每个分支匹配的环境各触发一次。
+                </li>
+              </ul>
+            </div>
+
+            <div className="rounded-lg border bg-background p-4 space-y-3 text-xs">
+              <h4 className="text-sm font-medium text-foreground">请求头</h4>
+              <ul className="space-y-1">
+                <li>
+                  <strong>Content-Type</strong>：建议 <code>application/json</code>。
+                </li>
+                <li>
+                  <strong>平台识别</strong>（决定用哪套规则解析 JSON 体；手动调用时至少满足其一，否则易返回「无法识别 webhook 平台」）：
+                </li>
+              </ul>
+              <ul className="!mt-2 ml-4 list-disc space-y-1">
+                <li><code>X-Gitea-Event: push</code> → Gitea</li>
+                <li><code>X-Gitee-Event: Push Hook</code>（或 <code>Tag Push Hook</code>）→ 码云 Gitee；通常还有 <code>User-Agent: git-oschina-hook</code></li>
+                <li><code>X-GitHub-Event: push</code> → GitHub</li>
+                <li><code>X-Gitlab-Event: Push Hook</code> → GitLab</li>
+                <li><code>X-Event-Key: repo:push</code> → Bitbucket</li>
+                <li>或：在项目中将 <code>webhook_type</code> 设为 <code>github</code> / <code>gitlab</code> / <code>gitee</code> / <code>gitea</code> / <code>bitbucket</code> / <code>generic</code>（非 <code>auto</code>），可不依赖上述请求头。</li>
+                <li>或：配置 <code>webhook_ref_path</code>（及可选的 commit、message 路径）走通用 JSON 解析。</li>
+              </ul>
+            </div>
+
+            <div className="rounded-lg border bg-background p-4 space-y-3 text-xs">
+              <h4 className="text-sm font-medium text-foreground">请求体（JSON）</h4>
+              <p>
+                须为合法 JSON。解析成功后取出 <code>ref</code>（如 <code>refs/heads/main</code>），分支名为去掉 <code>refs/heads/</code> 后的字符串，与环境的 <strong>Branch</strong> 做相等匹配。
+              </p>
+              <p className="text-muted-foreground">
+                GitHub / Gitea / <strong>码云</strong> 的 Push 常用字段：<code>ref</code>、<code>after</code>、<code>head_commit.id</code>、<code>head_commit.message</code>（码云文档称 <code>hook_name</code> 为 <code>push_hooks</code>）。GitLab：<code>ref</code>、<code>checkout_sha</code>、<code>commit.message</code>。通用类型需在项目里配置 JSONPath（点分路径，支持 <code>[0]</code> 数组下标）。
+              </p>
+            </div>
+
+            <div className="rounded-lg border bg-background p-4 space-y-2 text-xs">
+              <h4 className="text-sm font-medium text-foreground">响应</h4>
+              <ul className="space-y-1">
+                <li>
+                  成功 HTTP 200：<code>&#123; &quot;code&quot;: 0, &quot;message&quot;: &quot;success&quot;, &quot;data&quot;: &#123; &quot;triggered&quot;: &lt;入队构建数&gt;, &quot;branch&quot;: &quot;&lt;分支名&gt;&quot; [, &quot;environment_id&quot;: &lt;id&gt; ] &#125; &#125;</code>（仅当请求带了 <code>environment_id</code> 时 <code>data</code> 内含该字段）。
+                </li>
+                <li>
+                  失败：HTTP 4xx/5xx，正文为 <code>&#123; &quot;code&quot;: …, &quot;message&quot;: &quot;原因&quot; &#125;</code>（如密钥错误 401、项目不存在 404、JSON/平台不匹配 400）。
+                </li>
+              </ul>
+            </div>
+
+            <div className="space-y-3">
+              <h4 className="text-sm font-medium text-foreground">手动调用示例</h4>
+              <p className="text-xs text-muted-foreground">以下 JSON 与 GitHub push 类似；码云真实推送字段更多，见码云帮助中心「WebHook 推送数据格式」。</p>
+              <div className="rounded-lg bg-black/90 p-4 font-mono text-xs text-white whitespace-pre-wrap break-all">
+{`# GitHub
+curl -sS -X POST \\
+  'https://你的域名/api/v1/webhook/12/你的密钥' \\
+  -H 'Content-Type: application/json' \\
+  -H 'X-GitHub-Event: push' \\
+  -d '{"ref":"refs/heads/main","after":"abc123","head_commit":{"id":"abc123","message":"manual"}}'
+
+# 码云（请求头与仓库 WebHook 一致；BuildFlow 只校验 URL 中的密钥）
+curl -sS -X POST \\
+  'https://你的域名/api/v1/webhook/12/你的密钥' \\
+  -H 'Content-Type: application/json' \\
+  -H 'X-Gitee-Event: Push Hook' \\
+  -d '{"ref":"refs/heads/main","after":"abc123","head_commit":{"id":"abc123","message":"manual"}}'`}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                仅触发某一环境时，在 URL 后追加 <code>?environment_id=环境ID</code>。
+              </p>
+            </div>
           </Section>
 
           <Separator />

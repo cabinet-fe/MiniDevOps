@@ -97,6 +97,7 @@ export const WEBHOOK_TYPES = [
   { value: "auto", label: "自动识别" },
   { value: "github", label: "GitHub" },
   { value: "gitlab", label: "GitLab" },
+  { value: "gitee", label: "码云 (Gitee)" },
   { value: "gitea", label: "Gitea" },
   { value: "bitbucket", label: "Bitbucket" },
   { value: "generic", label: "通用 JSON" },
