@@ -1,6 +1,18 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
-import { Copy, ExternalLink, GitBranch, Loader2, Pencil, Play, Plus, Sparkles, Trash2 } from "lucide-react";
+import {
+  Check,
+  ChevronsUpDown,
+  Copy,
+  ExternalLink,
+  GitBranch,
+  Loader2,
+  Pencil,
+  Play,
+  Plus,
+  Sparkles,
+  Trash2,
+} from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -15,6 +27,19 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
 import { api } from "@/lib/api";
 import type { PaginatedData } from "@/lib/api";
 import { EnvironmentBuildsTable, extractFileName } from "@/components/environment-builds-table";
@@ -208,6 +233,8 @@ export function ProjectDetailPage() {
   const [deleteProjectLoading, setDeleteProjectLoading] = useState(false);
   const [deleteEnvTarget, setDeleteEnvTarget] = useState<Environment | null>(null);
   const [deleteEnvLoading, setDeleteEnvLoading] = useState(false);
+  const [projectSwitchList, setProjectSwitchList] = useState<{ id: number; name: string }[]>([]);
+  const [projectSwitchOpen, setProjectSwitchOpen] = useState(false);
   const latestNotification = useNotificationStore((state) => state.latestNotification);
 
   useEffect(() => {
@@ -218,6 +245,18 @@ export function ProjectDetailPage() {
           setDictTags(res.data);
         }
       });
+  }, []);
+
+  useEffect(() => {
+    api.get<PaginatedData<Project>>("/projects?page=1&page_size=100").then((res) => {
+      if (res.code !== 0 || !res.data?.items) return;
+      setProjectSwitchList(
+        res.data.items.map((p) => ({
+          id: p.id,
+          name: p.name,
+        })),
+      );
+    });
   }, []);
 
   const fetchProject = useCallback(async () => {
@@ -458,7 +497,52 @@ export function ProjectDetailPage() {
             <div className="flex items-start justify-between gap-4">
               <div className="min-w-0 space-y-1.5">
                 <div className="flex flex-wrap items-center gap-2">
-                  <CardTitle className="text-xl tracking-tight">{project.name}</CardTitle>
+                  <Popover open={projectSwitchOpen} onOpenChange={setProjectSwitchOpen}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        className="h-auto max-w-[min(100%,28rem)] gap-1 px-2 py-1 text-xl font-semibold tracking-tight hover:bg-muted/80"
+                        aria-label="切换项目"
+                      >
+                        <span className="truncate">{project.name}</span>
+                        <ChevronsUpDown className="size-4 shrink-0 opacity-60" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[min(100vw-2rem,22rem)] p-0" align="start">
+                      <Command>
+                        <CommandInput placeholder="搜索项目..." className="h-9" />
+                        <CommandList>
+                          <CommandEmpty>无匹配项目</CommandEmpty>
+                          <CommandGroup>
+                            {projectSwitchList.map((p) => (
+                              <CommandItem
+                                key={p.id}
+                                value={`${p.name} ${p.id}`}
+                                onSelect={() => {
+                                  setProjectSwitchOpen(false);
+                                  if (p.id !== project.id) {
+                                    navigate(`/projects/${p.id}`);
+                                  }
+                                }}
+                              >
+                                <Check
+                                  className={cn(
+                                    "size-4 shrink-0",
+                                    p.id === project.id ? "opacity-100" : "opacity-0",
+                                  )}
+                                />
+                                <span className="min-w-0 flex-1 truncate">{p.name}</span>
+                                <span className="text-muted-foreground shrink-0 font-mono text-xs">
+                                  #{p.id}
+                                </span>
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
                   <Badge variant="outline" className="font-mono text-[11px]">
                     #{project.id}
                   </Badge>

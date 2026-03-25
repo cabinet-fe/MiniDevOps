@@ -89,6 +89,24 @@ interface Server {
   id: number
   name: string
   host: string
+  auth_type?: string
+  agent_url?: string
+}
+
+function serverSupportsDeployMethod(server: Server, method: string): boolean {
+  const m = (method || 'rsync').toLowerCase()
+  if (m === 'local') return true
+  const auth = (server.auth_type || '').toLowerCase()
+  if (m === 'agent') {
+    return auth === 'agent' && Boolean(server.agent_url?.trim())
+  }
+  return auth === 'password' || auth === 'key'
+}
+
+function filterServersForDeployMethod(servers: Server[], method: string): Server[] {
+  const m = (method || 'rsync').toLowerCase()
+  if (m === 'local') return []
+  return servers.filter((s) => serverSupportsDeployMethod(s, m))
 }
 
 const DEFAULT_FORM: EnvironmentPayload = {
@@ -217,6 +235,24 @@ export function EnvironmentFormDialog({
       setInitialEnvVars([])
     }
   }, [open, editEnv, isEdit, projectId])
+
+  useEffect(() => {
+    if (!open || servers.length === 0) return
+    setForm((prev) => {
+      let changed = false
+      const distributions = prev.distributions.map((d) => {
+        if (d.method === 'local' || d.server_id == null) return d
+        const s = servers.find((x) => x.id === d.server_id)
+        if (!s || !serverSupportsDeployMethod(s, d.method)) {
+          changed = true
+          return { ...d, server_id: null }
+        }
+        return d
+      })
+      if (!changed) return prev
+      return { ...prev, distributions }
+    })
+  }, [open, servers])
 
   const setField = <K extends keyof EnvironmentPayload>(key: K, value: EnvironmentPayload[K]) => {
     setForm((prev) => ({ ...prev, [key]: value }))
@@ -556,7 +592,7 @@ export function EnvironmentFormDialog({
                           onValueChange={(value) => {
                             updateDistribution(index, {
                               method: value,
-                              server_id: value === 'local' ? null : row.server_id,
+                              server_id: null,
                             })
                           }}
                         >
@@ -588,7 +624,7 @@ export function EnvironmentFormDialog({
                             </SelectTrigger>
                             <SelectContent>
                               <SelectItem value="none">未选择</SelectItem>
-                              {servers.map((server) => (
+                              {filterServersForDeployMethod(servers, row.method).map((server) => (
                                 <SelectItem key={server.id} value={String(server.id)}>
                                   {server.name} ({server.host})
                                 </SelectItem>
