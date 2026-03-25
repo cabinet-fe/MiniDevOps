@@ -44,7 +44,7 @@ export const CREDENTIAL_TYPES = [
 ];
 
 export const BUILD_SCRIPT_TYPES = [
-  { value: "bash", label: "Bash", placeholder: "npm install && npm run build" },
+  { value: "bash", label: "Bash / sh", placeholder: "npm install && npm run build" },
   {
     value: "node",
     label: "Node.js",
@@ -56,6 +56,17 @@ export const BUILD_SCRIPT_TYPES = [
     label: "Python",
     placeholder:
       "import subprocess\nsubprocess.run(['npm', 'install'], check=True)\nsubprocess.run(['npm', 'run', 'build'], check=True)",
+  },
+  {
+    value: "powershell",
+    label: "PowerShell",
+    placeholder:
+      "$ErrorActionPreference = 'Stop'\npnpm i\npnpm gen:routes\nSet-Location core\npnpm build",
+  },
+  {
+    value: "cmd",
+    label: "CMD",
+    placeholder: "pnpm i && pnpm gen:routes && cd core && pnpm build",
   },
 ];
 

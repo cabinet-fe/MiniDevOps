@@ -11,7 +11,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -241,21 +240,13 @@ func (p *Pipeline) Execute(ctx context.Context, buildID uint) {
 		envVars = append(envVars, resolvedEnvVars...)
 	}
 
-	// Select interpreter based on build script type
-	var interpreter string
-	var interpreterArgs []string
-	switch env.BuildScriptType {
-	case "node":
-		interpreter = "node"
-		interpreterArgs = []string{"-e", env.BuildScript}
-	case "python":
-		interpreter = "python3"
-		interpreterArgs = []string{"-c", env.BuildScript}
-	default: // "bash" or empty
-		interpreter = "sh"
-		interpreterArgs = []string{"-c", env.BuildScript}
+	cmd, cleanupScript, err := newBuildScriptCommand(ctx, workDir, env.BuildScriptType, env.BuildScript)
+	if err != nil {
+		p.failBuild(build, "构建脚本配置无效: "+err.Error())
+		writeLine("ERROR: " + err.Error())
+		return
 	}
-	cmd := exec.CommandContext(ctx, interpreter, interpreterArgs...)
+	defer cleanupScript()
 	cmd.Dir = workDir
 	cmd.Env = envVars
 	configureBuildCmdProc(cmd)

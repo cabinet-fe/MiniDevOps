@@ -349,6 +349,8 @@ export function EnvironmentFormDialog({
         return [javascript()]
       case 'python':
         return [python()]
+      case 'powershell':
+      case 'cmd':
       case 'bash':
       default:
         return [StreamLanguage.define(shell)]
