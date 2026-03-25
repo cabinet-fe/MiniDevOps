@@ -18,7 +18,6 @@ import (
 
 	"go.uber.org/zap"
 
-	"buildflow/internal/deployer"
 	"buildflow/internal/model"
 	"buildflow/internal/pkg"
 	"buildflow/internal/repository"
@@ -27,9 +26,11 @@ import (
 
 type Pipeline struct {
 	buildRepo      *repository.BuildRepository
+	buildDistRepo  *repository.BuildDistributionRepository
 	projectRepo    *repository.ProjectRepository
 	credentialRepo *repository.CredentialRepository
 	envRepo        *repository.EnvironmentRepository
+	distRepo       *repository.DistributionRepository
 	envVarRepo     *repository.EnvVarRepository
 	varGroupRepo   *repository.VarGroupRepository
 	serverRepo     *repository.ServerRepository
@@ -57,9 +58,11 @@ type notificationMessage struct {
 
 func NewPipeline(
 	buildRepo *repository.BuildRepository,
+	buildDistRepo *repository.BuildDistributionRepository,
 	projectRepo *repository.ProjectRepository,
 	credentialRepo *repository.CredentialRepository,
 	envRepo *repository.EnvironmentRepository,
+	distRepo *repository.DistributionRepository,
 	envVarRepo *repository.EnvVarRepository,
 	varGroupRepo *repository.VarGroupRepository,
 	serverRepo *repository.ServerRepository,
@@ -70,9 +73,11 @@ func NewPipeline(
 ) *Pipeline {
 	return &Pipeline{
 		buildRepo:      buildRepo,
+		buildDistRepo:  buildDistRepo,
 		projectRepo:    projectRepo,
 		credentialRepo: credentialRepo,
 		envRepo:        envRepo,
+		distRepo:       distRepo,
 		envVarRepo:     envVarRepo,
 		varGroupRepo:   varGroupRepo,
 		serverRepo:     serverRepo,
@@ -93,6 +98,10 @@ func (p *Pipeline) Execute(ctx context.Context, buildID uint) {
 				zap.Uint("build_id", buildID),
 				zap.Any("panic", r),
 			)
+			b, err := p.buildRepo.FindByID(buildID)
+			if err == nil && b.Status == "success" {
+				return
+			}
 			p.failBuild(&model.Build{ID: buildID}, fmt.Sprintf("internal panic: %v", r))
 		}
 	}()
@@ -114,8 +123,15 @@ func (p *Pipeline) Execute(ctx context.Context, buildID uint) {
 	}
 
 	now := time.Now()
-	build.StartedAt = &now
-	if build.TriggerType == "deploy" {
+	onlyDeploy := build.TriggerType == "deploy" || build.TriggerType == "redistribute"
+	if !onlyDeploy || build.Status != "success" {
+		build.StartedAt = &now
+	}
+	if build.TriggerType == "redistribute" {
+		_ = p.buildRepo.UpdateStatus(build.ID, "success", map[string]interface{}{"current_stage": "distributing"})
+		build.Status = "success"
+		build.CurrentStage = "distributing"
+	} else if build.TriggerType == "deploy" {
 		p.updateStage(build, "deploying")
 	} else {
 		p.updateStage(build, "cloning")
@@ -125,7 +141,13 @@ func (p *Pipeline) Execute(ctx context.Context, buildID uint) {
 	logDir := filepath.Join(p.logDir, fmt.Sprintf("project-%d", project.ID))
 	os.MkdirAll(logDir, 0755)
 	logPath := filepath.Join(logDir, fmt.Sprintf("build-%03d.log", build.BuildNumber))
-	logFile, err := os.Create(logPath)
+	var logFile *os.File
+	if build.TriggerType == "redistribute" && build.LogPath != "" {
+		logPath = build.LogPath
+		logFile, err = os.OpenFile(logPath, os.O_APPEND|os.O_WRONLY, 0644)
+	} else {
+		logFile, err = os.Create(logPath)
+	}
 	if err != nil {
 		p.failBuild(build, "无法创建日志文件: "+err.Error())
 		return
@@ -147,8 +169,8 @@ func (p *Pipeline) Execute(ctx context.Context, buildID uint) {
 		p.hub.BroadcastToChannel(channel, []byte(line))
 	}
 
-	if build.TriggerType == "deploy" {
-		p.executeDeployOnly(ctx, build, project, env, writeLine)
+	if build.TriggerType == "deploy" || build.TriggerType == "redistribute" {
+		p.executeRedistributeOnly(ctx, build, project, env, writeLine)
 		return
 	}
 
@@ -340,17 +362,16 @@ func (p *Pipeline) Execute(ctx context.Context, buildID uint) {
 	if env.BuildOutputDir == "" {
 		sourceDir = workDir
 	}
-	if err := p.deployFromSource(ctx, build, project, env, sourceDir, writeLine, true); err != nil {
-		if ctx.Err() != nil {
-			p.cancelBuild(build)
-			return
-		}
-		p.failBuild(build, err.Error())
-		writeLine("ERROR: " + err.Error())
+	dists, _ := p.distRepo.ListByEnvironmentID(env.ID)
+	hasDist := len(dists) > 0
+	p.markBuildArtifactSuccess(build, writeLine, hasDist)
+	if ctx.Err() != nil {
+		p.cancelBuild(build)
 		return
 	}
-
-	p.finishBuildSuccess(build, writeLine)
+	if hasDist {
+		p.runDistributions(ctx, build, project, env, sourceDir, writeLine, nil)
+	}
 }
 
 func decryptServerSecrets(server *model.Server) (password, privateKey, agentToken string) {
@@ -366,148 +387,6 @@ func decryptServerSecrets(server *model.Server) (password, privateKey, agentToke
 	return password, privateKey, agentToken
 }
 
-// deployFromSource runs deploy and optional post-deploy script.
-// When skipIfNoDeploy is true and no deploy target is configured, returns nil.
-// When skipIfNoDeploy is false, missing deploy configuration returns an error.
-func (p *Pipeline) deployFromSource(ctx context.Context, build *model.Build, project *model.Project, env *model.Environment, sourceDir string, writeLine func(string), skipIfNoDeploy bool) error {
-	method := strings.TrimSpace(strings.ToLower(env.DeployMethod))
-	if method == "" {
-		method = "rsync"
-	}
-	isLocal := method == "local"
-	deployPath := strings.TrimSpace(env.DeployPath)
-
-	if isLocal {
-		if deployPath == "" {
-			if skipIfNoDeploy {
-				return nil
-			}
-			return fmt.Errorf("环境未配置部署路径")
-		}
-		if !filepath.IsAbs(deployPath) {
-			return fmt.Errorf("本机部署路径须为绝对路径")
-		}
-	} else {
-		if env.DeployServerID == nil || deployPath == "" {
-			if skipIfNoDeploy {
-				return nil
-			}
-			return fmt.Errorf("环境未配置部署服务器或路径")
-		}
-	}
-	if ctx.Err() != nil {
-		return ctx.Err()
-	}
-	p.updateStage(build, "deploying")
-	writeLine("=== Stage: Deploying ===")
-
-	deployOpts := deployer.DeployOptions{
-		SourceDir:     sourceDir,
-		ArchiveFormat: normalizeArtifactFormat(project.ArtifactFormat),
-		RemotePath:    deployPath,
-		Logger:        writeLine,
-	}
-	if !isLocal {
-		server, err := p.serverRepo.FindByID(*env.DeployServerID)
-		if err != nil {
-			return fmt.Errorf("服务器不存在")
-		}
-		password, privateKey, agentToken := decryptServerSecrets(server)
-		deployOpts.Server = deployer.ServerInfo{
-			Host:       server.Host,
-			Port:       server.Port,
-			OSType:     server.OSType,
-			Username:   server.Username,
-			AuthType:   server.AuthType,
-			Password:   password,
-			PrivateKey: privateKey,
-			AgentURL:   server.AgentURL,
-			AgentToken: agentToken,
-		}
-	}
-
-	d := deployer.NewDeployer(method)
-	if err := d.Deploy(ctx, deployOpts); err != nil {
-		return fmt.Errorf("部署失败: %w", err)
-	}
-	writeLine("Deploy completed successfully")
-
-	if env.PostDeployScript != "" {
-		writeLine("=== Executing post-deploy script ===")
-		var err error
-		if isLocal {
-			err = deployer.ExecuteLocalScriptInDir(ctx, deployOpts.RemotePath, env.PostDeployScript, writeLine)
-		} else {
-			err = deployer.ExecuteRemoteScriptInDir(ctx, deployOpts.Server, deployOpts.RemotePath, env.PostDeployScript, writeLine)
-		}
-		if err != nil {
-			return fmt.Errorf("部署后脚本失败: %w", err)
-		}
-		writeLine("Post-deploy script completed")
-	}
-	return nil
-}
-
-func (p *Pipeline) executeDeployOnly(ctx context.Context, build *model.Build, project *model.Project, env *model.Environment, writeLine func(string)) {
-	artifactPath := strings.TrimSpace(build.ArtifactPath)
-	if artifactPath == "" {
-		p.failBuild(build, "该构建没有产物路径")
-		writeLine("ERROR: no artifact_path")
-		return
-	}
-	if !filepath.IsAbs(artifactPath) {
-		artifactPath = filepath.Join(p.artifactDir, artifactPath)
-	}
-	if _, err := os.Stat(artifactPath); err != nil {
-		p.failBuild(build, "产物文件不存在: "+err.Error())
-		writeLine("ERROR: " + err.Error())
-		return
-	}
-	writeLine("=== 仅部署：使用已有产物 ===")
-	writeLine("Artifact: " + artifactPath)
-
-	tmpDir, err := os.MkdirTemp("", "buildflow-deploy-*")
-	if err != nil {
-		p.failBuild(build, "创建临时目录失败: "+err.Error())
-		return
-	}
-	defer os.RemoveAll(tmpDir)
-
-	artifactFormat := normalizeArtifactFormat(project.ArtifactFormat)
-	if err := extractArtifactArchive(artifactPath, tmpDir, artifactFormat); err != nil {
-		p.failBuild(build, "解压产物失败: "+err.Error())
-		writeLine("ERROR: " + err.Error())
-		return
-	}
-
-	if err := p.deployFromSource(ctx, build, project, env, tmpDir, writeLine, false); err != nil {
-		if ctx.Err() != nil {
-			p.cancelBuild(build)
-			return
-		}
-		p.failBuild(build, err.Error())
-		writeLine("ERROR: " + err.Error())
-		return
-	}
-
-	p.finishBuildSuccess(build, writeLine)
-}
-
-func (p *Pipeline) finishBuildSuccess(build *model.Build, writeLine func(string)) {
-	finished := time.Now()
-	build.FinishedAt = &finished
-	build.DurationMs = finished.Sub(*build.StartedAt).Milliseconds()
-	build.Status = "success"
-	build.CurrentStage = "success"
-	p.buildRepo.UpdateStatus(build.ID, "success", map[string]interface{}{
-		"finished_at":   build.FinishedAt,
-		"duration_ms":   build.DurationMs,
-		"current_stage": build.CurrentStage,
-	})
-	writeLine(fmt.Sprintf("=== Build #%d finished in %dms ===", build.BuildNumber, build.DurationMs))
-	p.notify(build, "success")
-}
-
 func (p *Pipeline) updateStage(build *model.Build, stage string) {
 	build.Status = stage
 	build.CurrentStage = stage
@@ -515,6 +394,10 @@ func (p *Pipeline) updateStage(build *model.Build, stage string) {
 }
 
 func (p *Pipeline) failBuild(build *model.Build, errMsg string) {
+	latest, err := p.buildRepo.FindByID(build.ID)
+	if err == nil && latest.Status == "success" {
+		return
+	}
 	finished := time.Now()
 	build.Status = "failed"
 	build.ErrorMessage = errMsg
@@ -532,6 +415,15 @@ func (p *Pipeline) failBuild(build *model.Build, errMsg string) {
 }
 
 func (p *Pipeline) cancelBuild(build *model.Build) {
+	latest, err := p.buildRepo.FindByID(build.ID)
+	if err == nil && latest.Status == "success" {
+		_ = p.buildRepo.UpdateStatus(build.ID, "success", map[string]interface{}{
+			"current_stage":            "success",
+			"distribution_summary":     "cancelled",
+			"redistribute_filter_json": "",
+		})
+		return
+	}
 	finished := time.Now()
 	build.Status = "cancelled"
 	build.FinishedAt = &finished

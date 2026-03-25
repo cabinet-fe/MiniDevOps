@@ -18,7 +18,7 @@ func newBuildServiceTestDB(t *testing.T) *gorm.DB {
 		t.Fatalf("open sqlite: %v", err)
 	}
 
-	if err := db.AutoMigrate(&model.Project{}, &model.Environment{}, &model.Build{}); err != nil {
+	if err := db.AutoMigrate(&model.Project{}, &model.Environment{}, &model.Distribution{}, &model.Build{}, &model.BuildDistribution{}); err != nil {
 		t.Fatalf("auto migrate: %v", err)
 	}
 
@@ -39,7 +39,7 @@ func TestTriggerBuildUsesEnvironmentBranchAndInitialStage(t *testing.T) {
 		t.Fatalf("create env: %v", err)
 	}
 
-	svc := NewBuildService(buildRepo, nil, envRepo, nil)
+	svc := NewBuildService(buildRepo, nil, envRepo, nil, nil, nil)
 
 	build, err := svc.TriggerBuild(1, env.ID, 7, "manual", "", "", "")
 	if err != nil {
@@ -104,7 +104,7 @@ func TestGetBuildDetailFallsBackToEnvironmentBranchAndInferredStage(t *testing.T
 		t.Fatalf("create build: %v", err)
 	}
 
-	svc := NewBuildService(buildRepo, projectRepo, envRepo, nil)
+	svc := NewBuildService(buildRepo, projectRepo, envRepo, nil, nil, nil)
 	detail, err := svc.GetBuildDetail(build.ID)
 	if err != nil {
 		t.Fatalf("get build detail: %v", err)
@@ -118,7 +118,7 @@ func TestGetBuildDetailFallsBackToEnvironmentBranchAndInferredStage(t *testing.T
 	}
 }
 
-func TestTriggerDeployBuildCopiesArtifactAndTriggerType(t *testing.T) {
+func TestTriggerRedistributeUpdatesSameBuild(t *testing.T) {
 	db := newBuildServiceTestDB(t)
 	envRepo := repository.NewEnvironmentRepository(db)
 	buildRepo := repository.NewBuildRepository(db)
@@ -143,19 +143,22 @@ func TestTriggerDeployBuildCopiesArtifactAndTriggerType(t *testing.T) {
 		t.Fatalf("create source build: %v", err)
 	}
 
-	svc := NewBuildService(buildRepo, nil, envRepo, nil)
-	out, err := svc.TriggerDeployBuild(src.ID, 2)
-	if err != nil {
-		t.Fatalf("trigger deploy: %v", err)
+	svc := NewBuildService(buildRepo, nil, envRepo, nil, nil, nil)
+	if err := svc.TriggerRedistribute(src.ID, 2, nil); err != nil {
+		t.Fatalf("trigger redistribute: %v", err)
 	}
-	if out.TriggerType != "deploy" {
-		t.Fatalf("expected trigger deploy, got %q", out.TriggerType)
+	out, err := buildRepo.FindByID(src.ID)
+	if err != nil {
+		t.Fatalf("reload build: %v", err)
+	}
+	if out.TriggerType != "redistribute" {
+		t.Fatalf("expected trigger redistribute, got %q", out.TriggerType)
 	}
 	if out.ArtifactPath != src.ArtifactPath {
-		t.Fatalf("artifact path not copied")
+		t.Fatalf("artifact path changed")
 	}
-	if out.BuildNumber != 2 {
-		t.Fatalf("expected build number 2, got %d", out.BuildNumber)
+	if out.BuildNumber != 1 {
+		t.Fatalf("expected same build number 1, got %d", out.BuildNumber)
 	}
 	if out.TriggeredBy != 2 {
 		t.Fatalf("expected triggered_by 2")

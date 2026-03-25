@@ -71,6 +71,7 @@ const STAGE_LABELS: Record<string, string> = {
   cloning: "拉取",
   building: "构建",
   deploying: "部署",
+  distributing: "分发",
   success: "完成",
   failed: "失败",
   cancelled: "取消",

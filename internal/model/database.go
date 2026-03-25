@@ -46,17 +46,26 @@ func InitDB() (*gorm.DB, error) {
 		&Credential{},
 		&Project{},
 		&Environment{},
+		&Distribution{},
 		&EnvVar{},
 		&VarGroup{},
 		&VarGroupItem{},
 		&EnvironmentVarGroup{},
 		&Build{},
+		&BuildDistribution{},
 		&Notification{},
 		&AuditLog{},
 		&Dictionary{},
 		&DictItem{},
 	); err != nil {
 		return nil, fmt.Errorf("auto migrating: %w", err)
+	}
+
+	legacyEnvCols := []string{"deploy_server_id", "deploy_path", "deploy_method", "post_deploy_script"}
+	for _, col := range legacyEnvCols {
+		if db.Migrator().HasColumn(&Environment{}, col) {
+			_ = db.Migrator().DropColumn(&Environment{}, col)
+		}
 	}
 
 	if err := migrateProjectRepoCredentials(db); err != nil {

@@ -50,6 +50,6 @@ func (r *ServerRepository) Delete(id uint) error {
 
 func (r *ServerRepository) CountByServerID(id uint) (int64, error) {
 	var count int64
-	err := r.db.Model(&model.Environment{}).Where("deploy_server_id = ?", id).Count(&count).Error
+	err := r.db.Model(&model.Distribution{}).Where("server_id = ?", id).Count(&count).Error
 	return count, err
 }

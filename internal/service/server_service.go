@@ -20,12 +20,11 @@ import (
 )
 
 type ServerService struct {
-	repo    *repository.ServerRepository
-	envRepo *repository.EnvironmentRepository
+	repo *repository.ServerRepository
 }
 
-func NewServerService(repo *repository.ServerRepository, envRepo *repository.EnvironmentRepository) *ServerService {
-	return &ServerService{repo: repo, envRepo: envRepo}
+func NewServerService(repo *repository.ServerRepository) *ServerService {
+	return &ServerService{repo: repo}
 }
 
 func (s *ServerService) Create(server *model.Server) error {
@@ -146,7 +145,7 @@ func (s *ServerService) Update(server *model.Server) error {
 }
 
 func (s *ServerService) Delete(id uint) error {
-	count, err := s.envRepo.CountByDeployServerID(id)
+	count, err := s.repo.CountByServerID(id)
 	if err != nil {
 		return err
 	}

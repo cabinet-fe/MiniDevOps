@@ -16,9 +16,11 @@ type Build struct {
 	CommitMessage string     `json:"commit_message" gorm:"size:500"`
 	LogPath       string     `json:"log_path" gorm:"size:500"`
 	ArtifactPath  string     `json:"artifact_path" gorm:"size:500"`
-	DurationMs    int64      `json:"duration_ms"`
-	ErrorMessage  string     `json:"error_message" gorm:"type:text"`
-	StartedAt     *time.Time `json:"started_at"`
-	FinishedAt    *time.Time `json:"finished_at"`
-	CreatedAt     time.Time  `json:"created_at"`
+	DurationMs             int64      `json:"duration_ms"`
+	ErrorMessage           string     `json:"error_message" gorm:"type:text"`
+	DistributionSummary    string     `json:"distribution_summary" gorm:"size:30"`
+	RedistributeFilterJSON string     `json:"redistribute_filter_json,omitempty" gorm:"type:text"`
+	StartedAt              *time.Time `json:"started_at"`
+	FinishedAt             *time.Time `json:"finished_at"`
+	CreatedAt              time.Time  `json:"created_at"`
 }

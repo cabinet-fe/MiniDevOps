@@ -23,6 +23,7 @@ type BuildStatus =
   | 'cloning'
   | 'building'
   | 'deploying'
+  | 'distributing'
   | 'success'
   | 'failed'
   | 'cancelled'
@@ -44,6 +45,7 @@ const STATUS_VARIANTS: Record<
   cloning: { label: '拉取代码', className: 'bg-blue-400 text-white' },
   building: { label: '构建中', className: 'bg-blue-600 text-white' },
   deploying: { label: '部署中', className: 'bg-purple-500 text-white' },
+  distributing: { label: '分发中', className: 'bg-purple-500 text-white' },
   success: { label: '成功', className: 'bg-green-600 text-white' },
   failed: { label: '失败', className: 'bg-red-600 text-white' },
   cancelled: { label: '已取消', className: 'bg-zinc-500 text-white' },
@@ -86,7 +88,7 @@ export function BuildLogViewer({
       ? `/ws/projects/${projectId}/builds/${buildId}/logs`
       : `/ws/builds/${buildId}/logs`)
 
-  const isRunning = ['pending', 'cloning', 'building', 'deploying'].includes(status)
+  const isRunning = ['pending', 'cloning', 'building', 'deploying', 'distributing'].includes(status)
 
   useEffect(() => {
     if (initialLogs) {

@@ -308,20 +308,17 @@ func (h *ProjectHandler) CreateEnvironment(c *gin.Context) {
 	}
 	projectID := uint(id)
 	var req struct {
-		Name             string `json:"name" binding:"required"`
-		Branch           string `json:"branch"`
-		BuildScript      string `json:"build_script"`
-		BuildScriptType  string `json:"build_script_type"`
-		BuildOutputDir   string `json:"build_output_dir"`
-		DeployServerID   *uint  `json:"deploy_server_id"`
-		DeployPath       string `json:"deploy_path"`
-		DeployMethod     string `json:"deploy_method"`
-		PostDeployScript string `json:"post_deploy_script"`
-		CachePaths       string `json:"cache_paths"`
-		CronExpression   string `json:"cron_expression"`
-		CronEnabled      bool   `json:"cron_enabled"`
-		SortOrder        int    `json:"sort_order"`
-		VarGroupIDs      []uint `json:"var_group_ids"`
+		Name            string                 `json:"name" binding:"required"`
+		Branch          string                 `json:"branch"`
+		BuildScript     string                 `json:"build_script"`
+		BuildScriptType string                 `json:"build_script_type"`
+		BuildOutputDir  string                 `json:"build_output_dir"`
+		Distributions   []model.Distribution   `json:"distributions"`
+		CachePaths      string                 `json:"cache_paths"`
+		CronExpression  string                 `json:"cron_expression"`
+		CronEnabled     bool                   `json:"cron_enabled"`
+		SortOrder       int                    `json:"sort_order"`
+		VarGroupIDs     []uint                 `json:"var_group_ids"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		pkg.Error(c, http.StatusBadRequest, "参数错误")
@@ -340,22 +337,18 @@ func (h *ProjectHandler) CreateEnvironment(c *gin.Context) {
 		}
 	}
 	env := &model.Environment{
-		ProjectID:        projectID,
-		Name:             req.Name,
-		Branch:           req.Branch,
-		BuildScript:      req.BuildScript,
-		BuildScriptType:  req.BuildScriptType,
-		BuildOutputDir:   req.BuildOutputDir,
-		DeployServerID:   req.DeployServerID,
-		DeployPath:       req.DeployPath,
-		DeployMethod:     req.DeployMethod,
-		PostDeployScript: req.PostDeployScript,
-		CachePaths:       req.CachePaths,
-		CronExpression:   req.CronExpression,
-		CronEnabled:      req.CronEnabled,
-		SortOrder:        req.SortOrder,
+		ProjectID:       projectID,
+		Name:            req.Name,
+		Branch:          req.Branch,
+		BuildScript:     req.BuildScript,
+		BuildScriptType: req.BuildScriptType,
+		BuildOutputDir:  req.BuildOutputDir,
+		CachePaths:      req.CachePaths,
+		CronExpression:  req.CronExpression,
+		CronEnabled:     req.CronEnabled,
+		SortOrder:       req.SortOrder,
 	}
-	if err := h.projectService.CreateEnvironment(env, req.VarGroupIDs); err != nil {
+	if err := h.projectService.CreateEnvironment(env, req.VarGroupIDs, req.Distributions); err != nil {
 		pkg.Error(c, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -394,20 +387,17 @@ func (h *ProjectHandler) UpdateEnvironment(c *gin.Context) {
 		return
 	}
 	var req struct {
-		Name             *string `json:"name"`
-		Branch           *string `json:"branch"`
-		BuildScript      *string `json:"build_script"`
-		BuildScriptType  *string `json:"build_script_type"`
-		BuildOutputDir   *string `json:"build_output_dir"`
-		DeployServerID   *uint   `json:"deploy_server_id"`
-		DeployPath       *string `json:"deploy_path"`
-		DeployMethod     *string `json:"deploy_method"`
-		PostDeployScript *string `json:"post_deploy_script"`
-		CachePaths       *string `json:"cache_paths"`
-		CronExpression   *string `json:"cron_expression"`
-		CronEnabled      *bool   `json:"cron_enabled"`
-		SortOrder        *int    `json:"sort_order"`
-		VarGroupIDs      []uint  `json:"var_group_ids"`
+		Name            *string                `json:"name"`
+		Branch          *string                `json:"branch"`
+		BuildScript     *string                `json:"build_script"`
+		BuildScriptType *string                `json:"build_script_type"`
+		BuildOutputDir  *string                `json:"build_output_dir"`
+		Distributions   []model.Distribution   `json:"distributions"`
+		CachePaths      *string                `json:"cache_paths"`
+		CronExpression  *string                `json:"cron_expression"`
+		CronEnabled     *bool                  `json:"cron_enabled"`
+		SortOrder       *int                   `json:"sort_order"`
+		VarGroupIDs     []uint                 `json:"var_group_ids"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		pkg.Error(c, http.StatusBadRequest, "参数错误")
@@ -428,18 +418,6 @@ func (h *ProjectHandler) UpdateEnvironment(c *gin.Context) {
 	if req.BuildOutputDir != nil {
 		env.BuildOutputDir = *req.BuildOutputDir
 	}
-	if req.DeployServerID != nil {
-		env.DeployServerID = req.DeployServerID
-	}
-	if req.DeployPath != nil {
-		env.DeployPath = *req.DeployPath
-	}
-	if req.DeployMethod != nil {
-		env.DeployMethod = *req.DeployMethod
-	}
-	if req.PostDeployScript != nil {
-		env.PostDeployScript = *req.PostDeployScript
-	}
 	if req.CachePaths != nil {
 		env.CachePaths = *req.CachePaths
 	}
@@ -459,7 +437,8 @@ func (h *ProjectHandler) UpdateEnvironment(c *gin.Context) {
 	if req.SortOrder != nil {
 		env.SortOrder = *req.SortOrder
 	}
-	if err := h.projectService.UpdateEnvironment(env, req.VarGroupIDs, req.VarGroupIDs != nil); err != nil {
+	syncDistributions := req.Distributions != nil
+	if err := h.projectService.UpdateEnvironment(env, req.VarGroupIDs, req.VarGroupIDs != nil, req.Distributions, syncDistributions); err != nil {
 		pkg.Error(c, http.StatusBadRequest, err.Error())
 		return
 	}

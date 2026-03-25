@@ -133,8 +133,16 @@ func (h *BuildHandler) GetLog(c *gin.Context) {
 	data, err := os.ReadFile(logPath)
 	if err != nil {
 		if os.IsNotExist(err) {
+			inProgress := false
 			switch build.Status {
 			case "pending", "cloning", "building", "deploying":
+				inProgress = true
+			case "success":
+				if build.DistributionSummary == "running" || build.DistributionSummary == "pending" {
+					inProgress = true
+				}
+			}
+			if inProgress {
 				c.Data(http.StatusOK, "text/plain; charset=utf-8", nil)
 				return
 			}
@@ -164,23 +172,26 @@ func (h *BuildHandler) Cancel(c *gin.Context) {
 	pkg.Success(c, nil)
 }
 
-// POST /api/v1/builds/:id/deploy - deploy existing artifact only (new build record, no re-clone/build)
+// POST /api/v1/builds/:id/deploy - re-run distribution on existing successful build (same build row)
 func (h *BuildHandler) Deploy(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
 		pkg.Error(c, http.StatusBadRequest, "参数错误")
 		return
 	}
+	var req struct {
+		DistributionIDs []uint `json:"distribution_ids"`
+	}
+	_ = c.ShouldBindJSON(&req)
 	userID := middleware.GetUserID(c)
-	build, err := h.buildService.TriggerDeployBuild(uint(id), userID)
-	if err != nil {
+	if err := h.buildService.TriggerRedistribute(uint(id), userID, req.DistributionIDs); err != nil {
 		pkg.Error(c, http.StatusBadRequest, err.Error())
 		return
 	}
 	if h.scheduler != nil {
-		h.scheduler.Submit(build.ID)
+		h.scheduler.Submit(uint(id))
 	}
-	pkg.Created(c, build)
+	pkg.Success(c, gin.H{"id": id})
 }
 
 // GET /api/v1/builds/:id/artifact - download artifact file

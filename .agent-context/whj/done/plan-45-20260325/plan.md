@@ -1,6 +1,6 @@
 # 构建与分发阶段分离（多分发目标）
 
-> 状态: 未执行
+> 状态: 已执行
 
 ## 目标
 
@@ -47,7 +47,14 @@
 
 ## 影响范围
 
-（实施阶段由 implement / patch 填写具体文件路径）
+- `internal/model/`：`environment.go`、`build.go`、新增 `distribution.go`、`build_distribution.go`；`database.go` 迁移与丢弃旧 `deploy_*` 列
+- `internal/repository/`：`distribution_repo.go`、`build_distribution_repo.go`，`build_repo.go`、`environment_repo.go`、`server_repo.go` 调整
+- `internal/engine/`：`pipeline.go`、`pipeline_distribute.go`、`scheduler.go`
+- `internal/service/`：`project_service.go`、`build_service.go`、`server_service.go` 及测试
+- `internal/handler/`：`project_handler.go`、`build_handler.go`
+- `cmd/server/main.go`：DI
+- `web/src/`：`lib/constants.ts`、`components/build-log-viewer.tsx`、`environment-builds-table.tsx`、`pages/projects/environment-form.tsx`、`pages/projects/detail.tsx`、`pages/builds/detail.tsx`、`pages/dashboard.tsx`
+- `AGENTS.md`：流水线与部署器说明
 
 ## 历史补丁
 

@@ -20,7 +20,7 @@ func (r *ProjectRepository) Create(project *model.Project) error {
 
 func (r *ProjectRepository) FindByID(id uint) (*model.Project, error) {
 	var project model.Project
-	err := r.db.Preload("Environments").First(&project, id).Error
+	err := r.db.Preload("Environments").Preload("Environments.Distributions").First(&project, id).Error
 	return &project, err
 }
 

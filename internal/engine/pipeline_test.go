@@ -78,6 +78,40 @@ func TestFailBuildKeepsCurrentStage(t *testing.T) {
 	}
 }
 
+func TestFailBuildNoOpWhenAlreadySuccess(t *testing.T) {
+	db := newPipelineTestDB(t)
+	buildRepo := repository.NewBuildRepository(db)
+	notifRepo := repository.NewNotificationRepository(db)
+
+	build := &model.Build{
+		ProjectID:     1,
+		EnvironmentID: 1,
+		BuildNumber:   1,
+		Status:        "success",
+		CurrentStage:  "success",
+		TriggeredBy:   1,
+	}
+	if err := buildRepo.Create(build); err != nil {
+		t.Fatalf("create build: %v", err)
+	}
+
+	pipeline := &Pipeline{
+		buildRepo: buildRepo,
+		notifRepo: notifRepo,
+		hub:       ws.NewHub(),
+	}
+
+	pipeline.failBuild(build, "should not apply")
+
+	saved, err := buildRepo.FindByID(build.ID)
+	if err != nil {
+		t.Fatalf("find build: %v", err)
+	}
+	if saved.Status != "success" {
+		t.Fatalf("expected status to stay success, got %q", saved.Status)
+	}
+}
+
 func TestCreateArtifactArchiveSupportsZipAndGzip(t *testing.T) {
 	sourceDir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(sourceDir, "index.html"), []byte("hello"), 0644); err != nil {

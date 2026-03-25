@@ -10,15 +10,12 @@ type Environment struct {
 	BuildScript      string    `json:"build_script" gorm:"type:text"`
 	BuildScriptType  string    `json:"build_script_type" gorm:"size:20;default:bash"`
 	BuildOutputDir   string    `json:"build_output_dir" gorm:"size:300"`
-	DeployServerID   *uint     `json:"deploy_server_id"`
-	DeployPath       string    `json:"deploy_path" gorm:"size:500"`
-	DeployMethod     string    `json:"deploy_method" gorm:"size:20"`
-	PostDeployScript string    `json:"post_deploy_script" gorm:"type:text"`
 	CachePaths       string    `json:"cache_paths" gorm:"type:text"`
 	CronExpression   string    `json:"cron_expression" gorm:"size:100"`
 	CronEnabled      bool      `json:"cron_enabled" gorm:"default:false"`
 	SortOrder        int       `json:"sort_order" gorm:"default:0"`
 	VarGroupIDs      []uint    `json:"var_group_ids" gorm:"-"`
+	Distributions    []Distribution `json:"distributions,omitempty" gorm:"foreignKey:EnvironmentID"`
 	CreatedAt        time.Time `json:"created_at"`
 	UpdatedAt        time.Time `json:"updated_at"`
 }

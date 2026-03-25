@@ -69,7 +69,9 @@ make clean               # 删除 buildflow 二进制、dist、data 目录
 │   │   ├── database.go           # InitDB()、AutoMigrate、默认 admin
 │   │   ├── build.go              # Build
 │   │   ├── project.go            # Project
-│   │   ├── environment.go        # Environment（含构建脚本、部署配置、Cron）
+│   │   ├── environment.go        # Environment（构建脚本、Cron 等）
+│   │   ├── distribution.go       # Distribution（环境多分发目标）
+│   │   ├── build_distribution.go # BuildDistribution（构建-分发执行记录）
 │   │   ├── server.go             # Server
 │   │   ├── user.go               # User
 │   │   ├── variable.go           # EnvVar, VarGroup, VarGroupItem
@@ -85,7 +87,8 @@ make clean               # 删除 buildflow 二进制、dist、data 目录
 │   │   ├── cors.go               # CORS 配置
 │   │   └── audit.go              # POST/PUT/PATCH/DELETE 自动审计
 │   ├── engine/                   # 构建引擎
-│   │   ├── pipeline.go           # Pipeline：克隆 → 构建 → 归档 → 部署
+│   │   ├── pipeline.go           # Pipeline：克隆 → 构建 → 归档 → 分发（多目标）
+│   │   ├── pipeline_distribute.go # 分发阶段与单目标部署封装
 │   │   ├── scheduler.go          # Scheduler：并发构建限制、Submit/Cancel
 │   │   ├── cron.go               # CronScheduler：定时构建 Add/Remove/Update
 │   │   └── git.go                # GitCloneOrPull, GitListBranches
@@ -146,15 +149,15 @@ DI 在 `cmd/server/main.go` 中手动组装，不使用框架。
 
 ### 构建引擎
 
-Pipeline 执行流程：`克隆/拉取 → 执行构建脚本 → 归档产物（gzip/zip） → 部署`。
+Pipeline 执行流程：`克隆/拉取 → 执行构建脚本 → 归档产物（gzip/zip）→ 标记构建阶段成功（可下载）→ 按环境多条 Distribution 顺序分发`。分发失败**不会**将 `Build.Status` 置为 `failed`；汇总见 `Build.distribution_summary` 与 `BuildDistribution` 各行状态。`TriggerType == redistribute` 或仅重新分发时在同一 `Build` 上只跑分发阶段。
 
 - **Scheduler**：通过 `config.build.max_concurrent` 限制并发构建数，`Submit(buildID)` 入队，`Cancel(buildID)` 取消。
 - **CronScheduler**：基于 `robfig/cron/v3`，从 `Environment.CronExpression` 加载定时任务。
 - **Git**：支持 URL 内嵌 token、HTTP Basic、明文密码三种认证方式。
 
-### 部署器
+### 部署器（分发）
 
-`Deployer` 接口统一 `Deploy(ctx, DeployOptions) error`，通过 `NewDeployer(method)` 工厂方法创建：
+`Deployer` 接口统一 `Deploy(ctx, DeployOptions) error`，通过 `NewDeployer(method)` 工厂方法创建；每条 `Distribution` 调用一次：
 
 | 方法 | 实现 | 说明 |
 |------|------|------|
@@ -184,6 +187,7 @@ SSH 连接支持密码、密钥、SSH Agent 三种认证。`path.go` 处理 Wind
 - WebSocket：`/ws/` 前缀，token 通过查询参数传递
 - Webhook：`POST /api/v1/webhook/:projectId/:secret`（公开，无需认证）；可选查询参数 `environment_id` 时仅在推送分支与该环境分支一致时触发该环境构建
 - 文件下载：直接返回二进制流（产物下载）
+- 重新分发：`POST /api/v1/builds/:id/deploy`（body 可选 `distribution_ids`），对**已成功且有产物**的同一构建记录触发仅分发阶段
 
 ### 前端规范
 

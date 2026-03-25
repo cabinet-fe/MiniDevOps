@@ -18,12 +18,21 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { api } from "@/lib/api";
 import type { PaginatedData } from "@/lib/api";
 import { EnvironmentBuildsTable, extractFileName } from "@/components/environment-builds-table";
-import { ARTIFACT_FORMATS, BUILD_SCRIPT_TYPES, DEPLOY_METHODS } from "@/lib/constants";
+import { ARTIFACT_FORMATS, BUILD_SCRIPT_TYPES } from "@/lib/constants";
 import { cn, copyTextToClipboard } from "@/lib/utils";
 import { ProjectFormDialog } from "@/pages/projects/form";
 import { EnvironmentFormDialog } from "@/pages/projects/environment-form";
 import { useNotificationStore } from "@/stores/notification-store";
 import { useAuthStore } from "@/stores/auth-store";
+
+interface Distribution {
+  id: number;
+  server_id: number | null;
+  remote_path: string;
+  method: string;
+  post_deploy_script: string;
+  sort_order: number;
+}
 
 interface Environment {
   id: number;
@@ -33,10 +42,7 @@ interface Environment {
   build_script: string;
   build_script_type: string;
   build_output_dir: string;
-  deploy_server_id: number | null;
-  deploy_method: string;
-  deploy_path: string;
-  post_deploy_script: string;
+  distributions: Distribution[];
   cron_expression: string;
   cron_enabled: boolean;
   sort_order: number;
@@ -73,9 +79,18 @@ interface Build {
   artifact_path: string;
   duration_ms: number;
   created_at: string;
+  distribution_summary?: string;
 }
 
-const RUNNING_BUILD_STATUSES = new Set(["pending", "cloning", "building", "deploying"]);
+function isBuildRunning(status: string, distributionSummary?: string): boolean {
+  if (["pending", "cloning", "building", "deploying"].includes(status)) return true;
+  if (
+    status === "success" &&
+    (distributionSummary === "pending" || distributionSummary === "running")
+  )
+    return true;
+  return false;
+}
 
 const BUILD_PAGE_SIZE = 20;
 
@@ -281,7 +296,7 @@ export function ProjectDetailPage() {
   }, [latestNotification, projectId, fetchProject]);
 
   const hasActiveBuilds = Object.values(buildsByEnv).some((items) =>
-    items.some((item) => RUNNING_BUILD_STATUSES.has(item.status)),
+    items.some((item) => isBuildRunning(item.status, item.distribution_summary)),
   );
 
   useEffect(() => {
@@ -400,7 +415,7 @@ export function ProjectDetailPage() {
         toast.error(res.message || "操作失败");
         return;
       }
-      toast.success(action === "deploy" ? "开始部署" : "已重新构建");
+      toast.success(action === "deploy" ? "已开始重新分发" : "已重新构建");
       await fetchProject();
       const tab = activeTabRef.current;
       if (tab) {
@@ -614,15 +629,13 @@ export function ProjectDetailPage() {
                         />
                         <MetaItem label="产物" value={env.build_output_dir || "未配置"} mono />
                         <MetaItem
-                          label="部署"
+                          label="分发"
                           value={
-                            env.deploy_method
-                              ? (DEPLOY_METHODS.find((m) => m.value === env.deploy_method)?.label ??
-                                env.deploy_method)
-                              : "未部署"
+                            env.distributions?.length
+                              ? `${env.distributions.length} 条目标`
+                              : "未配置"
                           }
                         />
-                        {env.deploy_path && <MetaItem label="路径" value={env.deploy_path} mono />}
                         <MetaItem
                           label="Cron"
                           value={env.cron_enabled ? env.cron_expression || "已启用" : "未启用"}

@@ -58,6 +58,10 @@ func (s *Scheduler) run() {
 						zap.Uint("build_id", id),
 						zap.String("panic", fmt.Sprint(r)),
 					)
+					b, err := s.pipeline.buildRepo.FindByID(id)
+					if err == nil && b.Status == "success" {
+						return
+					}
 					s.pipeline.failBuild(&model.Build{ID: id}, fmt.Sprintf("internal panic: %v", r))
 				}
 			}()

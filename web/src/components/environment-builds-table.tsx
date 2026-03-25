@@ -38,6 +38,7 @@ export interface BuildListEntry {
   artifact_path: string;
   duration_ms: number;
   created_at: string;
+  distribution_summary?: string;
 }
 
 export interface EnvBranchRef {
@@ -92,8 +93,19 @@ function BuildRow({
         #{build.build_number}
       </TableCell>
       <TableCell className="py-1.5">
-        <Badge className={cn("text-[10px] text-white", statusInfo.color)}>
+        <Badge
+          className={cn(
+            "text-[10px] text-white",
+            statusInfo.color,
+            build.distribution_summary === "partial" && build.status === "success" && "ring-1 ring-amber-400/80"
+          )}
+        >
           {statusInfo.label}
+          {build.distribution_summary === "partial" && build.status === "success" && (
+            <span className="ml-0.5 text-[9px] opacity-90" title="分发未全部成功">
+              *
+            </span>
+          )}
         </Badge>
       </TableCell>
       <TableCell className="py-1.5">
@@ -148,7 +160,7 @@ function BuildRow({
                   )}
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>重新部署</TooltipContent>
+              <TooltipContent>重新分发</TooltipContent>
             </Tooltip>
           )}
           {canRetry && (

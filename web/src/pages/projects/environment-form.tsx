@@ -58,16 +58,21 @@ interface VarGroup {
   description: string
 }
 
+export interface DistributionRow {
+  id?: number
+  server_id: number | null
+  remote_path: string
+  method: string
+  post_deploy_script: string
+}
+
 export interface EnvironmentPayload {
   name: string
   branch: string
   build_script: string
   build_script_type: string
   build_output_dir: string
-  deploy_server_id: number | null
-  deploy_path: string
-  deploy_method: string
-  post_deploy_script: string
+  distributions: DistributionRow[]
   cache_paths?: string
   cron_expression: string
   cron_enabled: boolean
@@ -92,10 +97,7 @@ const DEFAULT_FORM: EnvironmentPayload = {
   build_script: '',
   build_script_type: 'bash',
   build_output_dir: '',
-  deploy_server_id: null,
-  deploy_path: '',
-  deploy_method: 'rsync',
-  post_deploy_script: '',
+  distributions: [],
   cache_paths: '',
   cron_expression: '',
   cron_enabled: false,
@@ -174,16 +176,23 @@ export function EnvironmentFormDialog({
     }).finally(() => setBranchesLoading(false))
 
     if (isEdit && editEnv) {
+      const dists = editEnv.distributions
       setForm({
         name: editEnv.name || '',
         branch: editEnv.branch || '',
         build_script: editEnv.build_script || '',
         build_script_type: editEnv.build_script_type || 'bash',
         build_output_dir: editEnv.build_output_dir || '',
-        deploy_server_id: editEnv.deploy_server_id,
-        deploy_path: editEnv.deploy_path || '',
-        deploy_method: editEnv.deploy_method || 'rsync',
-        post_deploy_script: editEnv.post_deploy_script || '',
+        distributions:
+          dists && dists.length > 0
+            ? dists.map((d) => ({
+                id: d.id,
+                server_id: d.server_id ?? null,
+                remote_path: d.remote_path || '',
+                method: d.method || 'rsync',
+                post_deploy_script: d.post_deploy_script || '',
+              }))
+            : [],
         cache_paths: editEnv.cache_paths || '',
         cron_expression: editEnv.cron_expression || '',
         cron_enabled: editEnv.cron_enabled || false,
@@ -213,6 +222,30 @@ export function EnvironmentFormDialog({
     setForm((prev) => ({ ...prev, [key]: value }))
   }
 
+  const updateDistribution = (index: number, patch: Partial<DistributionRow>) => {
+    setForm((prev) => ({
+      ...prev,
+      distributions: prev.distributions.map((row, i) => (i === index ? { ...row, ...patch } : row)),
+    }))
+  }
+
+  const addDistribution = () => {
+    setForm((prev) => ({
+      ...prev,
+      distributions: [
+        ...prev.distributions,
+        { server_id: null, remote_path: '', method: 'rsync', post_deploy_script: '' },
+      ],
+    }))
+  }
+
+  const removeDistribution = (index: number) => {
+    setForm((prev) => ({
+      ...prev,
+      distributions: prev.distributions.filter((_, i) => i !== index),
+    }))
+  }
+
   const updateEnvVar = (index: number, patch: Partial<EnvVarRow>) => {
     setEnvVars((prev) => prev.map((item, current) => {
       if (current !== index) return item
@@ -231,8 +264,19 @@ export function EnvironmentFormDialog({
     if (!form.name.trim()) return '请输入环境名称'
     if (form.cron_enabled && !form.cron_expression.trim()) return '启用定时构建时必须填写 Cron 表达式'
     if (envVars.some((item) => !item.key.trim())) return '环境变量 key 不能为空'
-    if (form.deploy_method === 'local' && form.deploy_path.trim() && !isAbsoluteDeployPath(form.deploy_path)) {
-      return '本机部署路径须为绝对路径（如 /var/www/app 或 C:\\publish）'
+    for (const d of form.distributions) {
+      const path = d.remote_path.trim()
+      const script = d.post_deploy_script.trim()
+      const hasAny = path || d.server_id != null || script || d.method !== 'rsync'
+      if (!hasAny) continue
+      if (d.method === 'local') {
+        if (!path) return '本机分发须填写路径'
+        if (!isAbsoluteDeployPath(path)) {
+          return '本机分发路径须为绝对路径（如 /var/www/app 或 C:\\publish）'
+        }
+      } else if (!d.server_id || !path) {
+        return '非本机分发须选择服务器并填写远程路径'
+      }
     }
     return ''
   }
@@ -291,12 +335,25 @@ export function EnvironmentFormDialog({
     setSubmitting(true)
 
     try {
+      const distPayload = form.distributions
+        .filter((d) => {
+          const path = d.remote_path.trim()
+          const script = d.post_deploy_script.trim()
+          return path || d.server_id != null || script || d.method !== 'rsync'
+        })
+        .map((d, i) => ({
+          server_id: d.server_id,
+          remote_path: d.remote_path.trim(),
+          method: d.method || 'rsync',
+          post_deploy_script: d.post_deploy_script.trim(),
+          sort_order: i,
+        }))
       const payload = {
         ...form,
         name: form.name.trim(),
         branch: form.branch.trim(),
         build_output_dir: form.build_output_dir.trim(),
-        deploy_path: form.deploy_path.trim(),
+        distributions: distPayload,
         cache_paths: (form.cache_paths ?? '').trim(),
       }
 
@@ -470,64 +527,111 @@ export function EnvironmentFormDialog({
               </div>
             </div>
 
-            <div
-              className={`grid gap-4 ${form.deploy_method === 'local' ? 'sm:grid-cols-2' : 'sm:grid-cols-3'}`}
-            >
-              <div className="space-y-2">
-                <Label>部署方式</Label>
-                <Select
-                  value={form.deploy_method}
-                  onValueChange={(value) => {
-                    setField('deploy_method', value)
-                    if (value === 'local') {
-                      setField('deploy_server_id', null)
-                    }
-                  }}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {DEPLOY_METHODS.map((method) => (
-                      <SelectItem key={method.value} value={method.value}>
-                        {method.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+            <div className="space-y-3 rounded-lg border border-border p-4">
+              <div className="flex items-center justify-between gap-2">
+                <div>
+                  <p className="text-sm font-medium">分发目标</p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    构建成功后依次分发到下列目标；可添加多条。留空表示构建完成后不分发。
+                  </p>
+                </div>
+                <Button type="button" variant="outline" size="sm" onClick={addDistribution}>
+                  <Plus className="mr-1 size-4" />
+                  添加
+                </Button>
               </div>
-              {form.deploy_method !== 'local' && (
-                <div className="space-y-2">
-                  <Label>部署服务器</Label>
-                  <Select
-                    value={form.deploy_server_id ? String(form.deploy_server_id) : 'none'}
-                    onValueChange={(value) => setField('deploy_server_id', value === 'none' ? null : Number(value))}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">不部署</SelectItem>
-                      {servers.map((server) => (
-                        <SelectItem key={server.id} value={String(server.id)}>
-                          {server.name} ({server.host})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+              {form.distributions.length === 0 ? (
+                <p className="text-sm text-muted-foreground">暂无分发目标</p>
+              ) : (
+                <div className="space-y-4">
+                  {form.distributions.map((row, index) => (
+                    <div
+                      key={index}
+                      className="grid gap-3 rounded-md border border-border/80 bg-muted/20 p-3 sm:grid-cols-12"
+                    >
+                      <div className="space-y-2 sm:col-span-3">
+                        <Label>方式</Label>
+                        <Select
+                          value={row.method}
+                          onValueChange={(value) => {
+                            updateDistribution(index, {
+                              method: value,
+                              server_id: value === 'local' ? null : row.server_id,
+                            })
+                          }}
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {DEPLOY_METHODS.map((method) => (
+                              <SelectItem key={method.value} value={method.value}>
+                                {method.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      {row.method !== 'local' && (
+                        <div className="space-y-2 sm:col-span-4">
+                          <Label>服务器</Label>
+                          <Select
+                            value={row.server_id ? String(row.server_id) : 'none'}
+                            onValueChange={(value) =>
+                              updateDistribution(index, {
+                                server_id: value === 'none' ? null : Number(value),
+                              })
+                            }
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="选择服务器" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="none">未选择</SelectItem>
+                              {servers.map((server) => (
+                                <SelectItem key={server.id} value={String(server.id)}>
+                                  {server.name} ({server.host})
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      )}
+                      <div className={`space-y-2 ${row.method === 'local' ? 'sm:col-span-9' : 'sm:col-span-5'}`}>
+                        <Label>路径</Label>
+                        <Input
+                          value={row.remote_path}
+                          onChange={(e) => updateDistribution(index, { remote_path: e.target.value })}
+                          placeholder={
+                            row.method === 'local' ? '/var/www/app（本机绝对路径）' : '/var/www/html'
+                          }
+                        />
+                      </div>
+                      <div className="space-y-2 sm:col-span-12">
+                        <Label>部署后脚本（可选）</Label>
+                        <Input
+                          value={row.post_deploy_script}
+                          onChange={(e) => updateDistribution(index, { post_deploy_script: e.target.value })}
+                          placeholder="留空表示不执行"
+                          className="font-mono text-sm"
+                        />
+                      </div>
+                      <div className="flex justify-end sm:col-span-12">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="text-destructive"
+                          onClick={() => removeDistribution(index)}
+                        >
+                          <Trash2 className="mr-1 size-4" />
+                          移除此条
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               )}
-              <div className="space-y-2">
-                <Label htmlFor="env-deploy-path">部署路径</Label>
-                <Input
-                  id="env-deploy-path"
-                  value={form.deploy_path}
-                  onChange={(e) => setField('deploy_path', e.target.value)}
-                  placeholder={
-                    form.deploy_method === 'local' ? '/var/www/app（本机绝对路径）' : '/var/www/html'
-                  }
-                />
-              </div>
             </div>
 
             <div className="rounded-lg border border-border p-4 space-y-4">

@@ -44,12 +44,6 @@ func (r *EnvironmentRepository) Delete(id uint) error {
 	return r.db.Delete(&model.Environment{}, id).Error
 }
 
-func (r *EnvironmentRepository) CountByDeployServerID(serverID uint) (int64, error) {
-	var count int64
-	err := r.db.Model(&model.Environment{}).Where("deploy_server_id = ?", serverID).Count(&count).Error
-	return count, err
-}
-
 func (r *EnvironmentRepository) Update(env *model.Environment) error {
 	return r.db.Save(env).Error
 }

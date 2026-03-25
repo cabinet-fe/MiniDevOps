@@ -9,9 +9,23 @@ export const BUILD_STATUSES = {
   cloning: { label: "拉取代码", color: "bg-blue-400" },
   building: { label: "构建中", color: "bg-blue-500" },
   deploying: { label: "部署中", color: "bg-purple-500" },
+  distributing: { label: "分发中", color: "bg-purple-500" },
   success: { label: "成功", color: "bg-green-500" },
   failed: { label: "失败", color: "bg-red-500" },
   cancelled: { label: "已取消", color: "bg-gray-500" },
+};
+
+/** 构建记录上 distribution_summary 字段（后端） */
+export const DISTRIBUTION_SUMMARY_LABELS: Record<string, string> = {
+  "": "",
+  none: "无分发",
+  pending: "分发排队",
+  running: "分发进行中",
+  all_success: "分发全部成功",
+  partial: "分发部分失败",
+  all_failed: "分发全部失败",
+  skipped: "未配置分发",
+  cancelled: "分发已取消",
 };
 
 export const DEPLOY_METHODS = [

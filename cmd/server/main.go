@@ -72,6 +72,8 @@ func main() {
 	envVarRepo := repository.NewEnvVarRepository(db)
 	varGroupRepo := repository.NewVarGroupRepository(db)
 	buildRepo := repository.NewBuildRepository(db)
+	buildDistRepo := repository.NewBuildDistributionRepository(db)
+	distRepo := repository.NewDistributionRepository(db)
 	notifRepo := repository.NewNotificationRepository(db)
 	auditRepo := repository.NewAuditRepository(db)
 	dictRepo := repository.NewDictRepository(db)
@@ -82,10 +84,10 @@ func main() {
 		logger.Fatal("Failed to init auth service", zap.Error(err))
 	}
 	userService := service.NewUserService(userRepo)
-	serverService := service.NewServerService(serverRepo, envRepo)
+	serverService := service.NewServerService(serverRepo)
 	credentialService := service.NewCredentialService(credentialRepo, projectRepo, userRepo)
-	projectService := service.NewProjectService(projectRepo, credentialRepo, envRepo, buildRepo, envVarRepo, varGroupRepo)
-	buildService := service.NewBuildService(buildRepo, projectRepo, envRepo, userRepo)
+	projectService := service.NewProjectService(projectRepo, credentialRepo, envRepo, buildRepo, envVarRepo, varGroupRepo, distRepo)
+	buildService := service.NewBuildService(buildRepo, projectRepo, envRepo, userRepo, distRepo, buildDistRepo)
 	if n, err := buildRepo.MarkInterruptedBuilds("服务异常中断，构建未正常结束"); err != nil {
 		logger.Error("reconcile interrupted builds", zap.Error(err))
 	} else if n > 0 {
@@ -100,7 +102,7 @@ func main() {
 
 	// Init build pipeline and scheduler
 	pipeline := engine.NewPipeline(
-		buildRepo, projectRepo, credentialRepo, envRepo, envVarRepo, varGroupRepo, serverRepo, notifRepo,
+		buildRepo, buildDistRepo, projectRepo, credentialRepo, envRepo, distRepo, envVarRepo, varGroupRepo, serverRepo, notifRepo,
 		hub, logger,
 		cfg.Build.WorkspaceDir, cfg.Build.ArtifactDir, cfg.Build.LogDir, cfg.Build.CacheDir,
 	)

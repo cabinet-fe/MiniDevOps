@@ -2,6 +2,7 @@ package service
 
 import (
 	"bufio"
+	"encoding/json"
 	"buildflow/internal/config"
 	"buildflow/internal/model"
 	"buildflow/internal/repository"
@@ -12,22 +13,32 @@ import (
 )
 
 type BuildService struct {
-	repo        *repository.BuildRepository
-	projectRepo *repository.ProjectRepository
-	envRepo     *repository.EnvironmentRepository
-	userRepo    *repository.UserRepository
+	repo          *repository.BuildRepository
+	projectRepo   *repository.ProjectRepository
+	envRepo       *repository.EnvironmentRepository
+	userRepo      *repository.UserRepository
+	distRepo      *repository.DistributionRepository
+	buildDistRepo *repository.BuildDistributionRepository
 }
 
-func NewBuildService(repo *repository.BuildRepository, projectRepo *repository.ProjectRepository, envRepo *repository.EnvironmentRepository, userRepo *repository.UserRepository) *BuildService {
-	return &BuildService{repo: repo, projectRepo: projectRepo, envRepo: envRepo, userRepo: userRepo}
+func NewBuildService(repo *repository.BuildRepository, projectRepo *repository.ProjectRepository, envRepo *repository.EnvironmentRepository, userRepo *repository.UserRepository, distRepo *repository.DistributionRepository, buildDistRepo *repository.BuildDistributionRepository) *BuildService {
+	return &BuildService{repo: repo, projectRepo: projectRepo, envRepo: envRepo, userRepo: userRepo, distRepo: distRepo, buildDistRepo: buildDistRepo}
+}
+
+// BuildDistributionDetail is one distribution run row with target config for display.
+type BuildDistributionDetail struct {
+	model.BuildDistribution
+	Method     string `json:"method"`
+	RemotePath string `json:"remote_path"`
 }
 
 // BuildDetailResponse extends Build with associated names.
 type BuildDetailResponse struct {
 	model.Build
-	ProjectName     string `json:"project_name"`
-	EnvironmentName string `json:"environment_name"`
-	TriggeredByName string `json:"triggered_by_name"`
+	ProjectName     string                  `json:"project_name"`
+	EnvironmentName string                  `json:"environment_name"`
+	TriggeredByName string                  `json:"triggered_by_name"`
+	Distributions   []BuildDistributionDetail `json:"distributions,omitempty"`
 }
 
 func (s *BuildService) GetBuildDetail(id uint) (*BuildDetailResponse, error) {
@@ -69,6 +80,20 @@ func (s *BuildService) GetBuildDetail(id uint) (*BuildDetailResponse, error) {
 			}
 		}
 	}
+	if s.buildDistRepo != nil && s.distRepo != nil {
+		rows, err := s.buildDistRepo.ListByBuildID(build.ID)
+		if err == nil && len(rows) > 0 {
+			resp.Distributions = make([]BuildDistributionDetail, 0, len(rows))
+			for _, row := range rows {
+				detail := BuildDistributionDetail{BuildDistribution: row}
+				if d, err := s.distRepo.FindByID(row.DistributionID); err == nil {
+					detail.Method = d.Method
+					detail.RemotePath = d.RemotePath
+				}
+				resp.Distributions = append(resp.Distributions, detail)
+			}
+		}
+	}
 	return resp, nil
 }
 
@@ -92,8 +117,12 @@ func inferBuildStageFromLog(logPath string) string {
 			stage = "cloning"
 		case strings.Contains(line, "=== Stage: Building ==="):
 			stage = "building"
+		case strings.Contains(line, "=== Stage: Distributing ==="):
+			stage = "distributing"
 		case strings.Contains(line, "=== Stage: Deploying ==="):
 			stage = "deploying"
+		case strings.Contains(line, "=== 重新分发：使用已有产物 ==="):
+			stage = "distributing"
 		case strings.Contains(line, "=== 仅部署：使用已有产物 ==="):
 			stage = "deploying"
 		case strings.Contains(line, "=== Build completed successfully ==="):
@@ -135,39 +164,28 @@ func (s *BuildService) TriggerBuild(projectID, environmentID, triggeredBy uint, 
 	return build, nil
 }
 
-// TriggerDeployBuild creates a new build that only publishes an existing artifact (no clone/build).
-func (s *BuildService) TriggerDeployBuild(sourceBuildID uint, triggeredBy uint) (*model.Build, error) {
-	src, err := s.repo.FindByID(sourceBuildID)
+// TriggerRedistribute schedules distribution-only on an existing successful build (same build row).
+func (s *BuildService) TriggerRedistribute(buildID uint, triggeredBy uint, distributionIDs []uint) error {
+	b, err := s.repo.FindByID(buildID)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	if src.Status != "success" {
-		return nil, fmt.Errorf("只有成功的构建才能部署")
+	if b.Status != "success" {
+		return fmt.Errorf("只有成功的构建才能重新分发")
 	}
-	if strings.TrimSpace(src.ArtifactPath) == "" {
-		return nil, fmt.Errorf("该构建没有产物，无法部署")
+	if strings.TrimSpace(b.ArtifactPath) == "" {
+		return fmt.Errorf("该构建没有产物，无法分发")
 	}
-	num, err := s.repo.GetNextBuildNumber(src.ProjectID)
+	filterJSON, err := json.Marshal(distributionIDs)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	build := &model.Build{
-		ProjectID:     src.ProjectID,
-		EnvironmentID: src.EnvironmentID,
-		BuildNumber:   num,
-		Status:        "pending",
-		CurrentStage:  "pending",
-		TriggerType:   "deploy",
-		TriggeredBy:   triggeredBy,
-		Branch:        src.Branch,
-		CommitHash:    src.CommitHash,
-		CommitMessage: src.CommitMessage,
-		ArtifactPath:  src.ArtifactPath,
-	}
-	if err := s.repo.Create(build); err != nil {
-		return nil, err
-	}
-	return build, nil
+	return s.repo.UpdateStatus(buildID, "success", map[string]interface{}{
+		"trigger_type":             "redistribute",
+		"redistribute_filter_json": string(filterJSON),
+		"distribution_summary":     "pending",
+		"triggered_by":             triggeredBy,
+	})
 }
 
 func (s *BuildService) GetByID(id uint) (*model.Build, error) {

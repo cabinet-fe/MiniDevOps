@@ -20,6 +20,7 @@ type ProjectService struct {
 	repo           *repository.ProjectRepository
 	credentialRepo *repository.CredentialRepository
 	envRepo        *repository.EnvironmentRepository
+	distRepo       *repository.DistributionRepository
 	buildRepo      *repository.BuildRepository
 	envVarRepo     *repository.EnvVarRepository
 	varGroupRepo   *repository.VarGroupRepository
@@ -32,11 +33,13 @@ func NewProjectService(
 	buildRepo *repository.BuildRepository,
 	envVarRepo *repository.EnvVarRepository,
 	varGroupRepo *repository.VarGroupRepository,
+	distRepo *repository.DistributionRepository,
 ) *ProjectService {
 	return &ProjectService{
 		repo:           repo,
 		credentialRepo: credentialRepo,
 		envRepo:        envRepo,
+		distRepo:       distRepo,
 		buildRepo:      buildRepo,
 		envVarRepo:     envVarRepo,
 		varGroupRepo:   varGroupRepo,
@@ -170,15 +173,22 @@ type EnvironmentExport struct {
 	BuildScript      string         `json:"build_script"`
 	BuildScriptType  string         `json:"build_script_type"`
 	BuildOutputDir   string         `json:"build_output_dir"`
-	DeployPath       string         `json:"deploy_path"`
-	DeployMethod     string         `json:"deploy_method"`
-	PostDeployScript string         `json:"post_deploy_script"`
+	Distributions    []DistributionExport `json:"distributions"`
 	CachePaths       string         `json:"cache_paths"`
 	CronExpression   string         `json:"cron_expression"`
 	CronEnabled      bool           `json:"cron_enabled"`
 	SortOrder        int            `json:"sort_order"`
 	VarGroupNames    []string       `json:"var_group_names,omitempty"`
 	EnvVars          []EnvVarExport `json:"env_vars,omitempty"`
+}
+
+// DistributionExport is one deploy target for export/import.
+type DistributionExport struct {
+	ServerID         *uint  `json:"server_id"`
+	RemotePath       string `json:"remote_path"`
+	Method           string `json:"method"`
+	PostDeployScript string `json:"post_deploy_script"`
+	SortOrder        int    `json:"sort_order"`
 }
 
 type EnvVarExport struct {
@@ -223,21 +233,30 @@ func (s *ProjectService) Export(id uint) ([]byte, error) {
 				IsSecret: envVar.IsSecret,
 			})
 		}
+		dists, _ := s.distRepo.ListByEnvironmentID(e.ID)
+		distExports := make([]DistributionExport, 0, len(dists))
+		for _, d := range dists {
+			distExports = append(distExports, DistributionExport{
+				ServerID:         d.ServerID,
+				RemotePath:       d.RemotePath,
+				Method:           d.Method,
+				PostDeployScript: d.PostDeployScript,
+				SortOrder:        d.SortOrder,
+			})
+		}
 		exp.Environments = append(exp.Environments, EnvironmentExport{
-			Name:             e.Name,
-			Branch:           e.Branch,
-			BuildScript:      e.BuildScript,
-			BuildScriptType:  e.BuildScriptType,
-			BuildOutputDir:   e.BuildOutputDir,
-			DeployPath:       e.DeployPath,
-			DeployMethod:     e.DeployMethod,
-			PostDeployScript: e.PostDeployScript,
-			CachePaths:       e.CachePaths,
-			CronExpression:   e.CronExpression,
-			CronEnabled:      e.CronEnabled,
-			SortOrder:        e.SortOrder,
-			VarGroupNames:    varGroupNames,
-			EnvVars:          exportVars,
+			Name:            e.Name,
+			Branch:          e.Branch,
+			BuildScript:     e.BuildScript,
+			BuildScriptType: e.BuildScriptType,
+			BuildOutputDir:  e.BuildOutputDir,
+			Distributions:   distExports,
+			CachePaths:      e.CachePaths,
+			CronExpression:  e.CronExpression,
+			CronEnabled:     e.CronEnabled,
+			SortOrder:       e.SortOrder,
+			VarGroupNames:   varGroupNames,
+			EnvVars:         exportVars,
 		})
 	}
 	return json.MarshalIndent(exp, "", "  ")
@@ -280,21 +299,28 @@ func (s *ProjectService) Import(data []byte, createdBy uint) (*model.Project, er
 	}
 	for _, ee := range exp.Environments {
 		env := &model.Environment{
-			ProjectID:        project.ID,
-			Name:             ee.Name,
-			Branch:           ee.Branch,
-			BuildScript:      ee.BuildScript,
-			BuildScriptType:  ee.BuildScriptType,
-			BuildOutputDir:   ee.BuildOutputDir,
-			DeployPath:       ee.DeployPath,
-			DeployMethod:     ee.DeployMethod,
-			PostDeployScript: ee.PostDeployScript,
-			CachePaths:       ee.CachePaths,
-			CronExpression:   ee.CronExpression,
-			CronEnabled:      ee.CronEnabled,
-			SortOrder:        ee.SortOrder,
+			ProjectID:       project.ID,
+			Name:            ee.Name,
+			Branch:          ee.Branch,
+			BuildScript:     ee.BuildScript,
+			BuildScriptType: ee.BuildScriptType,
+			BuildOutputDir:  ee.BuildOutputDir,
+			CachePaths:      ee.CachePaths,
+			CronExpression:  ee.CronExpression,
+			CronEnabled:     ee.CronEnabled,
+			SortOrder:       ee.SortOrder,
 		}
-		if err := s.CreateEnvironment(env, nil); err != nil {
+		dists := make([]model.Distribution, 0, len(ee.Distributions))
+		for _, de := range ee.Distributions {
+			dists = append(dists, model.Distribution{
+				ServerID:         de.ServerID,
+				RemotePath:       de.RemotePath,
+				Method:           de.Method,
+				PostDeployScript: de.PostDeployScript,
+				SortOrder:        de.SortOrder,
+			})
+		}
+		if err := s.CreateEnvironment(env, nil, dists); err != nil {
 			return nil, err
 		}
 		for _, exported := range ee.EnvVars {
@@ -384,36 +410,58 @@ func (s *ProjectService) ListEnvironments(projectID uint) ([]model.Environment, 
 	if err := s.populateEnvironmentGroupIDs(envs); err != nil {
 		return nil, err
 	}
+	for i := range envs {
+		list, err := s.distRepo.ListByEnvironmentID(envs[i].ID)
+		if err != nil {
+			return nil, err
+		}
+		envs[i].Distributions = list
+	}
 	return envs, nil
 }
 
-func normalizeEnvironmentDeploy(env *model.Environment) error {
-	m := strings.TrimSpace(strings.ToLower(env.DeployMethod))
+func validateDistribution(d *model.Distribution) error {
+	m := strings.TrimSpace(strings.ToLower(d.Method))
 	if m == "" {
 		m = "rsync"
 	}
 	switch m {
 	case "rsync", "sftp", "scp", "agent", "local":
-		env.DeployMethod = m
+		d.Method = m
 	default:
-		return fmt.Errorf("不支持的部署方式: %s", strings.TrimSpace(env.DeployMethod))
+		return fmt.Errorf("不支持的部署方式: %s", strings.TrimSpace(d.Method))
 	}
 	if m == "local" {
-		env.DeployServerID = nil
-		p := strings.TrimSpace(env.DeployPath)
-		if p != "" && !filepath.IsAbs(p) {
+		d.ServerID = nil
+		p := strings.TrimSpace(d.RemotePath)
+		if p == "" {
+			return errors.New("本机分发须填写路径")
+		}
+		if !filepath.IsAbs(p) {
 			return errors.New("本机部署路径须为绝对路径")
 		}
+		return nil
+	}
+	if d.ServerID == nil || strings.TrimSpace(d.RemotePath) == "" {
+		return fmt.Errorf("非本机分发须指定服务器与路径")
 	}
 	return nil
 }
 
-func (s *ProjectService) CreateEnvironment(env *model.Environment, varGroupIDs []uint) error {
-	if err := normalizeEnvironmentDeploy(env); err != nil {
-		return err
-	}
+func (s *ProjectService) CreateEnvironment(env *model.Environment, varGroupIDs []uint, distributions []model.Distribution) error {
 	if err := s.envRepo.Create(env); err != nil {
 		return err
+	}
+	if len(distributions) > 0 {
+		for i := range distributions {
+			if err := validateDistribution(&distributions[i]); err != nil {
+				return err
+			}
+		}
+		if err := s.distRepo.ReplaceForEnvironment(env.ID, distributions); err != nil {
+			return err
+		}
+		env.Distributions = distributions
 	}
 	if varGroupIDs != nil {
 		if err := s.varGroupRepo.SetEnvironmentVarGroupIDs(env.ID, uniqueUintSlice(varGroupIDs)); err != nil {
@@ -424,10 +472,7 @@ func (s *ProjectService) CreateEnvironment(env *model.Environment, varGroupIDs [
 	return nil
 }
 
-func (s *ProjectService) UpdateEnvironment(env *model.Environment, varGroupIDs []uint, syncVarGroups bool) error {
-	if err := normalizeEnvironmentDeploy(env); err != nil {
-		return err
-	}
+func (s *ProjectService) UpdateEnvironment(env *model.Environment, varGroupIDs []uint, syncVarGroups bool, distributions []model.Distribution, syncDistributions bool) error {
 	existing, err := s.envRepo.FindByID(env.ID)
 	if err != nil {
 		return err
@@ -437,6 +482,17 @@ func (s *ProjectService) UpdateEnvironment(env *model.Environment, varGroupIDs [
 	}
 	if err := s.envRepo.Update(env); err != nil {
 		return err
+	}
+	if syncDistributions {
+		for i := range distributions {
+			if err := validateDistribution(&distributions[i]); err != nil {
+				return err
+			}
+		}
+		if err := s.distRepo.ReplaceForEnvironment(env.ID, distributions); err != nil {
+			return err
+		}
+		env.Distributions = distributions
 	}
 	if syncVarGroups {
 		groupIDs := uniqueUintSlice(varGroupIDs)
@@ -481,6 +537,9 @@ func (s *ProjectService) DeleteEnvironment(id, projectID uint) error {
 		return err
 	}
 	if err := s.varGroupRepo.DeleteEnvironmentLinks(id); err != nil {
+		return err
+	}
+	if err := s.distRepo.DeleteByEnvironmentID(id); err != nil {
 		return err
 	}
 	return s.envRepo.Delete(id)

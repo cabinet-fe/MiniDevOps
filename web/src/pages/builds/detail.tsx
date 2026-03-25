@@ -20,10 +20,20 @@ import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { BuildLogViewer } from '@/components/build-log-viewer'
 import { api } from '@/lib/api'
-import { BUILD_STATUSES } from '@/lib/constants'
+import { BUILD_STATUSES, DISTRIBUTION_SUMMARY_LABELS } from '@/lib/constants'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import { useWebSocket } from '@/hooks/use-websocket'
+
+interface BuildDistributionRow {
+  id: number
+  build_id: number
+  distribution_id: number
+  status: string
+  error_message: string
+  method?: string
+  remote_path?: string
+}
 
 interface BuildDetail {
   id: number
@@ -41,26 +51,37 @@ interface BuildDetail {
   artifact_path: string
   duration_ms: number
   error_message: string
+  distribution_summary?: string
   started_at: string | null
   finished_at: string | null
   created_at: string
   project_name: string
   environment_name: string
   triggered_by_name: string
+  distributions?: BuildDistributionRow[]
 }
 
-const TIMELINE_STAGES = ['pending', 'cloning', 'building', 'deploying', 'success'] as const
+const TIMELINE_STAGES = ['pending', 'cloning', 'building', 'distributing', 'success'] as const
+
+function normalizeTimelineStage(status: string, currentStage: string, distributionSummary?: string): string {
+  if (status === 'failed' || status === 'cancelled') {
+    return currentStage === 'deploying' ? 'distributing' : currentStage
+  }
+  if (status === 'success' && (distributionSummary === 'running' || distributionSummary === 'pending')) {
+    return 'distributing'
+  }
+  if (currentStage === 'deploying') return 'distributing'
+  return currentStage || status
+}
 
 function getStageState(
   currentStatus: string,
   currentStage: string,
+  distributionSummary: string | undefined,
   stage: string
 ): 'completed' | 'active' | 'pending' | 'failed' {
   const order = TIMELINE_STAGES.indexOf(stage as (typeof TIMELINE_STAGES)[number])
-  const effectiveStage =
-    currentStatus === 'failed' || currentStatus === 'cancelled'
-      ? currentStage
-      : currentStatus
+  const effectiveStage = normalizeTimelineStage(currentStatus, currentStage, distributionSummary)
   const currentOrder = TIMELINE_STAGES.indexOf(
     effectiveStage as (typeof TIMELINE_STAGES)[number]
   )
@@ -74,7 +95,7 @@ function getStageState(
   }
 
   if (order < currentOrder) return 'completed'
-  if (order === currentOrder) return currentStatus === 'success' ? 'completed' : 'active'
+  if (order === currentOrder) return currentStatus === 'success' && stage === 'success' ? 'completed' : 'active'
   return 'pending'
 }
 
@@ -116,7 +137,9 @@ export function BuildDetailPage() {
   }, [fetchBuild])
 
   const isRunning = build
-    ? ['pending', 'cloning', 'building', 'deploying'].includes(build.status)
+    ? ['pending', 'cloning', 'building', 'deploying'].includes(build.status) ||
+      (build.status === 'success' &&
+        (build.distribution_summary === 'running' || build.distribution_summary === 'pending'))
     : false
 
   // WebSocket for real-time status updates
@@ -188,8 +211,14 @@ export function BuildDetailPage() {
     label: build.status,
     color: 'bg-gray-500',
   }
+  const distSummaryLabel =
+    build.distribution_summary && DISTRIBUTION_SUMMARY_LABELS[build.distribution_summary]
+      ? DISTRIBUTION_SUMMARY_LABELS[build.distribution_summary]
+      : ''
   const currentStageInfo = build.current_stage
-    ? BUILD_STATUSES[build.current_stage as keyof typeof BUILD_STATUSES]
+    ? BUILD_STATUSES[
+        (build.current_stage === 'deploying' ? 'distributing' : build.current_stage) as keyof typeof BUILD_STATUSES
+      ]
     : undefined
 
   return (
@@ -212,6 +241,9 @@ export function BuildDetailPage() {
             <p className="mt-0.5 text-sm text-muted-foreground">
               {build.project_name} / {build.environment_name}
             </p>
+            {distSummaryLabel && (
+              <p className="mt-1 text-xs text-muted-foreground">分发：{distSummaryLabel}</p>
+            )}
           </div>
         </div>
         <div className="flex gap-2">
@@ -251,7 +283,7 @@ export function BuildDetailPage() {
                   disabled={actionLoading === 'deploy'}
                 >
                   <Rocket className="size-4" />
-                  部署
+                  重新分发
                 </Button>
               )}
             </>
@@ -322,6 +354,56 @@ export function BuildDetailPage() {
         </CardContent>
       </Card>
 
+      {build.distributions && build.distributions.length > 0 && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">分发目标</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {build.distributions.map((row) => (
+              <div
+                key={row.id}
+                className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border/80 px-3 py-2 text-sm"
+              >
+                <div className="min-w-0">
+                  <span className="font-mono text-xs text-muted-foreground">
+                    #{row.distribution_id}
+                  </span>{' '}
+                  <span className="text-muted-foreground">
+                    {row.method || '-'}/{row.remote_path || '-'}
+                  </span>
+                </div>
+                <Badge
+                  variant="outline"
+                  className={
+                    row.status === 'success'
+                      ? 'border-green-500/50 text-green-600'
+                      : row.status === 'failed'
+                        ? 'border-red-500/50 text-red-600'
+                        : ''
+                  }
+                >
+                  {row.status === 'pending'
+                    ? '待处理'
+                    : row.status === 'running'
+                      ? '进行中'
+                      : row.status === 'success'
+                        ? '成功'
+                        : row.status === 'failed'
+                          ? '失败'
+                          : row.status === 'cancelled'
+                            ? '已取消'
+                            : row.status}
+                </Badge>
+                {row.error_message && (
+                  <p className="w-full text-xs text-red-500/90">{row.error_message}</p>
+                )}
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+
       {/* Build Timeline */}
       <Card>
         <CardHeader className="pb-3">
@@ -330,7 +412,7 @@ export function BuildDetailPage() {
         <CardContent>
           <div className="flex items-center gap-0">
             {TIMELINE_STAGES.map((stage, i) => {
-              const state = getStageState(build.status, build.current_stage, stage)
+              const state = getStageState(build.status, build.current_stage, build.distribution_summary, stage)
               const stageLabel =
                 BUILD_STATUSES[stage as keyof typeof BUILD_STATUSES]?.label ?? stage
               return (
@@ -382,7 +464,12 @@ export function BuildDetailPage() {
         <h2 className="mb-3 text-base font-semibold">构建日志</h2>
         <BuildLogViewer
           buildId={build.id}
-          status={build.status as 'pending' | 'cloning' | 'building' | 'deploying' | 'success' | 'failed' | 'cancelled'}
+          status={
+            build.status === 'success' &&
+            (build.distribution_summary === 'running' || build.distribution_summary === 'pending')
+              ? 'distributing'
+              : (build.status === 'deploying' ? 'distributing' : build.status)
+          }
         />
       </div>
     </div>

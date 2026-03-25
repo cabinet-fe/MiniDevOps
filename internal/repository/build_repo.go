@@ -60,7 +60,12 @@ func (r *BuildRepository) GetNextBuildNumber(projectID uint) (int, error) {
 
 func (r *BuildRepository) FindActiveBuilds() ([]model.Build, error) {
 	var builds []model.Build
-	err := r.db.Where("status IN ?", []string{"pending", "cloning", "building", "deploying"}).Find(&builds).Error
+	err := r.db.Where(
+		"status IN ? OR (status = ? AND distribution_summary IN ?)",
+		[]string{"pending", "cloning", "building", "deploying"},
+		"success",
+		[]string{"pending", "running"},
+	).Find(&builds).Error
 	return builds, err
 }
 
@@ -84,6 +89,17 @@ func (r *BuildRepository) MarkInterruptedBuilds(errMsg string) (int64, error) {
 	now := time.Now()
 	var n int64
 	for _, b := range builds {
+		if b.Status == "success" && (b.DistributionSummary == "running" || b.DistributionSummary == "pending") {
+			if err := r.UpdateStatus(b.ID, "success", map[string]interface{}{
+				"current_stage":          "success",
+				"distribution_summary":   "cancelled",
+				"redistribute_filter_json": "",
+			}); err != nil {
+				return n, err
+			}
+			n++
+			continue
+		}
 		stage := b.CurrentStage
 		if stage == "" {
 			stage = b.Status
@@ -109,7 +125,12 @@ func (r *BuildRepository) MarkInterruptedBuilds(errMsg string) (int64, error) {
 func (r *BuildRepository) CountActive() (int64, error) {
 	var count int64
 	err := r.db.Model(&model.Build{}).
-		Where("status IN ?", []string{"pending", "cloning", "building", "deploying"}).
+		Where(
+			"status IN ? OR (status = ? AND distribution_summary IN ?)",
+			[]string{"pending", "cloning", "building", "deploying"},
+			"success",
+			[]string{"pending", "running"},
+		).
 		Count(&count).Error
 	return count, err
 }
