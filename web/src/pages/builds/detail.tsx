@@ -18,7 +18,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
-import { BuildLogViewer } from '@/components/build-log-viewer'
+import { BuildLogViewer, type BuildStatus } from '@/components/build-log-viewer'
 import { api } from '@/lib/api'
 import { BUILD_STATUSES, DISTRIBUTION_SUMMARY_LABELS } from '@/lib/constants'
 import { cn } from '@/lib/utils'
@@ -40,7 +40,7 @@ interface BuildDetail {
   project_id: number
   environment_id: number
   build_number: number
-  status: string
+  status: BuildStatus
   current_stage: string
   trigger_type: string
   triggered_by: number
@@ -406,56 +406,71 @@ export function BuildDetailPage() {
 
       {/* Build Timeline */}
       <Card>
-        <CardHeader className="pb-3">
+        <CardHeader className="pb-2">
           <CardTitle className="text-base">构建进度</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="flex items-center gap-0">
+          <div className="mt-4 flex w-full items-center justify-between">
             {TIMELINE_STAGES.map((stage, i) => {
               const state = getStageState(build.status, build.current_stage, build.distribution_summary, stage)
               const stageLabel =
                 BUILD_STATUSES[stage as keyof typeof BUILD_STATUSES]?.label ?? stage
+              const isLast = i === TIMELINE_STAGES.length - 1
+
               return (
-                <div key={stage} className="flex items-center">
-                  <div className="flex flex-col items-center gap-1">
+                <div key={stage} className={cn("relative flex items-center", isLast ? "" : "flex-1")}>
+                  {/* Step point */}
+                  <div className="relative flex flex-col items-center">
+                    {/* Ring for active item */}
+                    {state === 'active' && (
+                      <span className="absolute -inset-1 animate-ping rounded-full bg-blue-400/50" />
+                    )}
+
                     <div
                       className={cn(
-                        'flex size-8 items-center justify-center rounded-full',
-                        state === 'completed' && 'bg-green-500/20 text-green-500',
-                        state === 'active' && 'bg-blue-500/20 text-blue-500 animate-pulse',
-                        state === 'pending' && 'bg-muted text-muted-foreground',
-                        state === 'failed' && 'bg-red-500/20 text-red-500'
+                        'relative z-10 flex size-8 sm:size-10 items-center justify-center rounded-full border-2 transition-all duration-300 shadow-sm glassmorphism',
+                        state === 'completed' && 'border-green-500 bg-green-500 text-white',
+                        state === 'active' && 'border-blue-500 bg-background text-blue-500 ring-4 ring-blue-500/20',
+                        state === 'pending' && 'border-muted bg-muted/30 text-muted-foreground',
+                        state === 'failed' && 'border-red-500 bg-red-500 text-white'
                       )}
                     >
-                      {state === 'completed' && <CheckCircle2 className="size-4" />}
-                      {state === 'active' && <Loader2 className="size-4 animate-spin" />}
-                      {state === 'pending' && <Circle className="size-4" />}
-                      {state === 'failed' && <AlertCircle className="size-4" />}
+                      {state === 'completed' && <CheckCircle2 className="size-4 sm:size-5" />}
+                      {state === 'active' && <Loader2 className="size-4 sm:size-5 animate-spin" />}
+                      {state === 'pending' && <Circle className="size-2 sm:size-2.5 fill-current" />}
+                      {state === 'failed' && <AlertCircle className="size-4 sm:size-5" />}
                     </div>
+
                     <span
                       className={cn(
-                        'text-xs whitespace-nowrap',
-                        state === 'completed' && 'text-green-500',
-                        state === 'active' && 'text-blue-500 font-medium',
-                        state === 'pending' && 'text-muted-foreground',
-                        state === 'failed' && 'text-red-500'
+                        'absolute -bottom-7 text-[10px] sm:text-xs font-medium whitespace-nowrap transition-colors duration-300',
+                        state === 'completed' && 'text-green-600 dark:text-green-400',
+                        state === 'active' && 'text-blue-600 dark:text-blue-400 font-bold',
+                        state === 'pending' && 'text-muted-foreground/60',
+                        state === 'failed' && 'text-red-600 dark:text-red-400'
                       )}
                     >
                       {stageLabel}
                     </span>
                   </div>
-                  {i < TIMELINE_STAGES.length - 1 && (
-                    <div
-                      className={cn(
-                        'mx-1 h-0.5 w-8 sm:w-12 lg:w-16',
-                        state === 'completed' ? 'bg-green-500/40' : 'bg-muted'
-                      )}
-                    />
+
+                  {/* Connecting Line */}
+                  {!isLast && (
+                    <div className="flex-1 px-2 sm:px-4">
+                      <div
+                        className={cn(
+                          'h-1 w-full rounded-full transition-all duration-500',
+                          state === 'completed' ? 'bg-green-500' : 'bg-muted shadow-inner'
+                        )}
+                      />
+                    </div>
                   )}
                 </div>
               )
             })}
           </div>
+          {/* Spacer to account for absolute positioned labels */}
+          <div className="h-7 w-full" />
         </CardContent>
       </Card>
 

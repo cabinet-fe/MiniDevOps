@@ -7,7 +7,7 @@ import {
   Terminal,
   Server,
   Workflow,
-  Github,
+  GitBranch,
   CheckCircle2,
   Info,
   Clock,
@@ -82,7 +82,7 @@ export function ProjectManualPage() {
         </div>
         <Button variant="outline" className="w-fit gap-2" asChild>
           <a href="https://github.com/cabinet-fe/MiniDevOps" target="_blank" rel="noreferrer">
-            <Github className="h-4 w-4" />
+            <GitBranch className="h-4 w-4" />
             源码仓库
           </a>
         </Button>
@@ -341,7 +341,7 @@ curl -sS -X POST \\
             <p>一次完整的流水线包含以下四个核心阶段：</p>
             <div className="relative space-y-8 before:absolute before:left-[17px] before:top-2 before:h-[calc(100%-16px)] before:w-0.5 before:bg-border">
               {[
-                { label: '代码准备', desc: '根据环境配置的凭证与分支，执行 git fetch/checkout，支持浅克隆以加速。', icon: Github },
+                { label: '代码准备', desc: '根据环境配置的凭证与分支，执行 git fetch/checkout，支持浅克隆以加速。', icon: GitBranch },
                 { label: '脚本构建', desc: '在指定的工作区执行自定义脚本（Bash/Node/Python）。支持依赖缓存保留。', icon: Code2 },
                 { label: '产物打包', desc: '扫描构建产物目录，按项目设定的格式（Zip/Gzip）生成压缩包。', icon: Layers },
                 { label: '分发部署', desc: '将打包好的产物通过选定的协议推送至目标服务器并解压。', icon: Rocket },
