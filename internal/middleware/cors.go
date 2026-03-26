@@ -7,6 +7,25 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// WebSocketCheckOrigin returns whether the request Origin is allowed for WebSocket upgrades.
+// Empty AllowOrigins matches CORSGin: allow any origin (typical dev).
+func WebSocketCheckOrigin(cfg CORSConfig, r *http.Request) bool {
+	allowAll := len(cfg.AllowOrigins) == 0
+	if allowAll {
+		return true
+	}
+	origin := r.Header.Get("Origin")
+	if origin == "" {
+		return false
+	}
+	for _, o := range cfg.AllowOrigins {
+		if o == origin || o == "*" {
+			return true
+		}
+	}
+	return false
+}
+
 // CORSConfig holds CORS configuration.
 type CORSConfig struct {
 	AllowOrigins []string // Empty means allow all in dev

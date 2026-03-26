@@ -81,10 +81,22 @@ func (r *ProjectRepository) Delete(id uint) error {
 	return r.db.Delete(&model.Project{}, id).Error
 }
 
-func (r *ProjectRepository) Count() (int64, error) {
+// Count returns project count; if createdBy is non-nil, only projects created by that user.
+func (r *ProjectRepository) Count(createdBy *uint) (int64, error) {
 	var count int64
-	err := r.db.Model(&model.Project{}).Count(&count).Error
+	q := r.db.Model(&model.Project{})
+	if createdBy != nil {
+		q = q.Where("created_by = ?", *createdBy)
+	}
+	err := q.Count(&count).Error
 	return count, err
+}
+
+// ListIDsByCreatedBy returns project IDs owned by the given user.
+func (r *ProjectRepository) ListIDsByCreatedBy(createdBy uint) ([]uint, error) {
+	var ids []uint
+	err := r.db.Model(&model.Project{}).Where("created_by = ?", createdBy).Pluck("id", &ids).Error
+	return ids, err
 }
 
 func (r *ProjectRepository) CountByCredentialID(credentialID uint) (int64, error) {

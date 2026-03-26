@@ -25,6 +25,21 @@ func NewBuildService(repo *repository.BuildRepository, projectRepo *repository.P
 	return &BuildService{repo: repo, projectRepo: projectRepo, envRepo: envRepo, userRepo: userRepo, distRepo: distRepo, buildDistRepo: buildDistRepo}
 }
 
+// buildProjectScope returns nil when unfiltered (admin/ops); for dev, IDs of owned projects (may be empty).
+func (s *BuildService) buildProjectScope(role string, userID uint) ([]uint, error) {
+	if role != "dev" {
+		return nil, nil
+	}
+	return s.projectRepo.ListIDsByCreatedBy(userID)
+}
+
+func projectCreatedByFilter(role string, userID uint) *uint {
+	if role != "dev" {
+		return nil
+	}
+	return &userID
+}
+
 // BuildDistributionDetail is one distribution run row with target config for display.
 type BuildDistributionDetail struct {
 	model.BuildDistribution
@@ -203,8 +218,12 @@ type BuildListItem struct {
 	EnvironmentName string `json:"environment_name"`
 }
 
-func (s *BuildService) ListAll(page, pageSize int) ([]BuildListItem, int64, error) {
-	builds, total, err := s.repo.ListAll(page, pageSize)
+func (s *BuildService) ListAll(page, pageSize int, role string, userID uint) ([]BuildListItem, int64, error) {
+	scope, err := s.buildProjectScope(role, userID)
+	if err != nil {
+		return nil, 0, err
+	}
+	builds, total, err := s.repo.ListAll(page, pageSize, scope)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -258,24 +277,29 @@ type DashboardBuildItem struct {
 	EnvironmentName string `json:"environment_name"`
 }
 
-func (s *BuildService) GetDashboardStats() (*DashboardStats, error) {
-	totalProjects, err := s.projectRepo.Count()
+func (s *BuildService) GetDashboardStats(role string, userID uint) (*DashboardStats, error) {
+	scope, err := s.buildProjectScope(role, userID)
 	if err != nil {
 		return nil, err
 	}
-	todayBuilds, err := s.repo.CountToday()
+	createdBy := projectCreatedByFilter(role, userID)
+	totalProjects, err := s.projectRepo.Count(createdBy)
 	if err != nil {
 		return nil, err
 	}
-	activeCount64, err := s.repo.CountActive()
+	todayBuilds, err := s.repo.CountToday(scope)
+	if err != nil {
+		return nil, err
+	}
+	activeCount64, err := s.repo.CountActive(scope)
 	if err != nil {
 		return nil, err
 	}
 	var successRate float64
-	if success, total, err := s.repo.CountSuccessRateInDays(30); err == nil && total > 0 {
+	if success, total, err := s.repo.CountSuccessRateInDays(30, scope); err == nil && total > 0 {
 		successRate = float64(success) / float64(total) * 100
 	}
-	projRows, err := s.projectRepo.ListProjectTagsWithEnvCounts(nil)
+	projRows, err := s.projectRepo.ListProjectTagsWithEnvCounts(createdBy)
 	if err != nil {
 		return nil, err
 	}
@@ -329,16 +353,24 @@ func (s *BuildService) GetDashboardSystemResources() DashboardSystemResources {
 	return collectDashboardSystemResources(diskPath)
 }
 
-func (s *BuildService) GetActiveBuildsList() ([]DashboardBuildItem, error) {
-	builds, err := s.repo.FindActiveBuilds()
+func (s *BuildService) GetActiveBuildsList(role string, userID uint) ([]DashboardBuildItem, error) {
+	scope, err := s.buildProjectScope(role, userID)
+	if err != nil {
+		return nil, err
+	}
+	builds, err := s.repo.FindActiveBuilds(scope)
 	if err != nil {
 		return nil, err
 	}
 	return s.decorateDashboardBuilds(builds), nil
 }
 
-func (s *BuildService) GetRecentBuilds(limit int) ([]DashboardBuildItem, error) {
-	builds, err := s.repo.GetRecentBuilds(limit)
+func (s *BuildService) GetRecentBuilds(limit int, role string, userID uint) ([]DashboardBuildItem, error) {
+	scope, err := s.buildProjectScope(role, userID)
+	if err != nil {
+		return nil, err
+	}
+	builds, err := s.repo.GetRecentBuilds(limit, scope)
 	if err != nil {
 		return nil, err
 	}
@@ -352,8 +384,12 @@ type BuildTrendItem struct {
 	Count  int64  `json:"count"`
 }
 
-func (s *BuildService) GetBuildTrend(days int) ([]BuildTrendItem, error) {
-	results, err := s.repo.CountByStatusInDays(days)
+func (s *BuildService) GetBuildTrend(days int, role string, userID uint) ([]BuildTrendItem, error) {
+	scope, err := s.buildProjectScope(role, userID)
+	if err != nil {
+		return nil, err
+	}
+	results, err := s.repo.CountByStatusInDays(days, scope)
 	if err != nil {
 		return nil, err
 	}

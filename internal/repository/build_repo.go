@@ -16,6 +16,18 @@ func NewBuildRepository(db *gorm.DB) *BuildRepository {
 	return &BuildRepository{db: db}
 }
 
+// applyBuildProjectScope restricts builds to project_id IN filter when filter is non-nil.
+// nil filter = no restriction; empty slice = match nothing.
+func applyBuildProjectScope(db *gorm.DB, projectIDFilter []uint) *gorm.DB {
+	if projectIDFilter == nil {
+		return db
+	}
+	if len(projectIDFilter) == 0 {
+		return db.Where("1 = 0")
+	}
+	return db.Where("project_id IN ?", projectIDFilter)
+}
+
 func (r *BuildRepository) Create(build *model.Build) error {
 	return r.db.Create(build).Error
 }
@@ -33,16 +45,23 @@ func (r *BuildRepository) List(projectID uint, environmentID *uint, page, pageSi
 	if environmentID != nil {
 		query = query.Where("environment_id = ?", *environmentID)
 	}
-	query.Count(&total)
+	if err := query.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
 	err := query.Offset((page - 1) * pageSize).Limit(pageSize).Order("created_at DESC").Find(&builds).Error
 	return builds, total, err
 }
 
-func (r *BuildRepository) ListAll(page, pageSize int) ([]model.Build, int64, error) {
+// ListAll lists builds; projectIDFilter nil = all projects, empty slice = none.
+func (r *BuildRepository) ListAll(page, pageSize int, projectIDFilter []uint) ([]model.Build, int64, error) {
 	var builds []model.Build
 	var total int64
-	r.db.Model(&model.Build{}).Count(&total)
-	err := r.db.Offset((page - 1) * pageSize).Limit(pageSize).Order("created_at DESC").Find(&builds).Error
+	q := applyBuildProjectScope(r.db.Model(&model.Build{}), projectIDFilter)
+	if err := q.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	err := applyBuildProjectScope(r.db.Model(&model.Build{}), projectIDFilter).
+		Offset((page - 1) * pageSize).Limit(pageSize).Order("created_at DESC").Find(&builds).Error
 	return builds, total, err
 }
 
@@ -58,14 +77,16 @@ func (r *BuildRepository) GetNextBuildNumber(projectID uint) (int, error) {
 	return *maxNum + 1, nil
 }
 
-func (r *BuildRepository) FindActiveBuilds() ([]model.Build, error) {
+func (r *BuildRepository) FindActiveBuilds(projectIDFilter []uint) ([]model.Build, error) {
 	var builds []model.Build
-	err := r.db.Where(
+	q := r.db.Where(
 		"status IN ? OR (status = ? AND distribution_summary IN ?)",
 		[]string{"pending", "cloning", "building", "deploying"},
 		"success",
 		[]string{"pending", "running"},
-	).Find(&builds).Error
+	)
+	q = applyBuildProjectScope(q, projectIDFilter)
+	err := q.Find(&builds).Error
 	return builds, err
 }
 
@@ -82,7 +103,7 @@ func (r *BuildRepository) DeleteByEnvironmentID(environmentID uint) error {
 
 // MarkInterruptedBuilds sets non-terminal builds to failed (e.g. after process crash).
 func (r *BuildRepository) MarkInterruptedBuilds(errMsg string) (int64, error) {
-	builds, err := r.FindActiveBuilds()
+	builds, err := r.FindActiveBuilds(nil)
 	if err != nil {
 		return 0, err
 	}
@@ -122,28 +143,29 @@ func (r *BuildRepository) MarkInterruptedBuilds(errMsg string) (int64, error) {
 	return n, nil
 }
 
-func (r *BuildRepository) CountActive() (int64, error) {
+func (r *BuildRepository) CountActive(projectIDFilter []uint) (int64, error) {
 	var count int64
-	err := r.db.Model(&model.Build{}).
+	q := r.db.Model(&model.Build{}).
 		Where(
 			"status IN ? OR (status = ? AND distribution_summary IN ?)",
 			[]string{"pending", "cloning", "building", "deploying"},
 			"success",
 			[]string{"pending", "running"},
-		).
-		Count(&count).Error
+		)
+	q = applyBuildProjectScope(q, projectIDFilter)
+	err := q.Count(&count).Error
 	return count, err
 }
 
 // CountSuccessRateInDays returns success count and total builds in the last `days` days (from midnight).
-func (r *BuildRepository) CountSuccessRateInDays(days int) (success int64, total int64, err error) {
+func (r *BuildRepository) CountSuccessRateInDays(days int, projectIDFilter []uint) (success int64, total int64, err error) {
 	from := time.Now().AddDate(0, 0, -days).Truncate(24 * time.Hour)
 	var result struct {
 		Total   int64 `gorm:"column:total"`
 		Success int64 `gorm:"column:success"`
 	}
-	err = r.db.Model(&model.Build{}).Where("created_at >= ?", from).
-		Select("COUNT(*) as total, COALESCE(SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END), 0) as success").
+	q := applyBuildProjectScope(r.db.Model(&model.Build{}), projectIDFilter).Where("created_at >= ?", from)
+	err = q.Select("COUNT(*) as total, COALESCE(SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END), 0) as success").
 		Scan(&result).Error
 	if err != nil {
 		return 0, 0, err
@@ -151,14 +173,15 @@ func (r *BuildRepository) CountSuccessRateInDays(days int) (success int64, total
 	return result.Success, result.Total, nil
 }
 
-func (r *BuildRepository) CountToday() (int64, error) {
+func (r *BuildRepository) CountToday(projectIDFilter []uint) (int64, error) {
 	var count int64
 	today := time.Now().Truncate(24 * time.Hour)
-	err := r.db.Model(&model.Build{}).Where("created_at >= ?", today).Count(&count).Error
+	q := applyBuildProjectScope(r.db.Model(&model.Build{}), projectIDFilter).Where("created_at >= ?", today)
+	err := q.Count(&count).Error
 	return count, err
 }
 
-func (r *BuildRepository) CountByStatusInDays(days int) ([]struct {
+func (r *BuildRepository) CountByStatusInDays(days int, projectIDFilter []uint) ([]struct {
 	Date   string
 	Status string
 	Count  int64
@@ -169,17 +192,18 @@ func (r *BuildRepository) CountByStatusInDays(days int) ([]struct {
 		Count  int64
 	}
 	from := time.Now().AddDate(0, 0, -days).Truncate(24 * time.Hour)
-	err := r.db.Model(&model.Build{}).
+	q := applyBuildProjectScope(r.db.Model(&model.Build{}), projectIDFilter).
 		Select("DATE(created_at) as date, status, COUNT(*) as count").
 		Where("created_at >= ?", from).
-		Group("DATE(created_at), status").
-		Find(&results).Error
+		Group("DATE(created_at), status")
+	err := q.Find(&results).Error
 	return results, err
 }
 
-func (r *BuildRepository) GetRecentBuilds(limit int) ([]model.Build, error) {
+func (r *BuildRepository) GetRecentBuilds(limit int, projectIDFilter []uint) ([]model.Build, error) {
 	var builds []model.Build
-	err := r.db.Order("created_at DESC").Limit(limit).Find(&builds).Error
+	q := applyBuildProjectScope(r.db.Model(&model.Build{}), projectIDFilter).Order("created_at DESC").Limit(limit)
+	err := q.Find(&builds).Error
 	return builds, err
 }
 

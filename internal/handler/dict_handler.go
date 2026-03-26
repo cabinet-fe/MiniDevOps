@@ -172,12 +172,10 @@ func (h *DictHandler) UpdateItem(c *gin.Context) {
 		pkg.Error(c, http.StatusBadRequest, "参数错误")
 		return
 	}
-	item, err := h.dictService.GetDictionary(uint(id))
-	if err != nil {
+	if _, err := h.dictService.GetDictionary(uint(id)); err != nil {
 		pkg.Error(c, http.StatusNotFound, "字典不存在")
 		return
 	}
-	_ = item
 
 	existingItem, err := h.dictService.FindItemForUpdate(uint(itemID), uint(id))
 	if err != nil {

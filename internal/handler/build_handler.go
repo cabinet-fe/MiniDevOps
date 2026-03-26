@@ -11,7 +11,9 @@ import (
 
 	"buildflow/internal/config"
 	"buildflow/internal/middleware"
+	"buildflow/internal/model"
 	"buildflow/internal/pkg"
+	"buildflow/internal/repository"
 	"buildflow/internal/service"
 )
 
@@ -23,17 +25,43 @@ type BuildScheduler interface {
 
 type BuildHandler struct {
 	buildService *service.BuildService
+	projectRepo  *repository.ProjectRepository
 	scheduler    BuildScheduler
 }
 
-func NewBuildHandler(bs *service.BuildService, scheduler BuildScheduler) *BuildHandler {
-	return &BuildHandler{buildService: bs, scheduler: scheduler}
+func NewBuildHandler(bs *service.BuildService, projectRepo *repository.ProjectRepository, scheduler BuildScheduler) *BuildHandler {
+	return &BuildHandler{buildService: bs, projectRepo: projectRepo, scheduler: scheduler}
+}
+
+func (h *BuildHandler) ensureProjectAccess(c *gin.Context, projectID uint) bool {
+	p, err := h.projectRepo.FindByID(projectID)
+	if err != nil {
+		pkg.Error(c, http.StatusNotFound, "项目不存在")
+		return false
+	}
+	if !middleware.UserCanAccessProject(c, p.CreatedBy) {
+		pkg.Error(c, http.StatusForbidden, "forbidden")
+		return false
+	}
+	return true
+}
+
+func (h *BuildHandler) ensureBuildAccess(c *gin.Context, buildID uint) (*model.Build, bool) {
+	b, err := h.buildService.GetByID(buildID)
+	if err != nil {
+		pkg.Error(c, http.StatusNotFound, "构建不存在")
+		return nil, false
+	}
+	if !h.ensureProjectAccess(c, b.ProjectID) {
+		return nil, false
+	}
+	return b, true
 }
 
 // GET /api/v1/builds - list all builds (global)
 func (h *BuildHandler) ListAll(c *gin.Context) {
 	page, pageSize := pkg.GetPage(c)
-	builds, total, err := h.buildService.ListAll(page, pageSize)
+	builds, total, err := h.buildService.ListAll(page, pageSize, middleware.GetRole(c), middleware.GetUserID(c))
 	if err != nil {
 		pkg.Error(c, http.StatusInternalServerError, "查询失败")
 		return
@@ -46,6 +74,9 @@ func (h *BuildHandler) ListByProject(c *gin.Context) {
 	projectID, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
 		pkg.Error(c, http.StatusBadRequest, "参数错误")
+		return
+	}
+	if !h.ensureProjectAccess(c, uint(projectID)) {
 		return
 	}
 	page, pageSize := pkg.GetPage(c)
@@ -76,9 +107,15 @@ func (h *BuildHandler) TriggerBuild(c *gin.Context) {
 		Branch        string `json:"branch"`
 		CommitHash    string `json:"commit_hash"`
 	}
-	_ = c.ShouldBindJSON(&req)
+	if err := c.ShouldBindJSON(&req); err != nil {
+		pkg.Error(c, http.StatusBadRequest, "参数错误")
+		return
+	}
 	if req.EnvironmentID == 0 {
 		pkg.Error(c, http.StatusBadRequest, "environment_id 必填")
+		return
+	}
+	if !h.ensureProjectAccess(c, uint(projectID)) {
 		return
 	}
 	userID := middleware.GetUserID(c)
@@ -105,6 +142,9 @@ func (h *BuildHandler) GetByID(c *gin.Context) {
 		pkg.Error(c, http.StatusNotFound, "构建不存在")
 		return
 	}
+	if !h.ensureProjectAccess(c, detail.ProjectID) {
+		return
+	}
 	pkg.Success(c, detail)
 }
 
@@ -115,9 +155,8 @@ func (h *BuildHandler) GetLog(c *gin.Context) {
 		pkg.Error(c, http.StatusBadRequest, "参数错误")
 		return
 	}
-	build, err := h.buildService.GetByID(uint(id))
-	if err != nil {
-		pkg.Error(c, http.StatusNotFound, "构建不存在")
+	build, ok := h.ensureBuildAccess(c, uint(id))
+	if !ok {
 		return
 	}
 	logPath := build.LogPath
@@ -162,6 +201,9 @@ func (h *BuildHandler) Cancel(c *gin.Context) {
 		pkg.Error(c, http.StatusBadRequest, "参数错误")
 		return
 	}
+	if _, ok := h.ensureBuildAccess(c, uint(id)); !ok {
+		return
+	}
 	if h.scheduler != nil {
 		h.scheduler.Cancel(uint(id))
 	}
@@ -182,7 +224,13 @@ func (h *BuildHandler) Deploy(c *gin.Context) {
 	var req struct {
 		DistributionIDs []uint `json:"distribution_ids"`
 	}
-	_ = c.ShouldBindJSON(&req)
+	if err := c.ShouldBindJSON(&req); err != nil {
+		pkg.Error(c, http.StatusBadRequest, "参数错误")
+		return
+	}
+	if _, ok := h.ensureBuildAccess(c, uint(id)); !ok {
+		return
+	}
 	userID := middleware.GetUserID(c)
 	if err := h.buildService.TriggerRedistribute(uint(id), userID, req.DistributionIDs); err != nil {
 		pkg.Error(c, http.StatusBadRequest, err.Error())
@@ -201,9 +249,8 @@ func (h *BuildHandler) DownloadArtifact(c *gin.Context) {
 		pkg.Error(c, http.StatusBadRequest, "参数错误")
 		return
 	}
-	build, err := h.buildService.GetByID(uint(id))
-	if err != nil {
-		pkg.Error(c, http.StatusNotFound, "构建不存在")
+	build, ok := h.ensureBuildAccess(c, uint(id))
+	if !ok {
 		return
 	}
 	if build.ArtifactPath == "" {
@@ -224,7 +271,7 @@ func (h *BuildHandler) DownloadArtifact(c *gin.Context) {
 
 // GET /api/v1/dashboard/stats
 func (h *BuildHandler) DashboardStats(c *gin.Context) {
-	stats, err := h.buildService.GetDashboardStats()
+	stats, err := h.buildService.GetDashboardStats(middleware.GetRole(c), middleware.GetUserID(c))
 	if err != nil {
 		pkg.Error(c, http.StatusInternalServerError, "查询失败")
 		return
@@ -239,7 +286,7 @@ func (h *BuildHandler) DashboardSystemResources(c *gin.Context) {
 
 // GET /api/v1/dashboard/active-builds
 func (h *BuildHandler) DashboardActiveBuilds(c *gin.Context) {
-	builds, err := h.buildService.GetActiveBuildsList()
+	builds, err := h.buildService.GetActiveBuildsList(middleware.GetRole(c), middleware.GetUserID(c))
 	if err != nil {
 		pkg.Error(c, http.StatusInternalServerError, "查询失败")
 		return
@@ -255,7 +302,7 @@ func (h *BuildHandler) DashboardRecentBuilds(c *gin.Context) {
 			limit = parsed
 		}
 	}
-	builds, err := h.buildService.GetRecentBuilds(limit)
+	builds, err := h.buildService.GetRecentBuilds(limit, middleware.GetRole(c), middleware.GetUserID(c))
 	if err != nil {
 		pkg.Error(c, http.StatusInternalServerError, "查询失败")
 		return
@@ -271,7 +318,7 @@ func (h *BuildHandler) DashboardTrend(c *gin.Context) {
 			days = parsed
 		}
 	}
-	trend, err := h.buildService.GetBuildTrend(days)
+	trend, err := h.buildService.GetBuildTrend(days, middleware.GetRole(c), middleware.GetUserID(c))
 	if err != nil {
 		pkg.Error(c, http.StatusInternalServerError, "查询失败")
 		return
@@ -286,9 +333,8 @@ func (h *BuildHandler) Retry(c *gin.Context) {
 		pkg.Error(c, http.StatusBadRequest, "参数错误")
 		return
 	}
-	build, err := h.buildService.GetByID(uint(id))
-	if err != nil {
-		pkg.Error(c, http.StatusNotFound, "构建不存在")
+	build, ok := h.ensureBuildAccess(c, uint(id))
+	if !ok {
 		return
 	}
 	if build.Status != "failed" && build.Status != "cancelled" {

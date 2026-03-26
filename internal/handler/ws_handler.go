@@ -12,32 +12,37 @@ import (
 	"github.com/gorilla/websocket"
 
 	"buildflow/internal/config"
+	"buildflow/internal/middleware"
 	"buildflow/internal/repository"
 	"buildflow/internal/service"
 	"buildflow/internal/ws"
 )
-
-var upgrader = websocket.Upgrader{
-	ReadBufferSize:  1024,
-	WriteBufferSize: 1024,
-	CheckOrigin: func(r *http.Request) bool {
-		return true
-	},
-}
 
 type WSHandler struct {
 	authSvc     *service.AuthService
 	buildRepo   *repository.BuildRepository
 	projectRepo *repository.ProjectRepository
 	hub         *ws.Hub
+	cors        middleware.CORSConfig
 }
 
-func NewWSHandler(authSvc *service.AuthService, buildRepo *repository.BuildRepository, projectRepo *repository.ProjectRepository, hub *ws.Hub) *WSHandler {
+func NewWSHandler(authSvc *service.AuthService, buildRepo *repository.BuildRepository, projectRepo *repository.ProjectRepository, hub *ws.Hub, cors middleware.CORSConfig) *WSHandler {
 	return &WSHandler{
 		authSvc:     authSvc,
 		buildRepo:   buildRepo,
 		projectRepo: projectRepo,
 		hub:         hub,
+		cors:        cors,
+	}
+}
+
+func (h *WSHandler) wsUpgrader() *websocket.Upgrader {
+	return &websocket.Upgrader{
+		ReadBufferSize:  1024,
+		WriteBufferSize: 1024,
+		CheckOrigin: func(r *http.Request) bool {
+			return middleware.WebSocketCheckOrigin(h.cors, r)
+		},
 	}
 }
 
@@ -74,10 +79,12 @@ func (h *WSHandler) HandleBuildLogs(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "project not found"})
 		return
 	}
-	// For now, allow any authenticated user to view build logs
-	// TODO: add RBAC check for project membership
+	if !middleware.UserCanAccessProjectByIDs(claims.UserID, claims.Role, project.CreatedBy) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+		return
+	}
 
-	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
+	conn, err := h.wsUpgrader().Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
 		return
 	}
@@ -139,7 +146,7 @@ func (h *WSHandler) HandleNotifications(c *gin.Context) {
 		return
 	}
 
-	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
+	conn, err := h.wsUpgrader().Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
 		return
 	}

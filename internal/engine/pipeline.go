@@ -374,17 +374,26 @@ func (p *Pipeline) Execute(ctx context.Context, buildID uint) {
 	}
 }
 
-func decryptServerSecrets(server *model.Server) (password, privateKey, agentToken string) {
+func decryptServerSecrets(server *model.Server) (password, privateKey, agentToken string, err error) {
 	if server.Password != "" {
-		password, _ = pkg.Decrypt(server.Password)
+		password, err = pkg.Decrypt(server.Password)
+		if err != nil {
+			return "", "", "", fmt.Errorf("decrypt server password: %w", err)
+		}
 	}
 	if server.PrivateKey != "" {
-		privateKey, _ = pkg.Decrypt(server.PrivateKey)
+		privateKey, err = pkg.Decrypt(server.PrivateKey)
+		if err != nil {
+			return "", "", "", fmt.Errorf("decrypt server private key: %w", err)
+		}
 	}
 	if server.AgentToken != "" {
-		agentToken, _ = pkg.Decrypt(server.AgentToken)
+		agentToken, err = pkg.Decrypt(server.AgentToken)
+		if err != nil {
+			return "", "", "", fmt.Errorf("decrypt agent token: %w", err)
+		}
 	}
-	return password, privateKey, agentToken
+	return password, privateKey, agentToken, nil
 }
 
 func (p *Pipeline) updateStage(build *model.Build, stage string) {

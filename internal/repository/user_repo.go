@@ -33,7 +33,9 @@ func (r *UserRepository) FindByUsername(username string) (*model.User, error) {
 func (r *UserRepository) List(page, pageSize int) ([]model.User, int64, error) {
 	var users []model.User
 	var total int64
-	r.db.Model(&model.User{}).Count(&total)
+	if err := r.db.Model(&model.User{}).Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
 	err := r.db.Offset((page - 1) * pageSize).Limit(pageSize).Order("id DESC").Find(&users).Error
 	return users, total, err
 }

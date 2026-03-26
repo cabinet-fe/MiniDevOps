@@ -121,19 +121,21 @@ func main() {
 	serverHandler := handler.NewServerHandler(serverService)
 	credentialHandler := handler.NewCredentialHandler(credentialService)
 	projectHandler := handler.NewProjectHandler(projectService, credentialService, cronScheduler)
-	buildHandler := handler.NewBuildHandler(buildService, scheduler)
+	corsCfg := middleware.DefaultCORSConfig()
+
+	buildHandler := handler.NewBuildHandler(buildService, projectRepo, scheduler)
 	webhookHandler := handler.NewWebhookHandler(projectService, buildService, envRepo, scheduler)
 	notifHandler := handler.NewNotificationHandler(notifService)
 	systemHandler := handler.NewSystemHandler(auditService)
 	dictHandler := handler.NewDictHandler(dictService)
-	wsHandler := handler.NewWSHandler(authService, buildRepo, projectRepo, hub)
+	wsHandler := handler.NewWSHandler(authService, buildRepo, projectRepo, hub, corsCfg)
 
 	// Setup Gin
 	r := gin.Default()
 	r.Use(gzip.Gzip(gzip.DefaultCompression, gzip.WithExcludedPaths([]string{
 		"/api/v1/system/backup", // handler already writes gzip; avoid double-compression
 	})))
-	r.Use(middleware.CORSGin(middleware.CORSConfig{}))
+	r.Use(middleware.CORSGin(corsCfg))
 
 	// Audit middleware (must be before route registration)
 	r.Use(middleware.Audit(db))

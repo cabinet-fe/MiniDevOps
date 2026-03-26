@@ -1,10 +1,12 @@
 package middleware
 
 import (
-	"buildflow/internal/model"
+	"log"
 	"strconv"
 	"strings"
 	"time"
+
+	"buildflow/internal/model"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -53,7 +55,9 @@ func Audit(db *gorm.DB) gin.HandlerFunc {
 			CreatedAt:    time.Now(),
 		}
 
-		_ = db.Create(&entry)
+		if err := db.Create(&entry).Error; err != nil {
+			log.Printf("audit log insert failed: %v", err)
+		}
 	}
 }
 

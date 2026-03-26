@@ -53,7 +53,10 @@ func (p *Pipeline) deployOneDistribution(ctx context.Context, build *model.Build
 		if err != nil {
 			return fmt.Errorf("服务器不存在")
 		}
-		password, privateKey, agentToken := decryptServerSecrets(server)
+		password, privateKey, agentToken, decErr := decryptServerSecrets(server)
+		if decErr != nil {
+			return decErr
+		}
 		deployOpts.Server = deployer.ServerInfo{
 			Host:       server.Host,
 			Port:       server.Port,
