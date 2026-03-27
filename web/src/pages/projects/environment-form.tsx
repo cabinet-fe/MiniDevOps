@@ -446,7 +446,8 @@ export function EnvironmentFormDialog({
       case 'cmd':
       case 'bash':
       default:
-        return [StreamLanguage.define(shell)]
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- codemirror duplicate dependency type mismatch
+        return [StreamLanguage.define(shell as any)]
     }
   }
 
@@ -816,7 +817,7 @@ export function EnvironmentFormDialog({
                   value={form.cache_paths ?? ''}
                   height="80px"
                   theme={cmTheme}
-                  extensions={[StreamLanguage.define(shell)]}
+                  extensions={[StreamLanguage.define(shell as any)]}
                   onChange={(value) => setField('cache_paths', value)}
                   placeholder={'node_modules\n.npm\nvendor'}
                   className="text-sm font-mono [&_.cm-editor]:!bg-transparent [&_.cm-gutters]:!bg-transparent"

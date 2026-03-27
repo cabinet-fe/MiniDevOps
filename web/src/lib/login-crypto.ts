@@ -62,9 +62,9 @@ function getEncryptionKeyBytes(): Uint8Array {
 
 async function encryptSubtle(plain: string, keyBytes: Uint8Array): Promise<string> {
   const iv = randomIV();
-  const key = await crypto.subtle.importKey("raw", keyBytes, "AES-CBC", false, ["encrypt"]);
+  const key = await crypto.subtle.importKey("raw", keyBytes.buffer as ArrayBuffer, "AES-CBC", false, ["encrypt"]);
   const ciphertext = await crypto.subtle.encrypt(
-    { name: "AES-CBC", iv },
+    { name: "AES-CBC", iv: iv.buffer as ArrayBuffer },
     key,
     new TextEncoder().encode(plain),
   );
@@ -84,7 +84,7 @@ function encryptCryptoEs(plain: string, keyBytes: Uint8Array): string {
     mode: CBC,
     padding: Pkcs7,
   });
-  const ctHex = encrypted.ciphertext.toString(Hex);
+  const ctHex = encrypted.ciphertext!.toString(Hex);
   return bytesToHex(iv) + ctHex;
 }
 
