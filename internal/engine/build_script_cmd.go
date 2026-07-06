@@ -47,7 +47,8 @@ func newPOSIXShellBuildCommand(ctx context.Context, script string) (*exec.Cmd, f
 }
 
 func findPowerShell() (string, error) {
-	for _, name := range []string{"powershell", "pwsh"} {
+	// 优先 PowerShell 7+（pwsh），支持 && 链式命令且 UTF-8 输出更一致。
+	for _, name := range []string{"pwsh", "powershell"} {
 		path, err := exec.LookPath(name)
 		if err == nil {
 			return path, nil
@@ -56,17 +57,34 @@ func findPowerShell() (string, error) {
 	return "", fmt.Errorf("未找到 powershell 或 pwsh")
 }
 
+func isLegacyWindowsPowerShell(psPath string) bool {
+	normalized := strings.ReplaceAll(psPath, `\`, `/`)
+	base := strings.ToLower(filepath.Base(normalized))
+	return base == "powershell.exe" || base == "powershell"
+}
+
+const (
+	psUTF8Preamble = "$OutputEncoding = [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)\r\n"
+	cmdUTF8Preamble = "@echo off\r\nchcp 65001 >nul\r\n"
+)
+
 func newPowerShellBuildCommand(ctx context.Context, workDir, script string) (*exec.Cmd, func(), error) {
 	ps, err := findPowerShell()
 	if err != nil {
 		return nil, func() {}, err
+	}
+	if strings.Contains(script, "&&") && isLegacyWindowsPowerShell(ps) {
+		return nil, func() {}, fmt.Errorf(
+			"Windows PowerShell 5.x 不支持 && 链式命令。请将脚本类型改为 CMD、安装 PowerShell 7 (pwsh)，或拆成多行命令",
+		)
 	}
 	f, err := os.CreateTemp(workDir, ".buildflow-*.ps1")
 	if err != nil {
 		return nil, func() {}, err
 	}
 	path := f.Name()
-	if _, err := f.WriteString(script); err != nil {
+	body := psUTF8Preamble + script
+	if err := writeUTF8BOMFile(f, body); err != nil {
 		f.Close()
 		os.Remove(path)
 		return nil, func() {}, err
@@ -107,7 +125,7 @@ func newCmdBuildCommand(ctx context.Context, workDir, script string) (*exec.Cmd,
 		return nil, func() {}, err
 	}
 	path := f.Name()
-	if _, err := f.WriteString(script); err != nil {
+	if _, err := f.WriteString(cmdUTF8Preamble + script); err != nil {
 		f.Close()
 		os.Remove(path)
 		return nil, func() {}, err
@@ -119,4 +137,12 @@ func newCmdBuildCommand(ctx context.Context, workDir, script string) (*exec.Cmd,
 	cleanup := func() { os.Remove(path) }
 	cmd := exec.CommandContext(ctx, cmdexe, "/C", path)
 	return cmd, cleanup, nil
+}
+
+func writeUTF8BOMFile(f *os.File, content string) error {
+	if _, err := f.Write([]byte{0xEF, 0xBB, 0xBF}); err != nil {
+		return err
+	}
+	_, err := f.WriteString(content)
+	return err
 }

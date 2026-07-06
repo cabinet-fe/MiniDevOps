@@ -8,6 +8,23 @@ import (
 	"testing"
 )
 
+func TestIsLegacyWindowsPowerShell(t *testing.T) {
+	cases := []struct {
+		path string
+		want bool
+	}{
+		{`C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe`, true},
+		{`powershell`, true},
+		{`C:\Program Files\PowerShell\7\pwsh.exe`, false},
+		{`pwsh`, false},
+	}
+	for _, tc := range cases {
+		if got := isLegacyWindowsPowerShell(tc.path); got != tc.want {
+			t.Fatalf("isLegacyWindowsPowerShell(%q) = %v, want %v", tc.path, got, tc.want)
+		}
+	}
+}
+
 func TestNewBuildScriptCommandBashUsesShOnUnix(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip()
