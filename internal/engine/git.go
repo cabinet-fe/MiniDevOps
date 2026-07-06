@@ -22,6 +22,11 @@ func GitCloneOrPull(ctx context.Context, workDir, repoURL, authType, username, p
 	// Remove stale lock files that may remain from a previous crashed build
 	cleanGitLockFiles(workDir, logFn)
 
+	// 凭证或仓库地址变更后，工作区 .git/config 里仍可能缓存旧的 origin URL
+	if err := syncGitRemoteOrigin(ctx, workDir, authURL, logFn); err != nil {
+		return err
+	}
+
 	logFn("Fetching updates...")
 	if err := runGit(ctx, workDir, logFn, "fetch", "origin"); err != nil {
 		return err
@@ -40,6 +45,11 @@ func GitCloneOrPull(ctx context.Context, workDir, repoURL, authType, username, p
 		"-e", "target", "-e", "__pycache__", "-e", ".venv",
 		"-e", "venv", "-e", ".tox")
 	return nil
+}
+
+func syncGitRemoteOrigin(ctx context.Context, workDir, remoteURL string, logFn func(string)) error {
+	logFn("Syncing remote credentials...")
+	return runGit(ctx, workDir, logFn, "remote", "set-url", "origin", remoteURL)
 }
 
 var gitLockFiles = []string{

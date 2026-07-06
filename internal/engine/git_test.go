@@ -1,6 +1,11 @@
 package engine
 
 import (
+	"context"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -99,6 +104,58 @@ func TestBuildAuthURL_None(t *testing.T) {
 	if result != raw {
 		t.Errorf("buildAuthURL(none) = %q, want %q", result, raw)
 	}
+}
+
+func TestSyncGitRemoteOrigin(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available")
+	}
+
+	workDir := t.TempDir()
+	ctx := context.Background()
+	logFn := func(string) {}
+
+	if err := runGit(ctx, workDir, logFn, "init"); err != nil {
+		t.Fatalf("git init: %v", err)
+	}
+	oldURL := "https://olduser:oldtoken@gitee.com/user/repo.git"
+	if err := runGit(ctx, workDir, logFn, "remote", "add", "origin", oldURL); err != nil {
+		t.Fatalf("git remote add: %v", err)
+	}
+
+	newURL := buildAuthURL(
+		"https://gitee.com/user/repo.git",
+		"token",
+		"bnsby",
+		"newtoken",
+	)
+	if err := syncGitRemoteOrigin(ctx, workDir, newURL, logFn); err != nil {
+		t.Fatalf("syncGitRemoteOrigin: %v", err)
+	}
+
+	got, err := runGitOutput(ctx, workDir, "remote", "get-url", "origin")
+	if err != nil {
+		t.Fatalf("git remote get-url: %v", err)
+	}
+	if got != newURL {
+		t.Errorf("origin URL = %q, want %q", got, newURL)
+	}
+	if strings.Contains(got, "oldtoken") {
+		t.Errorf("origin URL still contains stale token: %q", got)
+	}
+
+	if _, err := os.Stat(filepath.Join(workDir, ".git")); err != nil {
+		t.Fatalf(".git missing: %v", err)
+	}
+}
+
+func runGitOutput(ctx context.Context, dir string, args ...string) (string, error) {
+	cmd := exec.CommandContext(ctx, "git", args...)
+	if dir != "" {
+		cmd.Dir = dir
+	}
+	output, err := cmd.CombinedOutput()
+	return strings.TrimSpace(string(output)), err
 }
 
 func contains(s, substr string) bool {
