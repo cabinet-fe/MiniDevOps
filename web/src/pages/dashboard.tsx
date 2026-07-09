@@ -78,6 +78,17 @@ const STAGE_LABELS: Record<string, string> = {
 };
 
 const POLL_INTERVAL_MS = 2000;
+const PROCESS_POLL_INTERVAL_MS = 5000;
+
+interface ProcessInfo {
+  pid: number;
+  name: string;
+  memory_bytes: number;
+  cpu_percent: number;
+  ports: number[];
+  username: string;
+  num_threads: number;
+}
 
 function formatBytes(bytes: number) {
   if (!bytes) return "0 B";
@@ -192,12 +203,19 @@ function buildTrendData(items: BuildTrendItem[]) {
     }));
 }
 
+function formatPorts(ports: number[] | undefined) {
+  if (!ports || ports.length === 0) return "-";
+  return ports.join(", ");
+}
+
 export function DashboardPage() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [resources, setResources] = useState<DashboardSystemResources>(EMPTY_RESOURCES);
   const [activeBuilds, setActiveBuilds] = useState<DashboardBuild[]>([]);
   const [recentBuilds, setRecentBuilds] = useState<DashboardBuild[]>([]);
   const [trend, setTrend] = useState<BuildTrendPoint[]>([]);
+  const [topProcesses, setTopProcesses] = useState<ProcessInfo[]>([]);
+  const [processSort, setProcessSort] = useState<"cpu" | "memory">("cpu");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -258,6 +276,29 @@ export function DashboardPage() {
     }, POLL_INTERVAL_MS);
     return () => window.clearInterval(timer);
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const fetchTopProcesses = async () => {
+      try {
+        const res = await api.get<ProcessInfo[]>(
+          `/dashboard/top-processes?sort=${processSort}&limit=10`,
+        );
+        if (cancelled) return;
+        if (res.code === 0 && Array.isArray(res.data)) {
+          setTopProcesses(res.data as ProcessInfo[]);
+        }
+      } catch {
+        /* keep last snapshot */
+      }
+    };
+    fetchTopProcesses();
+    const timer = window.setInterval(fetchTopProcesses, PROCESS_POLL_INTERVAL_MS);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [processSort]);
 
   if (loading) {
     return (
@@ -343,6 +384,86 @@ export function DashboardPage() {
           ))}
         </div>
       </div>
+
+      {/* Top processes */}
+      <Card className="border-border">
+        <CardHeader className="px-4 pb-2 pt-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">系统进程</CardTitle>
+            <div className="flex items-center gap-1 rounded-lg bg-muted p-[3px]">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className={cn(
+                  "h-7 px-2.5 text-xs",
+                  processSort === "cpu" && "bg-background text-foreground shadow-sm hover:bg-background",
+                )}
+                onClick={() => setProcessSort("cpu")}
+              >
+                按 CPU
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className={cn(
+                  "h-7 px-2.5 text-xs",
+                  processSort === "memory" &&
+                    "bg-background text-foreground shadow-sm hover:bg-background",
+                )}
+                onClick={() => setProcessSort("memory")}
+              >
+                按内存
+              </Button>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="px-4 pb-3">
+          {topProcesses.length === 0 ? (
+            <p className="py-3 text-center text-xs text-muted-foreground">暂无进程数据</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border text-left text-xs text-muted-foreground">
+                    <th className="pb-2 pr-3 font-medium">名称</th>
+                    <th className="pb-2 pr-3 font-medium">PID</th>
+                    <th className="pb-2 pr-3 font-medium text-right">内存</th>
+                    <th className="pb-2 pr-3 font-medium text-right">CPU%</th>
+                    <th className="pb-2 pr-3 font-medium">端口</th>
+                    <th className="pb-2 pr-3 font-medium">用户</th>
+                    <th className="pb-2 font-medium text-right">线程</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {topProcesses.map((proc) => (
+                    <tr key={proc.pid} className="border-b border-border/50 last:border-0">
+                      <td className="max-w-[160px] truncate py-2 pr-3 font-medium text-foreground">
+                        {proc.name || "-"}
+                      </td>
+                      <td className="py-2 pr-3 font-mono text-muted-foreground">{proc.pid}</td>
+                      <td className="py-2 pr-3 text-right font-mono text-muted-foreground">
+                        {formatBytes(proc.memory_bytes)}
+                      </td>
+                      <td className="py-2 pr-3 text-right font-mono text-muted-foreground">
+                        {Number(proc.cpu_percent ?? 0).toFixed(1)}
+                      </td>
+                      <td className="max-w-[120px] truncate py-2 pr-3 font-mono text-muted-foreground">
+                        {formatPorts(proc.ports)}
+                      </td>
+                      <td className="py-2 pr-3 text-muted-foreground">{proc.username || "-"}</td>
+                      <td className="py-2 text-right font-mono text-muted-foreground">
+                        {proc.num_threads ?? "-"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Trend chart */}
       <Card className="border-border">

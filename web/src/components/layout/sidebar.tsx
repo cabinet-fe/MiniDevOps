@@ -14,6 +14,7 @@ import {
   ChevronsLeft,
   ChevronsRight,
   Layers,
+  Monitor,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -44,6 +45,7 @@ const NAV_GROUPS = [
     items: [
       { path: '/users', label: '用户', icon: Users, roles: ['admin'] },
       { path: '/dictionaries', label: '数据字典', icon: BookOpen, roles: ['admin'] },
+      { path: '/system', label: '系统管理', icon: Monitor, roles: ['admin', 'ops'] },
       { path: '/audit-logs', label: '审计日志', icon: FileText, roles: ['admin', 'ops'] },
       { path: '/settings', label: '设置', icon: Settings, roles: ['admin'] },
     ],

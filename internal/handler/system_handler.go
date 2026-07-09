@@ -3,6 +3,7 @@ package handler
 import (
 	"archive/tar"
 	"compress/gzip"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -14,16 +15,18 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"buildflow/internal/config"
+	"buildflow/internal/middleware"
 	"buildflow/internal/pkg"
 	"buildflow/internal/service"
 )
 
 type SystemHandler struct {
-	auditService *service.AuditService
+	auditService   *service.AuditService
+	processService *service.ProcessService
 }
 
-func NewSystemHandler(as *service.AuditService) *SystemHandler {
-	return &SystemHandler{auditService: as}
+func NewSystemHandler(as *service.AuditService, processService *service.ProcessService) *SystemHandler {
+	return &SystemHandler{auditService: as, processService: processService}
 }
 
 // GET /api/v1/system/audit-logs - query audit logs with filters
@@ -298,6 +301,70 @@ func (h *SystemHandler) CleanCache(c *gin.Context) {
 		return
 	}
 	pkg.Success(c, gin.H{"message": "构建缓存已清理"})
+}
+
+// GET /api/v1/system/processes - 本机进程列表（admin/ops）
+func (h *SystemHandler) ListProcesses(c *gin.Context) {
+	page, pageSize := pkg.GetPage(c)
+	opts := service.ProcessListOptions{
+		Q:         c.Query("q"),
+		Sort:      c.DefaultQuery("sort", "cpu"),
+		Order:     c.DefaultQuery("order", "desc"),
+		Page:      page,
+		PageSize:  pageSize,
+		Detail:    true,
+		WithPorts: true,
+	}
+	if pidStr := c.Query("pid"); pidStr != "" {
+		pid64, err := strconv.ParseInt(pidStr, 10, 32)
+		if err != nil || pid64 <= 0 {
+			pkg.Error(c, http.StatusBadRequest, "无效的 pid")
+			return
+		}
+		pid := int32(pid64)
+		opts.PID = &pid
+	}
+	if portStr := c.Query("port"); portStr != "" {
+		port64, err := strconv.ParseUint(portStr, 10, 32)
+		if err != nil || port64 == 0 || port64 > 65535 {
+			pkg.Error(c, http.StatusBadRequest, "无效的 port")
+			return
+		}
+		port := uint32(port64)
+		opts.Port = &port
+	}
+
+	items, total, err := h.processService.ListProcesses(opts)
+	if err != nil {
+		pkg.Error(c, http.StatusInternalServerError, "查询进程失败")
+		return
+	}
+	pkg.Paginated(c, items, total, page, pageSize)
+}
+
+// DELETE /api/v1/system/processes/:pid - 终止进程（admin only）
+func (h *SystemHandler) KillProcess(c *gin.Context) {
+	pid64, err := strconv.ParseInt(c.Param("pid"), 10, 32)
+	if err != nil || pid64 <= 0 {
+		pkg.Error(c, http.StatusBadRequest, "无效的进程 PID")
+		return
+	}
+	pid := int32(pid64)
+
+	name, err := h.processService.KillProcess(pid)
+	if err != nil {
+		if errors.Is(err, service.ErrKillSelf) {
+			pkg.Error(c, http.StatusBadRequest, err.Error())
+			return
+		}
+		pkg.Error(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	details := fmt.Sprintf("终止进程 name=%s pid=%d", name, pid)
+	_ = h.auditService.Log(middleware.GetUserID(c), "delete", "process", uint(pid), details, c.ClientIP())
+
+	pkg.Success(c, gin.H{"message": "进程已终止", "pid": pid, "name": name})
 }
 
 // dirSize calculates the total size of a directory in bytes.

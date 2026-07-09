@@ -75,6 +75,7 @@ const RESOURCE_LABELS: Record<string, string> = {
   user: '用户',
   settings: '设置',
   system: '系统',
+  process: '进程',
   auth: '认证',
 }
 

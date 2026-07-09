@@ -96,6 +96,7 @@ func main() {
 	notifService := service.NewNotificationService(notifRepo)
 	auditService := service.NewAuditService(auditRepo)
 	dictService := service.NewDictService(dictRepo)
+	processService := service.NewProcessService()
 
 	// Init WebSocket hub
 	hub := ws.NewHub()
@@ -123,10 +124,10 @@ func main() {
 	projectHandler := handler.NewProjectHandler(projectService, credentialService, cronScheduler)
 	corsCfg := middleware.DefaultCORSConfig()
 
-	buildHandler := handler.NewBuildHandler(buildService, projectRepo, scheduler)
+	buildHandler := handler.NewBuildHandler(buildService, processService, projectRepo, scheduler)
 	webhookHandler := handler.NewWebhookHandler(projectService, buildService, envRepo, scheduler)
 	notifHandler := handler.NewNotificationHandler(notifService)
-	systemHandler := handler.NewSystemHandler(auditService)
+	systemHandler := handler.NewSystemHandler(auditService, processService)
 	dictHandler := handler.NewDictHandler(dictService)
 	wsHandler := handler.NewWSHandler(authService, buildRepo, projectRepo, hub, corsCfg)
 
@@ -226,6 +227,7 @@ func main() {
 			auth.GET("/dashboard/active-builds", buildHandler.DashboardActiveBuilds)
 			auth.GET("/dashboard/recent-builds", buildHandler.DashboardRecentBuilds)
 			auth.GET("/dashboard/trend", buildHandler.DashboardTrend)
+			auth.GET("/dashboard/top-processes", buildHandler.DashboardTopProcesses)
 
 			// Notifications
 			auth.GET("/notifications", notifHandler.List)
@@ -254,6 +256,8 @@ func main() {
 			auth.GET("/system/workspaces", middleware.RequireRole("admin", "ops"), systemHandler.ListWorkspaces)
 			auth.DELETE("/system/workspaces/:projectId", middleware.RequireRole("admin", "ops"), systemHandler.CleanWorkspace)
 			auth.DELETE("/system/caches/:projectId", middleware.RequireRole("admin", "ops"), systemHandler.CleanCache)
+			auth.GET("/system/processes", middleware.RequireRole("admin", "ops"), systemHandler.ListProcesses)
+			auth.DELETE("/system/processes/:pid", middleware.RequireRole("admin"), systemHandler.KillProcess)
 		}
 
 		// Webhook (public, secret-verified)

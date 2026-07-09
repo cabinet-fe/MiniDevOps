@@ -41,6 +41,9 @@ const DictionaryListPage = lazy(() =>
 const SettingsPage = lazy(() =>
   import('@/pages/settings').then((m) => ({ default: m.SettingsPage })),
 )
+const SystemProcessesPage = lazy(() =>
+  import('@/pages/system/processes').then((m) => ({ default: m.SystemProcessesPage })),
+)
 const ProjectManualPage = lazy(() =>
   import('@/pages/project-manual').then((m) => ({ default: m.ProjectManualPage })),
 )
@@ -189,6 +192,14 @@ function AppRoutes() {
           element={
             <Suspense fallback={<RouteFallback />}>
               <AuditLogsPage />
+            </Suspense>
+          }
+        />
+        <Route
+          path="system"
+          element={
+            <Suspense fallback={<RouteFallback />}>
+              <SystemProcessesPage />
             </Suspense>
           }
         />

@@ -15,6 +15,7 @@ import {
   BookOpen,
   Hammer,
   Layers,
+  Monitor,
   type LucideIcon,
 } from 'lucide-react'
 import { useTheme } from 'next-themes'
@@ -43,6 +44,7 @@ const ROUTE_META: Record<string, { label: string; icon: LucideIcon }> = {
   '/settings': { label: '设置', icon: Settings },
   '/manual': { label: '项目手册', icon: BookOpenText },
   '/dictionaries': { label: '数据字典', icon: BookOpen },
+  '/system': { label: '系统管理', icon: Monitor },
 }
 
 function getBreadcrumb(pathname: string): { label: string; href?: string; icon?: LucideIcon }[] {

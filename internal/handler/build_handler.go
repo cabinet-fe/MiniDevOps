@@ -24,13 +24,14 @@ type BuildScheduler interface {
 }
 
 type BuildHandler struct {
-	buildService *service.BuildService
-	projectRepo  *repository.ProjectRepository
-	scheduler    BuildScheduler
+	buildService   *service.BuildService
+	processService *service.ProcessService
+	projectRepo    *repository.ProjectRepository
+	scheduler      BuildScheduler
 }
 
-func NewBuildHandler(bs *service.BuildService, projectRepo *repository.ProjectRepository, scheduler BuildScheduler) *BuildHandler {
-	return &BuildHandler{buildService: bs, projectRepo: projectRepo, scheduler: scheduler}
+func NewBuildHandler(bs *service.BuildService, processService *service.ProcessService, projectRepo *repository.ProjectRepository, scheduler BuildScheduler) *BuildHandler {
+	return &BuildHandler{buildService: bs, processService: processService, projectRepo: projectRepo, scheduler: scheduler}
 }
 
 func (h *BuildHandler) ensureProjectAccess(c *gin.Context, projectID uint) bool {
@@ -324,6 +325,26 @@ func (h *BuildHandler) DashboardTrend(c *gin.Context) {
 		return
 	}
 	pkg.Success(c, trend)
+}
+
+// GET /api/v1/dashboard/top-processes - Top N 本机进程（已登录）
+func (h *BuildHandler) DashboardTopProcesses(c *gin.Context) {
+	sortBy := c.DefaultQuery("sort", "cpu")
+	if sortBy != "memory" {
+		sortBy = "cpu"
+	}
+	limit := 10
+	if l := c.Query("limit"); l != "" {
+		if parsed, err := strconv.Atoi(l); err == nil && parsed > 0 {
+			limit = parsed
+		}
+	}
+	list, err := h.processService.TopProcesses(sortBy, limit)
+	if err != nil {
+		pkg.Error(c, http.StatusInternalServerError, "查询进程失败")
+		return
+	}
+	pkg.Success(c, list)
 }
 
 // POST /api/v1/builds/:id/retry - retry a failed build
