@@ -72,6 +72,7 @@ interface Environment {
   cron_enabled: boolean;
   sort_order: number;
   var_group_ids: number[];
+  agent_ids: number[];
   cache_paths?: string;
 }
 

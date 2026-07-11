@@ -16,6 +16,8 @@ import {
   Hammer,
   Layers,
   Monitor,
+  Bot,
+  Cpu,
   type LucideIcon,
 } from 'lucide-react'
 import { useTheme } from 'next-themes'
@@ -42,9 +44,11 @@ const ROUTE_META: Record<string, { label: string; icon: LucideIcon }> = {
   '/users': { label: '用户', icon: Users },
   '/audit-logs': { label: '审计日志', icon: FileText },
   '/settings': { label: '设置', icon: Settings },
-  '/manual': { label: '项目手册', icon: BookOpenText },
+  '/manual': { label: '操作手册', icon: BookOpenText },
   '/dictionaries': { label: '数据字典', icon: BookOpen },
   '/system': { label: '系统管理', icon: Monitor },
+  '/agents': { label: '智能体管理', icon: Bot },
+  '/agent-proxies': { label: '代理管理', icon: Cpu },
 }
 
 function getBreadcrumb(pathname: string): { label: string; href?: string; icon?: LucideIcon }[] {

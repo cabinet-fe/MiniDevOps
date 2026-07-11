@@ -78,6 +78,7 @@ export interface EnvironmentPayload {
   cron_enabled: boolean
   sort_order: number
   var_group_ids: number[]
+  agent_ids: number[]
 }
 
 export interface EnvironmentDetail extends EnvironmentPayload {
@@ -121,6 +122,7 @@ const DEFAULT_FORM: EnvironmentPayload = {
   cron_enabled: false,
   sort_order: 0,
   var_group_ids: [],
+  agent_ids: [],
 }
 
 const CRON_PRESETS = [
@@ -160,6 +162,7 @@ export function EnvironmentFormDialog({
   const [branchesLoading, setBranchesLoading] = useState(false)
   const [branchPopoverOpen, setBranchPopoverOpen] = useState(false)
   const [varGroups, setVarGroups] = useState<VarGroup[]>([])
+  const [agents, setAgents] = useState<{ id: number; name: string; project_ids: number[]; enabled: boolean }[]>([])
   const [envVars, setEnvVars] = useState<EnvVarRow[]>([])
   const [initialEnvVars, setInitialEnvVars] = useState<EnvVarRow[]>([])
 
@@ -171,6 +174,7 @@ export function EnvironmentFormDialog({
       setEnvVars([])
       setInitialEnvVars([])
       setVarGroups([])
+      setAgents([])
       return
     }
 
@@ -183,6 +187,13 @@ export function EnvironmentFormDialog({
     api.get<VarGroup[]>('/var-groups').then((res) => {
       if (res.code === 0 && res.data) {
         setVarGroups(Array.isArray(res.data) ? res.data : [])
+      }
+    })
+
+    api.get<{ id: number; name: string; project_ids: number[]; enabled: boolean }[]>('/agents').then((res) => {
+      if (res.code === 0 && res.data) {
+        const list = Array.isArray(res.data) ? res.data : []
+        setAgents(list.filter((a) => (a.project_ids || []).includes(projectId)))
       }
     })
 
@@ -216,6 +227,7 @@ export function EnvironmentFormDialog({
         cron_enabled: editEnv.cron_enabled || false,
         sort_order: editEnv.sort_order || 0,
         var_group_ids: editEnv.var_group_ids || [],
+        agent_ids: editEnv.agent_ids || [],
       })
 
       api.get<EnvVarRow[]>(`/projects/${projectId}/envs/${editEnv.id}/vars`).then((res) => {
@@ -741,6 +753,39 @@ export function EnvironmentFormDialog({
                         }}
                       >
                         {group.name}
+                      </Button>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <Label>构建后智能体</Label>
+              {agents.length === 0 ? (
+                <div className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
+                  暂无适用于本项目的智能体，请先在「智能体管理」中创建并勾选本项目。
+                </div>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {agents.map((agent) => {
+                    const selected = form.agent_ids.includes(agent.id)
+                    return (
+                      <Button
+                        key={agent.id}
+                        type="button"
+                        variant={selected ? 'secondary' : 'outline'}
+                        size="sm"
+                        onClick={() => {
+                          if (selected) {
+                            setField('agent_ids', form.agent_ids.filter((id) => id !== agent.id))
+                            return
+                          }
+                          setField('agent_ids', [...form.agent_ids, agent.id])
+                        }}
+                      >
+                        {agent.name}
+                        {!agent.enabled ? ' (停用)' : ''}
                       </Button>
                     )
                   })}

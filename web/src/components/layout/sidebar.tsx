@@ -15,6 +15,8 @@ import {
   ChevronsRight,
   Layers,
   Monitor,
+  Bot,
+  Cpu,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -28,7 +30,6 @@ const NAV_GROUPS = [
     label: '概览',
     items: [
       { path: '/', label: '仪表盘', icon: LayoutDashboard, roles: [] as string[] },
-      { path: '/manual', label: '项目手册', icon: BookOpenText, roles: [] as string[] },
     ],
   },
   {
@@ -41,6 +42,13 @@ const NAV_GROUPS = [
     ],
   },
   {
+    label: '智能体',
+    items: [
+      { path: '/agents', label: '智能体管理', icon: Bot, roles: [] as string[] },
+      { path: '/agent-proxies', label: '代理管理', icon: Cpu, roles: ['admin', 'ops'] },
+    ],
+  },
+  {
     label: '管理',
     items: [
       { path: '/users', label: '用户', icon: Users, roles: ['admin'] },
@@ -48,6 +56,7 @@ const NAV_GROUPS = [
       { path: '/system', label: '系统管理', icon: Monitor, roles: ['admin', 'ops'] },
       { path: '/audit-logs', label: '审计日志', icon: FileText, roles: ['admin', 'ops'] },
       { path: '/settings', label: '设置', icon: Settings, roles: ['admin'] },
+      { path: '/manual', label: '操作手册', icon: BookOpenText, roles: [] as string[] },
     ],
   },
 ] as const

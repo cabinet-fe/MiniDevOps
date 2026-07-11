@@ -50,6 +50,16 @@ func TestSortProcessesByCPUAndMemory(t *testing.T) {
 	if list[0].Name != "a" || list[1].Name != "b" || list[2].Name != "c" {
 		t.Fatalf("name asc order wrong: %+v", namesOf(list))
 	}
+
+	unchanged := []ProcessInfo{
+		{PID: 1, Name: "a", CPUPercent: 10},
+		{PID: 2, Name: "b", CPUPercent: 50},
+		{PID: 3, Name: "c", CPUPercent: 20},
+	}
+	sortProcesses(unchanged, "", "desc")
+	if unchanged[0].PID != 1 || unchanged[1].PID != 2 || unchanged[2].PID != 3 {
+		t.Fatalf("empty sort should keep original order: %+v", pidsOf(unchanged))
+	}
 }
 
 func TestFilterProcessesByQPIDPort(t *testing.T) {

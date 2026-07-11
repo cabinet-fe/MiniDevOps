@@ -33,6 +33,7 @@ type Pipeline struct {
 	distRepo       *repository.DistributionRepository
 	envVarRepo     *repository.EnvVarRepository
 	varGroupRepo   *repository.VarGroupRepository
+	agentRepo      *repository.AgentRepository
 	serverRepo     *repository.ServerRepository
 	notifRepo      *repository.NotificationRepository
 	hub            *ws.Hub
@@ -65,6 +66,7 @@ func NewPipeline(
 	distRepo *repository.DistributionRepository,
 	envVarRepo *repository.EnvVarRepository,
 	varGroupRepo *repository.VarGroupRepository,
+	agentRepo *repository.AgentRepository,
 	serverRepo *repository.ServerRepository,
 	notifRepo *repository.NotificationRepository,
 	hub *ws.Hub,
@@ -80,6 +82,7 @@ func NewPipeline(
 		distRepo:       distRepo,
 		envVarRepo:     envVarRepo,
 		varGroupRepo:   varGroupRepo,
+		agentRepo:      agentRepo,
 		serverRepo:     serverRepo,
 		notifRepo:      notifRepo,
 		hub:            hub,
@@ -369,8 +372,16 @@ func (p *Pipeline) Execute(ctx context.Context, buildID uint) {
 		p.cancelBuild(build)
 		return
 	}
+	p.runMountedAgents(ctx, build, project, env, workDir, writeLine)
+	if ctx.Err() != nil {
+		p.cancelBuild(build)
+		return
+	}
 	if hasDist {
+		p.updateStageKeepSuccess(build, "distributing")
 		p.runDistributions(ctx, build, project, env, sourceDir, writeLine, nil)
+	} else {
+		p.updateStageKeepSuccess(build, "success")
 	}
 }
 

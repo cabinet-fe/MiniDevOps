@@ -24,6 +24,7 @@ type ProjectService struct {
 	buildRepo      *repository.BuildRepository
 	envVarRepo     *repository.EnvVarRepository
 	varGroupRepo   *repository.VarGroupRepository
+	agentRepo      *repository.AgentRepository
 }
 
 func NewProjectService(
@@ -34,6 +35,7 @@ func NewProjectService(
 	envVarRepo *repository.EnvVarRepository,
 	varGroupRepo *repository.VarGroupRepository,
 	distRepo *repository.DistributionRepository,
+	agentRepo *repository.AgentRepository,
 ) *ProjectService {
 	return &ProjectService{
 		repo:           repo,
@@ -43,6 +45,7 @@ func NewProjectService(
 		buildRepo:      buildRepo,
 		envVarRepo:     envVarRepo,
 		varGroupRepo:   varGroupRepo,
+		agentRepo:      agentRepo,
 	}
 }
 
@@ -132,6 +135,11 @@ func (s *ProjectService) Delete(id uint) error {
 	if err := s.varGroupRepo.DeleteLinksByProjectID(id); err != nil {
 		return err
 	}
+	if s.agentRepo != nil {
+		if err := s.agentRepo.DeleteLinksByProjectID(id); err != nil {
+			return err
+		}
+	}
 	if err := s.envRepo.DeleteByProjectID(id); err != nil {
 		return err
 	}
@@ -168,18 +176,18 @@ type ProjectExport struct {
 
 // EnvironmentExport excludes sensitive fields.
 type EnvironmentExport struct {
-	Name             string         `json:"name"`
-	Branch           string         `json:"branch"`
-	BuildScript      string         `json:"build_script"`
-	BuildScriptType  string         `json:"build_script_type"`
-	BuildOutputDir   string         `json:"build_output_dir"`
-	Distributions    []DistributionExport `json:"distributions"`
-	CachePaths       string         `json:"cache_paths"`
-	CronExpression   string         `json:"cron_expression"`
-	CronEnabled      bool           `json:"cron_enabled"`
-	SortOrder        int            `json:"sort_order"`
-	VarGroupNames    []string       `json:"var_group_names,omitempty"`
-	EnvVars          []EnvVarExport `json:"env_vars,omitempty"`
+	Name            string               `json:"name"`
+	Branch          string               `json:"branch"`
+	BuildScript     string               `json:"build_script"`
+	BuildScriptType string               `json:"build_script_type"`
+	BuildOutputDir  string               `json:"build_output_dir"`
+	Distributions   []DistributionExport `json:"distributions"`
+	CachePaths      string               `json:"cache_paths"`
+	CronExpression  string               `json:"cron_expression"`
+	CronEnabled     bool                 `json:"cron_enabled"`
+	SortOrder       int                  `json:"sort_order"`
+	VarGroupNames   []string             `json:"var_group_names,omitempty"`
+	EnvVars         []EnvVarExport       `json:"env_vars,omitempty"`
 }
 
 // DistributionExport is one deploy target for export/import.
@@ -320,7 +328,7 @@ func (s *ProjectService) Import(data []byte, createdBy uint) (*model.Project, er
 				SortOrder:        de.SortOrder,
 			})
 		}
-		if err := s.CreateEnvironment(env, nil, dists); err != nil {
+		if err := s.CreateEnvironment(env, nil, nil, dists); err != nil {
 			return nil, err
 		}
 		for _, exported := range ee.EnvVars {
@@ -448,7 +456,7 @@ func validateDistribution(d *model.Distribution) error {
 	return nil
 }
 
-func (s *ProjectService) CreateEnvironment(env *model.Environment, varGroupIDs []uint, distributions []model.Distribution) error {
+func (s *ProjectService) CreateEnvironment(env *model.Environment, varGroupIDs []uint, agentIDs []uint, distributions []model.Distribution) error {
 	if err := s.envRepo.Create(env); err != nil {
 		return err
 	}
@@ -469,10 +477,17 @@ func (s *ProjectService) CreateEnvironment(env *model.Environment, varGroupIDs [
 		}
 		env.VarGroupIDs = uniqueUintSlice(varGroupIDs)
 	}
+	if agentIDs != nil && s.agentRepo != nil {
+		ids := uniqueUintSlice(agentIDs)
+		if err := s.agentRepo.SetEnvironmentAgentIDs(env.ID, ids); err != nil {
+			return err
+		}
+		env.AgentIDs = ids
+	}
 	return nil
 }
 
-func (s *ProjectService) UpdateEnvironment(env *model.Environment, varGroupIDs []uint, syncVarGroups bool, distributions []model.Distribution, syncDistributions bool) error {
+func (s *ProjectService) UpdateEnvironment(env *model.Environment, varGroupIDs []uint, syncVarGroups bool, agentIDs []uint, syncAgents bool, distributions []model.Distribution, syncDistributions bool) error {
 	existing, err := s.envRepo.FindByID(env.ID)
 	if err != nil {
 		return err
@@ -500,6 +515,13 @@ func (s *ProjectService) UpdateEnvironment(env *model.Environment, varGroupIDs [
 			return err
 		}
 		env.VarGroupIDs = groupIDs
+	}
+	if syncAgents && s.agentRepo != nil {
+		ids := uniqueUintSlice(agentIDs)
+		if err := s.agentRepo.SetEnvironmentAgentIDs(env.ID, ids); err != nil {
+			return err
+		}
+		env.AgentIDs = ids
 	}
 	return nil
 }
@@ -538,6 +560,11 @@ func (s *ProjectService) DeleteEnvironment(id, projectID uint) error {
 	}
 	if err := s.varGroupRepo.DeleteEnvironmentLinks(id); err != nil {
 		return err
+	}
+	if s.agentRepo != nil {
+		if err := s.agentRepo.DeleteEnvironmentLinks(id); err != nil {
+			return err
+		}
 	}
 	if err := s.distRepo.DeleteByEnvironmentID(id); err != nil {
 		return err
@@ -738,6 +765,13 @@ func (s *ProjectService) populateEnvironmentGroupIDs(envs []model.Environment) e
 			return err
 		}
 		envs[i].VarGroupIDs = groupIDs
+		if s.agentRepo != nil {
+			agentIDs, err := s.agentRepo.ListEnvironmentAgentIDs(envs[i].ID)
+			if err != nil {
+				return err
+			}
+			envs[i].AgentIDs = agentIDs
+		}
 	}
 	return nil
 }

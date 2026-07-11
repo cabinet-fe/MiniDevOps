@@ -47,6 +47,12 @@ const SystemProcessesPage = lazy(() =>
 const ProjectManualPage = lazy(() =>
   import('@/pages/project-manual').then((m) => ({ default: m.ProjectManualPage })),
 )
+const AgentListPage = lazy(() =>
+  import('@/pages/agents/list').then((m) => ({ default: m.AgentListPage })),
+)
+const AgentProxyListPage = lazy(() =>
+  import('@/pages/agent-proxies/list').then((m) => ({ default: m.AgentProxyListPage })),
+)
 
 function RouteFallback() {
   return (
@@ -168,6 +174,22 @@ function AppRoutes() {
           element={
             <Suspense fallback={<RouteFallback />}>
               <ServerListPage />
+            </Suspense>
+          }
+        />
+        <Route
+          path="agents"
+          element={
+            <Suspense fallback={<RouteFallback />}>
+              <AgentListPage />
+            </Suspense>
+          }
+        />
+        <Route
+          path="agent-proxies"
+          element={
+            <Suspense fallback={<RouteFallback />}>
+              <AgentProxyListPage />
             </Suspense>
           }
         />

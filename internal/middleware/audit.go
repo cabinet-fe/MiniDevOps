@@ -20,13 +20,15 @@ var methodActionMap = map[string]string{
 }
 
 var segmentResourceMap = map[string]string{
-	"projects":     "project",
-	"servers":      "server",
-	"builds":       "build",
-	"environments": "environment",
-	"users":        "user",
-	"settings":     "settings",
-	"system":       "system",
+	"projects":      "project",
+	"servers":       "server",
+	"builds":        "build",
+	"environments":  "environment",
+	"users":         "user",
+	"settings":      "settings",
+	"system":        "system",
+	"agents":        "agent",
+	"agent-proxies": "agent_proxy",
 }
 
 func Audit(db *gorm.DB) gin.HandlerFunc {

@@ -77,6 +77,7 @@ func main() {
 	notifRepo := repository.NewNotificationRepository(db)
 	auditRepo := repository.NewAuditRepository(db)
 	dictRepo := repository.NewDictRepository(db)
+	agentRepo := repository.NewAgentRepository(db)
 
 	// Init services
 	authService, err := service.NewAuthService(cfg)
@@ -86,7 +87,7 @@ func main() {
 	userService := service.NewUserService(userRepo)
 	serverService := service.NewServerService(serverRepo)
 	credentialService := service.NewCredentialService(credentialRepo, projectRepo, userRepo)
-	projectService := service.NewProjectService(projectRepo, credentialRepo, envRepo, buildRepo, envVarRepo, varGroupRepo, distRepo)
+	projectService := service.NewProjectService(projectRepo, credentialRepo, envRepo, buildRepo, envVarRepo, varGroupRepo, distRepo, agentRepo)
 	buildService := service.NewBuildService(buildRepo, projectRepo, envRepo, userRepo, distRepo, buildDistRepo)
 	if n, err := buildRepo.MarkInterruptedBuilds("服务异常中断，构建未正常结束"); err != nil {
 		logger.Error("reconcile interrupted builds", zap.Error(err))
@@ -97,13 +98,15 @@ func main() {
 	auditService := service.NewAuditService(auditRepo)
 	dictService := service.NewDictService(dictRepo)
 	processService := service.NewProcessService()
+	agentService := service.NewAgentService(agentRepo, projectRepo)
+	agentProxyService := service.NewAgentProxyService()
 
 	// Init WebSocket hub
 	hub := ws.NewHub()
 
 	// Init build pipeline and scheduler
 	pipeline := engine.NewPipeline(
-		buildRepo, buildDistRepo, projectRepo, credentialRepo, envRepo, distRepo, envVarRepo, varGroupRepo, serverRepo, notifRepo,
+		buildRepo, buildDistRepo, projectRepo, credentialRepo, envRepo, distRepo, envVarRepo, varGroupRepo, agentRepo, serverRepo, notifRepo,
 		hub, logger,
 		cfg.Build.WorkspaceDir, cfg.Build.ArtifactDir, cfg.Build.LogDir, cfg.Build.CacheDir,
 	)
@@ -129,6 +132,8 @@ func main() {
 	notifHandler := handler.NewNotificationHandler(notifService)
 	systemHandler := handler.NewSystemHandler(auditService, processService)
 	dictHandler := handler.NewDictHandler(dictService)
+	agentHandler := handler.NewAgentHandler(agentService)
+	agentProxyHandler := handler.NewAgentProxyHandler(agentProxyService)
 	wsHandler := handler.NewWSHandler(authService, buildRepo, projectRepo, hub, corsCfg)
 
 	// Setup Gin
@@ -233,6 +238,21 @@ func main() {
 			auth.GET("/notifications", notifHandler.List)
 			auth.PUT("/notifications/:id/read", notifHandler.MarkRead)
 			auth.PUT("/notifications/read-all", notifHandler.MarkAllRead)
+
+			// Agents
+			auth.GET("/agents", agentHandler.List)
+			auth.GET("/agents/:id", agentHandler.GetByID)
+			agents := auth.Group("/agents", middleware.RequireRole("ops", "admin"))
+			{
+				agents.POST("", agentHandler.Create)
+				agents.PUT("/:id", agentHandler.Update)
+				agents.DELETE("/:id", agentHandler.Delete)
+			}
+
+			// Agent proxies (CLI)
+			auth.GET("/agent-proxies", middleware.RequireRole("ops", "admin"), agentProxyHandler.List)
+			auth.POST("/agent-proxies/:key/install", middleware.RequireRole("ops", "admin"), agentProxyHandler.Install)
+			auth.POST("/agent-proxies/:key/upgrade", middleware.RequireRole("ops", "admin"), agentProxyHandler.Upgrade)
 
 			// Dictionaries
 			auth.GET("/dictionaries", dictHandler.ListDictionaries)

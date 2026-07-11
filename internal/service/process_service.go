@@ -338,8 +338,12 @@ func filterProcesses(list []ProcessInfo, opts ProcessListOptions) []ProcessInfo 
 }
 
 func sortProcesses(list []ProcessInfo, sortBy, order string) {
+	sortBy = strings.ToLower(strings.TrimSpace(sortBy))
+	if sortBy == "" {
+		return
+	}
 	asc := strings.EqualFold(order, "asc")
-	switch strings.ToLower(sortBy) {
+	switch sortBy {
 	case "memory":
 		sort.SliceStable(list, func(i, j int) bool {
 			if asc {
@@ -354,7 +358,7 @@ func sortProcesses(list []ProcessInfo, sortBy, order string) {
 			}
 			return strings.ToLower(list[i].Name) > strings.ToLower(list[j].Name)
 		})
-	default: // cpu
+	case "cpu":
 		sort.SliceStable(list, func(i, j int) bool {
 			if asc {
 				return list[i].CPUPercent < list[j].CPUPercent

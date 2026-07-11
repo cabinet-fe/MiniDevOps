@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   useReactTable,
   getCoreRowModel,
@@ -8,6 +8,9 @@ import {
 } from '@tanstack/react-table'
 import {
   Activity,
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
   ChevronLeft,
   ChevronRight,
   Filter,
@@ -29,13 +32,6 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
-import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -43,6 +39,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { cn } from '@/lib/utils'
 import { api } from '@/lib/api'
 import type { PaginatedData } from '@/lib/api'
 import { useAuthStore } from '@/stores/auth-store'
@@ -60,7 +57,7 @@ interface ProcessInfo {
   create_time?: number
 }
 
-type ProcessSort = 'cpu' | 'memory'
+type ProcessSort = 'cpu' | 'memory' | 'name'
 type SortOrder = 'desc' | 'asc'
 
 function formatBytes(bytes: number) {
@@ -86,6 +83,48 @@ function formatCreateTime(ms: number | undefined) {
   return new Date(ms).toLocaleString('zh-CN')
 }
 
+function SortHeader({
+  label,
+  field,
+  activeField,
+  order,
+  onToggle,
+}: {
+  label: string
+  field: ProcessSort
+  activeField: ProcessSort | null
+  order: SortOrder | null
+  onToggle: (field: ProcessSort) => void
+}) {
+  const active = activeField === field
+  const Icon = !active ? ArrowUpDown : order === 'asc' ? ArrowUp : ArrowDown
+  const title = !active
+    ? `按${label}降序`
+    : order === 'desc'
+      ? `按${label}升序`
+      : `取消${label}排序`
+
+  return (
+    <div className="flex items-center gap-1">
+      <span>{label}</span>
+      <button
+        type="button"
+        className={cn(
+          'inline-flex size-6 items-center justify-center rounded-md transition-colors',
+          active
+            ? 'text-foreground hover:bg-accent'
+            : 'text-muted-foreground/60 hover:bg-accent hover:text-muted-foreground',
+        )}
+        onClick={() => onToggle(field)}
+        title={title}
+        aria-label={title}
+      >
+        <Icon className="size-3.5" />
+      </button>
+    </div>
+  )
+}
+
 export function SystemProcessesPage() {
   const user = useAuthStore((s) => s.user)
   const isAdmin = user?.role === 'admin'
@@ -95,27 +134,32 @@ export function SystemProcessesPage() {
   const [page, setPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
   const [loading, setLoading] = useState(false)
-  const [queried, setQueried] = useState(false)
 
   const [q, setQ] = useState('')
   const [pid, setPid] = useState('')
   const [port, setPort] = useState('')
-  const [sort, setSort] = useState<ProcessSort>('cpu')
-  const [order, setOrder] = useState<SortOrder>('desc')
+  const [sort, setSort] = useState<ProcessSort | null>(null)
+  const [order, setOrder] = useState<SortOrder | null>(null)
 
   const [killTarget, setKillTarget] = useState<ProcessInfo | null>(null)
   const [killing, setKilling] = useState(false)
 
   const pageSize = 20
 
-  const fetchProcesses = async (nextPage = page) => {
+  const fetchProcesses = async (
+    nextPage = page,
+    nextSort: ProcessSort | null = sort,
+    nextOrder: SortOrder | null = order,
+  ) => {
     setLoading(true)
     try {
       const params = new URLSearchParams()
       params.set('page', String(nextPage))
       params.set('page_size', String(pageSize))
-      params.set('sort', sort)
-      params.set('order', order)
+      if (nextSort && nextOrder) {
+        params.set('sort', nextSort)
+        params.set('order', nextOrder)
+      }
       if (q.trim()) params.set('q', q.trim())
       if (pid.trim()) params.set('pid', pid.trim())
       if (port.trim()) params.set('port', port.trim())
@@ -134,13 +178,37 @@ export function SystemProcessesPage() {
       toast.error('查询失败')
     } finally {
       setLoading(false)
-      setQueried(true)
     }
   }
+
+  useEffect(() => {
+    void fetchProcesses(1)
+    // 进入页面默认查询一次
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const handleQuery = () => {
     setPage(1)
     void fetchProcesses(1)
+  }
+
+  const toggleSort = (field: ProcessSort) => {
+    let nextSort: ProcessSort | null
+    let nextOrder: SortOrder | null
+    if (sort !== field) {
+      nextSort = field
+      nextOrder = 'desc'
+    } else if (order === 'desc') {
+      nextSort = field
+      nextOrder = 'asc'
+    } else {
+      nextSort = null
+      nextOrder = null
+    }
+    setSort(nextSort)
+    setOrder(nextOrder)
+    setPage(1)
+    void fetchProcesses(1, nextSort, nextOrder)
   }
 
   const goToPage = (next: number) => {
@@ -170,7 +238,15 @@ export function SystemProcessesPage() {
   const columnHelper = createColumnHelper<ProcessInfo>()
   const columns: ColumnDef<ProcessInfo, any>[] = [
     columnHelper.accessor('name', {
-      header: '名称',
+      header: () => (
+        <SortHeader
+          label="名称"
+          field="name"
+          activeField={sort}
+          order={order}
+          onToggle={toggleSort}
+        />
+      ),
       cell: ({ getValue }) => (
         <span className="max-w-[140px] truncate block font-medium">{String(getValue() || '-')}</span>
       ),
@@ -180,13 +256,29 @@ export function SystemProcessesPage() {
       cell: ({ getValue }) => <span className="font-mono text-xs">{getValue()}</span>,
     }),
     columnHelper.accessor('memory_bytes', {
-      header: '内存',
+      header: () => (
+        <SortHeader
+          label="内存"
+          field="memory"
+          activeField={sort}
+          order={order}
+          onToggle={toggleSort}
+        />
+      ),
       cell: ({ getValue }) => (
         <span className="font-mono text-xs text-muted-foreground">{formatBytes(Number(getValue() || 0))}</span>
       ),
     }),
     columnHelper.accessor('cpu_percent', {
-      header: 'CPU%',
+      header: () => (
+        <SortHeader
+          label="CPU%"
+          field="cpu"
+          activeField={sort}
+          order={order}
+          onToggle={toggleSort}
+        />
+      ),
       cell: ({ getValue }) => (
         <span className="font-mono text-xs text-muted-foreground">
           {Number(getValue() ?? 0).toFixed(1)}
@@ -321,30 +413,6 @@ export function SystemProcessesPage() {
                 onKeyDown={(e) => e.key === 'Enter' && handleQuery()}
               />
             </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-muted-foreground">排序</Label>
-              <Select value={sort} onValueChange={(v) => setSort(v as ProcessSort)}>
-                <SelectTrigger className="w-[120px]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="cpu">CPU</SelectItem>
-                  <SelectItem value="memory">内存</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-muted-foreground">顺序</Label>
-              <Select value={order} onValueChange={(v) => setOrder(v as SortOrder)}>
-                <SelectTrigger className="w-[120px]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="desc">降序</SelectItem>
-                  <SelectItem value="asc">升序</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
             <Button onClick={handleQuery} disabled={loading} className="gap-2">
               <Search className="size-4" />
               {loading ? '查询中...' : '查询'}
@@ -364,14 +432,9 @@ export function SystemProcessesPage() {
           </div>
         </CardHeader>
         <CardContent>
-          {loading ? (
+          {loading && processes.length === 0 ? (
             <div className="flex h-48 items-center justify-center">
               <div className="border-muted size-8 animate-spin rounded-full border-2 border-t-foreground" />
-            </div>
-          ) : !queried ? (
-            <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
-              <Search className="mb-3 size-10 opacity-40" />
-              <p className="text-sm">设置筛选条件后点击「查询」</p>
             </div>
           ) : processes.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">

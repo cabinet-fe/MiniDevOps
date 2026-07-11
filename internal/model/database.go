@@ -57,6 +57,9 @@ func InitDB() (*gorm.DB, error) {
 		&AuditLog{},
 		&Dictionary{},
 		&DictItem{},
+		&Agent{},
+		&AgentProject{},
+		&EnvironmentAgent{},
 	); err != nil {
 		return nil, fmt.Errorf("auto migrating: %w", err)
 	}

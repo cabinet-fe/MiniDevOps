@@ -308,17 +308,18 @@ func (h *ProjectHandler) CreateEnvironment(c *gin.Context) {
 	}
 	projectID := uint(id)
 	var req struct {
-		Name            string                 `json:"name" binding:"required"`
-		Branch          string                 `json:"branch"`
-		BuildScript     string                 `json:"build_script"`
-		BuildScriptType string                 `json:"build_script_type"`
-		BuildOutputDir  string                 `json:"build_output_dir"`
-		Distributions   []model.Distribution   `json:"distributions"`
-		CachePaths      string                 `json:"cache_paths"`
-		CronExpression  string                 `json:"cron_expression"`
-		CronEnabled     bool                   `json:"cron_enabled"`
-		SortOrder       int                    `json:"sort_order"`
-		VarGroupIDs     []uint                 `json:"var_group_ids"`
+		Name            string               `json:"name" binding:"required"`
+		Branch          string               `json:"branch"`
+		BuildScript     string               `json:"build_script"`
+		BuildScriptType string               `json:"build_script_type"`
+		BuildOutputDir  string               `json:"build_output_dir"`
+		Distributions   []model.Distribution `json:"distributions"`
+		CachePaths      string               `json:"cache_paths"`
+		CronExpression  string               `json:"cron_expression"`
+		CronEnabled     bool                 `json:"cron_enabled"`
+		SortOrder       int                  `json:"sort_order"`
+		VarGroupIDs     []uint               `json:"var_group_ids"`
+		AgentIDs        []uint               `json:"agent_ids"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		pkg.Error(c, http.StatusBadRequest, "参数错误")
@@ -348,7 +349,7 @@ func (h *ProjectHandler) CreateEnvironment(c *gin.Context) {
 		CronEnabled:     req.CronEnabled,
 		SortOrder:       req.SortOrder,
 	}
-	if err := h.projectService.CreateEnvironment(env, req.VarGroupIDs, req.Distributions); err != nil {
+	if err := h.projectService.CreateEnvironment(env, req.VarGroupIDs, req.AgentIDs, req.Distributions); err != nil {
 		pkg.Error(c, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -387,17 +388,18 @@ func (h *ProjectHandler) UpdateEnvironment(c *gin.Context) {
 		return
 	}
 	var req struct {
-		Name            *string                `json:"name"`
-		Branch          *string                `json:"branch"`
-		BuildScript     *string                `json:"build_script"`
-		BuildScriptType *string                `json:"build_script_type"`
-		BuildOutputDir  *string                `json:"build_output_dir"`
-		Distributions   []model.Distribution   `json:"distributions"`
-		CachePaths      *string                `json:"cache_paths"`
-		CronExpression  *string                `json:"cron_expression"`
-		CronEnabled     *bool                  `json:"cron_enabled"`
-		SortOrder       *int                   `json:"sort_order"`
-		VarGroupIDs     []uint                 `json:"var_group_ids"`
+		Name            *string              `json:"name"`
+		Branch          *string              `json:"branch"`
+		BuildScript     *string              `json:"build_script"`
+		BuildScriptType *string              `json:"build_script_type"`
+		BuildOutputDir  *string              `json:"build_output_dir"`
+		Distributions   []model.Distribution `json:"distributions"`
+		CachePaths      *string              `json:"cache_paths"`
+		CronExpression  *string              `json:"cron_expression"`
+		CronEnabled     *bool                `json:"cron_enabled"`
+		SortOrder       *int                 `json:"sort_order"`
+		VarGroupIDs     []uint               `json:"var_group_ids"`
+		AgentIDs        []uint               `json:"agent_ids"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		pkg.Error(c, http.StatusBadRequest, "参数错误")
@@ -438,7 +440,7 @@ func (h *ProjectHandler) UpdateEnvironment(c *gin.Context) {
 		env.SortOrder = *req.SortOrder
 	}
 	syncDistributions := req.Distributions != nil
-	if err := h.projectService.UpdateEnvironment(env, req.VarGroupIDs, req.VarGroupIDs != nil, req.Distributions, syncDistributions); err != nil {
+	if err := h.projectService.UpdateEnvironment(env, req.VarGroupIDs, req.VarGroupIDs != nil, req.AgentIDs, req.AgentIDs != nil, req.Distributions, syncDistributions); err != nil {
 		pkg.Error(c, http.StatusBadRequest, err.Error())
 		return
 	}

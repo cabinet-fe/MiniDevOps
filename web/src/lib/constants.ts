@@ -8,6 +8,7 @@ export const BUILD_STATUSES = {
   pending: { label: "等待中", color: "bg-yellow-500" },
   cloning: { label: "拉取代码", color: "bg-blue-400" },
   building: { label: "构建中", color: "bg-blue-500" },
+  agent: { label: "智能体", color: "bg-cyan-500" },
   deploying: { label: "部署中", color: "bg-purple-500" },
   distributing: { label: "分发中", color: "bg-purple-500" },
   success: { label: "成功", color: "bg-green-500" },
@@ -101,4 +102,11 @@ export const WEBHOOK_TYPES = [
   { value: "gitea", label: "Gitea" },
   { value: "bitbucket", label: "Bitbucket" },
   { value: "generic", label: "通用 JSON" },
+];
+
+/** 智能体绑定的本机 CLI 代理 */
+export const AGENT_PROXIES = [
+  { value: "opencode", label: "OpenCode" },
+  { value: "claude", label: "Claude Code" },
+  { value: "reasonix", label: "Reasonix" },
 ];

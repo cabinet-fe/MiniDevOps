@@ -308,8 +308,8 @@ func (h *SystemHandler) ListProcesses(c *gin.Context) {
 	page, pageSize := pkg.GetPage(c)
 	opts := service.ProcessListOptions{
 		Q:         c.Query("q"),
-		Sort:      c.DefaultQuery("sort", "cpu"),
-		Order:     c.DefaultQuery("order", "desc"),
+		Sort:      c.Query("sort"),
+		Order:     c.Query("order"),
 		Page:      page,
 		PageSize:  pageSize,
 		Detail:    true,
