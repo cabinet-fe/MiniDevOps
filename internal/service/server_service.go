@@ -11,10 +11,10 @@ import (
 	"strings"
 	"time"
 
-	"buildflow/internal/deployer"
-	"buildflow/internal/model"
-	"buildflow/internal/pkg"
-	"buildflow/internal/repository"
+	"bedrock/internal/deployer"
+	"bedrock/internal/model"
+	"bedrock/internal/pkg"
+	"bedrock/internal/repository"
 
 	"golang.org/x/crypto/ssh"
 )

@@ -3,8 +3,8 @@ package service
 import (
 	"time"
 
-	"buildflow/internal/model"
-	"buildflow/internal/repository"
+	"bedrock/internal/model"
+	"bedrock/internal/repository"
 )
 
 type AuditService struct {

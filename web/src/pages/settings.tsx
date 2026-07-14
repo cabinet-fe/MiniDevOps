@@ -154,7 +154,7 @@ export function SettingsPage() {
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = `buildflow-backup-${new Date().toISOString().slice(0, 10)}.tar.gz`
+      a.download = `bedrock-backup-${new Date().toISOString().slice(0, 10)}.tar.gz`
       a.click()
       URL.revokeObjectURL(url)
       toast.success('备份已下载')

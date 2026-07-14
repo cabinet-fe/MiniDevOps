@@ -13,18 +13,18 @@ dev:
 build-linux:
 	cd web && bun install && bun run build
 	rm -rf cmd/server/dist && cp -r web/dist cmd/server/dist
-	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags "$(LDFLAGS)" -o buildflow-linux-amd64 ./cmd/server
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags "$(LDFLAGS)" -o bedrock-linux-amd64 ./cmd/server
 
 build-win:
 	cd web && bun install && bun run build
 	rm -rf cmd/server/dist && cp -r web/dist cmd/server/dist
-	CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags "$(LDFLAGS)" -o buildflow-windows-amd64.exe ./cmd/server
+	CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags "$(LDFLAGS)" -o bedrock-windows-amd64.exe ./cmd/server
 
 build-agent-linux:
-	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags "$(LDFLAGS)" -o buildflow-agent-linux-amd64 ./cmd/agent
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags "$(LDFLAGS)" -o bedrock-agent-linux-amd64 ./cmd/agent
 
 build-agent-win:
-	CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags "$(LDFLAGS)" -o buildflow-agent-windows-amd64.exe ./cmd/agent
+	CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags "$(LDFLAGS)" -o bedrock-agent-windows-amd64.exe ./cmd/agent
 
 clean:
-	rm -rf buildflow* cmd/server/dist web/dist data/
+	rm -rf bedrock* cmd/server/dist web/dist data/

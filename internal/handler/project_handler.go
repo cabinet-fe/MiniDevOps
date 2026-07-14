@@ -9,11 +9,11 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/robfig/cron/v3"
 
-	"buildflow/internal/engine"
-	"buildflow/internal/middleware"
-	"buildflow/internal/model"
-	"buildflow/internal/pkg"
-	"buildflow/internal/service"
+	"bedrock/internal/engine"
+	"bedrock/internal/middleware"
+	"bedrock/internal/model"
+	"bedrock/internal/pkg"
+	"bedrock/internal/service"
 )
 
 // CronNotifier is called when an environment's cron settings change.

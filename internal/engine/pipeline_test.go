@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
-	"buildflow/internal/model"
-	"buildflow/internal/repository"
-	"buildflow/internal/ws"
+	"bedrock/internal/model"
+	"bedrock/internal/repository"
+	"bedrock/internal/ws"
 	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
 )

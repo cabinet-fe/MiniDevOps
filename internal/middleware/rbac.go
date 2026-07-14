@@ -3,7 +3,7 @@ package middleware
 import (
 	"net/http"
 
-	"buildflow/internal/pkg"
+	"bedrock/internal/pkg"
 
 	"github.com/gin-gonic/gin"
 )

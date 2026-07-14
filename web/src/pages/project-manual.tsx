@@ -77,7 +77,7 @@ export function ProjectManualPage() {
         <div className="space-y-2">
           <h1 className="text-4xl font-extrabold tracking-tight text-foreground lg:text-5xl">操作手册</h1>
           <p className="text-lg text-muted-foreground">
-            全面了解 BuildFlow 的核心概念、操作流程与最佳实践。
+            全面了解 Bedrock 的核心概念、操作流程与最佳实践。
           </p>
         </div>
         <Button variant="outline" className="w-fit gap-2" asChild>
@@ -109,7 +109,7 @@ export function ProjectManualPage() {
           {/* Introduction */}
           <Section id="intro" title="项目简介" icon={BookOpen}>
             <p className="text-base">
-              <strong>BuildFlow</strong> 是一款轻量级 CI/CD 构建部署平台。采用 Go 后端 + React 前端单体仓库架构，
+              <strong>Bedrock</strong> 是一款轻量级 CI/CD 构建部署平台。采用 Go 后端 + React 前端单体仓库架构，
               支持从代码克隆、自动化构建到多种模式部署的全生命周期管理。
             </p>
             <div className="grid gap-4 sm:grid-cols-2">
@@ -162,7 +162,7 @@ export function ProjectManualPage() {
           {/* Credential */}
           <Section id="credential" title="凭证管理" icon={Key}>
             <p>
-              BuildFlow 采用<strong>集中式凭证管理</strong>，确保敏感信息（如密码、Token、私钥）不被明文硬编码在项目配置中。
+              Bedrock 采用<strong>集中式凭证管理</strong>，确保敏感信息（如密码、Token、私钥）不被明文硬编码在项目配置中。
             </p>
             <ul>
               <li>
@@ -298,7 +298,7 @@ curl -sS -X POST \\
   -H 'X-GitHub-Event: push' \\
   -d '{"ref":"refs/heads/main","after":"abc123","head_commit":{"id":"abc123","message":"manual"}}'
 
-# 码云（请求头与仓库 WebHook 一致；BuildFlow 只校验 URL 中的密钥）
+# 码云（请求头与仓库 WebHook 一致；Bedrock 只校验 URL 中的密钥）
 curl -sS -X POST \\
   'https://你的域名/api/v1/webhook/12/你的密钥' \\
   -H 'Content-Type: application/json' \\
@@ -386,7 +386,7 @@ curl -sS -X POST \\
           {/* Agent */}
           <Section id="agent" title="独立 Agent 部署" icon={Rocket}>
             <p>
-              Agent 是一个极小的二进制程序，部署在生产服务器上，作为 BuildFlow 主控的接收端。主控将构建产物通过 HTTP 推送到 Agent，Agent 负责解压到目标路径，并可执行部署后脚本；鉴权方式为 <code>Authorization: Bearer &lt;token&gt;</code>。
+              Agent 是一个极小的二进制程序，部署在生产服务器上，作为 Bedrock 主控的接收端。主控将构建产物通过 HTTP 推送到 Agent，Agent 负责解压到目标路径，并可执行部署后脚本；鉴权方式为 <code>Authorization: Bearer &lt;token&gt;</code>。
             </p>
             <p className="text-xs">
               在「服务器管理」中新增服务器、部署方式选择 <strong>Agent</strong> 时，填写的访问地址与 Token 必须与 Agent 进程中的配置一致。界面保存的 Token 在库内加密存储，部署时会解密后与 Agent 校验，请保证与 Agent 侧明文配置相同。
@@ -395,15 +395,15 @@ curl -sS -X POST \\
               <div className="space-y-2">
                 <h4 className="text-sm font-medium text-foreground">配置优先级（后者覆盖前者）</h4>
                 <p className="text-xs">
-                  同目录默认配置文件 <code>buildflow-agent.yaml</code>（可用 <code>-config</code> 指定路径）→ 环境变量 → 命令行参数。未提供配置文件时仅使用环境变量与命令行。
+                  同目录默认配置文件 <code>bedrock-agent.yaml</code>（可用 <code>-config</code> 指定路径）→ 环境变量 → 命令行参数。未提供配置文件时仅使用环境变量与命令行。
                 </p>
               </div>
               <div className="rounded-lg border bg-background p-4 space-y-2">
                 <h4 className="text-sm font-medium text-foreground">环境变量</h4>
                 <ul className="text-xs space-y-1">
-                  <li><code>BUILDFLOW_AGENT_ADDR</code> — 监听地址，如 <code>:9091</code></li>
-                  <li><code>BUILDFLOW_AGENT_TOKEN</code> — 与主控「服务器管理」中 Token 一致</li>
-                  <li><code>BUILDFLOW_AGENT_TLS_CERT</code> / <code>BUILDFLOW_AGENT_TLS_KEY</code> — 可选，启用 HTTPS</li>
+                  <li><code>BEDROCK_AGENT_ADDR</code> — 监听地址，如 <code>:9091</code></li>
+                  <li><code>BEDROCK_AGENT_TOKEN</code> — 与主控「服务器管理」中 Token 一致</li>
+                  <li><code>BEDROCK_AGENT_TLS_CERT</code> / <code>BEDROCK_AGENT_TLS_KEY</code> — 可选，启用 HTTPS</li>
                 </ul>
               </div>
               <div className="space-y-2">
@@ -419,9 +419,9 @@ token: "YOUR_SECRET_TOKEN"
                 <h4 className="text-sm font-medium text-foreground">命令行示例</h4>
                 <div className="rounded-lg bg-black/90 p-4 font-mono text-xs text-white">
                   <div># 显式指定监听与 Token</div>
-                  <div className="mt-1">./buildflow-agent -addr :9091 -token YOUR_SECRET_TOKEN</div>
-                  <div className="mt-3 text-white/70"># 使用默认路径下的 buildflow-agent.yaml</div>
-                  <div className="mt-1">./buildflow-agent</div>
+                  <div className="mt-1">./bedrock-agent -addr :9091 -token YOUR_SECRET_TOKEN</div>
+                  <div className="mt-3 text-white/70"># 使用默认路径下的 bedrock-agent.yaml</div>
+                  <div className="mt-1">./bedrock-agent</div>
                 </div>
               </div>
               <p className="text-xs text-muted-foreground">

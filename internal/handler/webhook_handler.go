@@ -9,10 +9,10 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"buildflow/internal/model"
-	"buildflow/internal/pkg"
-	"buildflow/internal/repository"
-	"buildflow/internal/service"
+	"bedrock/internal/model"
+	"bedrock/internal/pkg"
+	"bedrock/internal/repository"
+	"bedrock/internal/service"
 )
 
 type WebhookHandler struct {

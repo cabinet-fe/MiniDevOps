@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"time"
 
-	"buildflow/internal/config"
-	"buildflow/internal/model"
+	"bedrock/internal/config"
+	"bedrock/internal/model"
 
 	"github.com/golang-jwt/jwt/v5"
 )
@@ -26,10 +26,10 @@ type Claims struct {
 
 // AuthService handles JWT generation and parsing.
 type AuthService struct {
-	secret      []byte
-	accessTTL   time.Duration
-	refreshTTL  time.Duration
-	refreshKey  []byte // optional: separate key for refresh; defaults to same as secret
+	secret     []byte
+	accessTTL  time.Duration
+	refreshTTL time.Duration
+	refreshKey []byte // optional: separate key for refresh; defaults to same as secret
 }
 
 // NewAuthService creates an AuthService from config.

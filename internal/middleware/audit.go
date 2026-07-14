@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"buildflow/internal/model"
+	"bedrock/internal/model"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"

@@ -6,7 +6,7 @@ database:
   path: "./data/db.sqlite"
 
 jwt:
-  secret: "buildflow-dev-secret-change-in-production"
+  secret: "bedrock-dev-secret-change-in-production"
   access_ttl: "2h"
   refresh_ttl: "168h"
 

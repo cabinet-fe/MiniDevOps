@@ -11,11 +11,11 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 
-	"buildflow/internal/config"
-	"buildflow/internal/middleware"
-	"buildflow/internal/repository"
-	"buildflow/internal/service"
-	"buildflow/internal/ws"
+	"bedrock/internal/config"
+	"bedrock/internal/middleware"
+	"bedrock/internal/repository"
+	"bedrock/internal/service"
+	"bedrock/internal/ws"
 )
 
 type WSHandler struct {

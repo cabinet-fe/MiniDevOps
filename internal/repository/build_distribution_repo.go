@@ -3,7 +3,7 @@ package repository
 import (
 	"errors"
 
-	"buildflow/internal/model"
+	"bedrock/internal/model"
 
 	"gorm.io/gorm"
 )
@@ -31,10 +31,10 @@ func (r *BuildDistributionRepository) Upsert(row *model.BuildDistribution) error
 	}
 	row.ID = existing.ID
 	return r.db.Model(&model.BuildDistribution{}).Where("id = ?", existing.ID).Updates(map[string]interface{}{
-		"status":         row.Status,
-		"error_message":  row.ErrorMessage,
-		"started_at":     row.StartedAt,
-		"finished_at":    row.FinishedAt,
+		"status":        row.Status,
+		"error_message": row.ErrorMessage,
+		"started_at":    row.StartedAt,
+		"finished_at":   row.FinishedAt,
 	}).Error
 }
 

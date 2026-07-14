@@ -3,7 +3,7 @@ package repository
 import (
 	"time"
 
-	"buildflow/internal/model"
+	"bedrock/internal/model"
 
 	"gorm.io/gorm"
 )

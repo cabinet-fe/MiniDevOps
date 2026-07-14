@@ -14,10 +14,10 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"buildflow/internal/config"
-	"buildflow/internal/middleware"
-	"buildflow/internal/pkg"
-	"buildflow/internal/service"
+	"bedrock/internal/config"
+	"bedrock/internal/middleware"
+	"bedrock/internal/pkg"
+	"bedrock/internal/service"
 )
 
 type SystemHandler struct {
@@ -94,7 +94,7 @@ func (h *SystemHandler) Backup(c *gin.Context) {
 		defer slimCleanup()
 	}
 
-	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=buildflow-backup-%s.tar.gz", time.Now().Format("20060102-150405")))
+	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=bedrock-backup-%s.tar.gz", time.Now().Format("20060102-150405")))
 	c.Header("Content-Type", "application/gzip")
 	gw := gzip.NewWriter(c.Writer)
 	defer gw.Close()

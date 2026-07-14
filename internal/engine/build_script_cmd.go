@@ -64,7 +64,7 @@ func isLegacyWindowsPowerShell(psPath string) bool {
 }
 
 const (
-	psUTF8Preamble = "$OutputEncoding = [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)\r\n"
+	psUTF8Preamble  = "$OutputEncoding = [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)\r\n"
 	cmdUTF8Preamble = "@echo off\r\nchcp 65001 >nul\r\n"
 )
 
@@ -78,7 +78,7 @@ func newPowerShellBuildCommand(ctx context.Context, workDir, script string) (*ex
 			"Windows PowerShell 5.x 不支持 && 链式命令。请将脚本类型改为 CMD、安装 PowerShell 7 (pwsh)，或拆成多行命令",
 		)
 	}
-	f, err := os.CreateTemp(workDir, ".buildflow-*.ps1")
+	f, err := os.CreateTemp(workDir, ".bedrock-*.ps1")
 	if err != nil {
 		return nil, func() {}, err
 	}
@@ -120,7 +120,7 @@ func newCmdBuildCommand(ctx context.Context, workDir, script string) (*exec.Cmd,
 		}
 	}
 
-	f, err := os.CreateTemp(workDir, ".buildflow-*.cmd")
+	f, err := os.CreateTemp(workDir, ".bedrock-*.cmd")
 	if err != nil {
 		return nil, func() {}, err
 	}

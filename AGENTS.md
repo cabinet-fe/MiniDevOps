@@ -1,4 +1,4 @@
-# BuildFlow
+# Bedrock
 
 CI/CD 构建部署平台。Go 后端 + React 前端单体仓库，前端产物通过 `embed` 嵌入后端二进制发布。
 
@@ -28,7 +28,7 @@ cd web && bun run lint   # oxlint 检查
 cd web && bun run build  # TypeScript 编译 + Vite 构建
 
 # 清理
-make clean               # 删除 buildflow 二进制、dist、data 目录
+make clean               # 删除 bedrock 二进制、dist、data 目录
 ```
 
 ## 技术栈
@@ -64,7 +64,7 @@ make clean               # 删除 buildflow 二进制、dist、data 目录
 │   ├── main.go                   # 应用启动、路由注册、DI 组装
 │   └── dist/                     # 前端构建产物（git 忽略）
 ├── internal/
-│   ├── config/                   # Viper 配置加载（支持 BUILDFLOW_ 环境变量前缀）
+│   ├── config/                   # Viper 配置加载（支持 BEDROCK_ 环境变量前缀）
 │   ├── model/                    # GORM 模型 + DB 初始化 + 种子数据
 │   │   ├── database.go           # InitDB()、AutoMigrate、默认 admin
 │   │   ├── build.go              # Build
@@ -182,7 +182,7 @@ SSH 连接支持密码、密钥、SSH Agent 三种认证。`path.go` 处理 Wind
 - 统一响应：`{ code: int, message: string, data?: T }`
 - 分页响应：`{ items, total, page, page_size, total_pages }`
 - 认证：Bearer JWT，access_token（2h） + refresh_token（168h）
-- 登录：`POST /api/v1/auth/login` 支持 `password`（明文，可选）与 `password_cipher`（hex，可选）。若 `password_cipher` 非空则仅解密该字段（AES-256-CBC，格式为 `hex(IV(16 字节) || PKCS#7 密文)`）；否则使用 `password`。解密失败返回 400「登录参数无效」，与凭据错误 401 区分。前端仅提交 `password_cipher`（`web/src/lib/login-crypto.ts`）：密钥来源 **优先** `window.__BUILDFLOW_ENCRYPTION_KEY__`（嵌入二进制由 Go 在返回的 `index.html` 中注入，与**运行时** `encryption.key` 一致，改配置重启即可，无需重编前端）；否则使用 `VITE_BUILDFLOW_ENCRYPTION_KEY`（dev、`vite preview`、非 Go 托管静态资源等，见 `web/.env`）。**安全上下文**（HTTPS、`localhost` 等，即存在 `crypto.subtle`）下用 **Web Crypto** 加密；**非安全上下文**（如纯 HTTP 内网 IP）下用 **`crypto-es`**（AES-256-CBC）；无有效密钥或加密失败时抛错，不再回退为明文 `password`。
+- 登录：`POST /api/v1/auth/login` 支持 `password`（明文，可选）与 `password_cipher`（hex，可选）。若 `password_cipher` 非空则仅解密该字段（AES-256-CBC，格式为 `hex(IV(16 字节) || PKCS#7 密文)`）；否则使用 `password`。解密失败返回 400「登录参数无效」，与凭据错误 401 区分。前端仅提交 `password_cipher`（`web/src/lib/login-crypto.ts`）：密钥来源 **优先** `window.__BEDROCK_ENCRYPTION_KEY__`（嵌入二进制由 Go 在返回的 `index.html` 中注入，与**运行时** `encryption.key` 一致，改配置重启即可，无需重编前端）；否则使用 `VITE_BEDROCK_ENCRYPTION_KEY`（dev、`vite preview`、非 Go 托管静态资源等，见 `web/.env`）。**安全上下文**（HTTPS、`localhost` 等，即存在 `crypto.subtle`）下用 **Web Crypto** 加密；**非安全上下文**（如纯 HTTP 内网 IP）下用 **`crypto-es`**（AES-256-CBC）；无有效密钥或加密失败时抛错，不再回退为明文 `password`。
 - RBAC 角色：`admin`（全权限）、`ops`（运维操作）、`dev`（只读 + 触发构建）
 - WebSocket：`/ws/` 前缀，token 通过查询参数传递
 - Webhook（公开，无需 JWT；`curl`/CI/代码托管平台均可调用）：
@@ -207,7 +207,7 @@ SSH 连接支持密码、密钥、SSH Agent 三种认证。`path.go` 处理 Wind
   - **失败响应**：HTTP 4xx/5xx，`{ "code": <http码>, "message": "<原因>" }`（如项目不存在 404、密钥错误 401、解析失败 400）。
   - **手动调用示例**  
     - GitHub：`curl -sS -X POST 'https://{host}/api/v1/webhook/{project_id}/{secret}' -H 'Content-Type: application/json' -H 'X-GitHub-Event: push' -d '{"ref":"refs/heads/main","after":"abc123","head_commit":{"id":"abc123","message":"manual"}}'`  
-    - 码云：请求体与上类似，请求头使用 `X-Gitee-Event: Push Hook`（标签推送为 `Tag Push Hook`）；仓库 WebHook 还会带 `User-Agent: git-oschina-hook`、`X-Gitee-Token` / `X-Gitee-Timestamp` 等，**无需**与 BuildFlow URL 密钥相同，鉴权仍以路径中的 `webhook_secret` 为准。  
+    - 码云：请求体与上类似，请求头使用 `X-Gitee-Event: Push Hook`（标签推送为 `Tag Push Hook`）；仓库 WebHook 还会带 `User-Agent: git-oschina-hook`、`X-Gitee-Token` / `X-Gitee-Timestamp` 等，**无需**与 Bedrock URL 密钥相同，鉴权仍以路径中的 `webhook_secret` 为准。  
     可选查询：`?environment_id=3`。
 - 文件下载：直接返回二进制流（产物下载）
 - 重新分发：`POST /api/v1/builds/:id/deploy`（body 可选 `distribution_ids`），对**已成功且有产物**的同一构建记录触发仅分发阶段

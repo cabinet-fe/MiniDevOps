@@ -1,4 +1,4 @@
-# BuildFlow Web
+# Bedrock Web
 
 前端基于 React + TypeScript + Vite 8，使用 bun 作为包管理器，使用 oxlint 进行代码检查。
 

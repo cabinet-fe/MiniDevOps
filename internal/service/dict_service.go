@@ -3,8 +3,8 @@ package service
 import (
 	"fmt"
 
-	"buildflow/internal/model"
-	"buildflow/internal/repository"
+	"bedrock/internal/model"
+	"bedrock/internal/repository"
 )
 
 type DictService struct {

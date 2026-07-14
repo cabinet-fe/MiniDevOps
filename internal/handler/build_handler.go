@@ -9,12 +9,12 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"buildflow/internal/config"
-	"buildflow/internal/middleware"
-	"buildflow/internal/model"
-	"buildflow/internal/pkg"
-	"buildflow/internal/repository"
-	"buildflow/internal/service"
+	"bedrock/internal/config"
+	"bedrock/internal/middleware"
+	"bedrock/internal/model"
+	"bedrock/internal/pkg"
+	"bedrock/internal/repository"
+	"bedrock/internal/service"
 )
 
 // BuildScheduler submits builds for execution. Used to avoid circular dependency.

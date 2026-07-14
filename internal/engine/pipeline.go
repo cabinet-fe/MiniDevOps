@@ -18,10 +18,10 @@ import (
 
 	"go.uber.org/zap"
 
-	"buildflow/internal/model"
-	"buildflow/internal/pkg"
-	"buildflow/internal/repository"
-	"buildflow/internal/ws"
+	"bedrock/internal/model"
+	"bedrock/internal/pkg"
+	"bedrock/internal/repository"
+	"bedrock/internal/ws"
 )
 
 type Pipeline struct {

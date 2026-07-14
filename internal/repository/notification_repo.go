@@ -1,7 +1,7 @@
 package repository
 
 import (
-	"buildflow/internal/model"
+	"bedrock/internal/model"
 
 	"gorm.io/gorm"
 )

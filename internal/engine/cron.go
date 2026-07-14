@@ -7,19 +7,19 @@ import (
 	"github.com/robfig/cron/v3"
 	"go.uber.org/zap"
 
-	"buildflow/internal/model"
-	"buildflow/internal/repository"
+	"bedrock/internal/model"
+	"bedrock/internal/repository"
 )
 
 // CronScheduler manages cron-based timed builds for environments.
 type CronScheduler struct {
-	cron        *cron.Cron
-	entries     map[uint]cron.EntryID // envID -> cron entry ID
-	mu          sync.Mutex
-	envRepo     *repository.EnvironmentRepository
-	buildRepo   *repository.BuildRepository
-	scheduler   *Scheduler
-	logger      *zap.Logger
+	cron      *cron.Cron
+	entries   map[uint]cron.EntryID // envID -> cron entry ID
+	mu        sync.Mutex
+	envRepo   *repository.EnvironmentRepository
+	buildRepo *repository.BuildRepository
+	scheduler *Scheduler
+	logger    *zap.Logger
 }
 
 // NewCronScheduler creates a new CronScheduler.

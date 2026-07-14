@@ -21,7 +21,7 @@ func serveSPA(r *gin.Engine, _ string) {
 			return
 		}
 		c.JSON(http.StatusOK, gin.H{
-			"message": "BuildFlow dev mode — frontend is served by Vite dev server",
+			"message": "Bedrock dev mode — frontend is served by Vite dev server",
 		})
 	})
 }

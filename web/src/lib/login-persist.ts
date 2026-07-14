@@ -1,6 +1,6 @@
-const REMEMBER_KEY = 'buildflow_v1_login_remember'
-const USERNAME_KEY = 'buildflow_v1_login_username'
-const PASSWORD_KEY = 'buildflow_v1_login_password'
+const REMEMBER_KEY = 'bedrock_v1_login_remember'
+const USERNAME_KEY = 'bedrock_v1_login_username'
+const PASSWORD_KEY = 'bedrock_v1_login_password'
 
 export function loadSavedCredentials(): {
   remember: boolean

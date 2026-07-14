@@ -291,7 +291,7 @@ export function ProjectFormDialog({
                     id="project-name"
                     value={form.name}
                     onChange={(e) => setField('name', e.target.value)}
-                    placeholder="例如：buildflow-web"
+                    placeholder="例如：bedrock-web"
                     maxLength={100}
                   />
                 </div>

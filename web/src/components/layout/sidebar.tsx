@@ -152,7 +152,7 @@ function SidebarContent({
         </div>
         {!collapsed && (
           <span className="text-[15px] font-semibold tracking-tight text-foreground">
-            BuildFlow
+            Bedrock
           </span>
         )}
       </div>
@@ -228,7 +228,7 @@ export function Sidebar({ mobileOpen = false, onMobileOpenChange }: SidebarProps
                 <Rocket className="size-4 text-white" />
               </div>
               <span className="text-[15px] font-semibold tracking-tight text-foreground">
-                BuildFlow
+                Bedrock
               </span>
             </div>
             <NavContent

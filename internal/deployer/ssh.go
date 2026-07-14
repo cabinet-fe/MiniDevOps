@@ -224,7 +224,7 @@ func buildSSHOptionsSlice(server ServerInfo) ([]string, func()) {
 		result = append(result, "-o", fmt.Sprintf("Port=%d", server.Port))
 	}
 	if server.AuthType == "key" && server.PrivateKey != "" {
-		tmpFile, err := os.CreateTemp("", "buildflow-deploy-key-*")
+		tmpFile, err := os.CreateTemp("", "bedrock-deploy-key-*")
 		if err == nil {
 			tmpFile.WriteString(server.PrivateKey)
 			tmpFile.Close()

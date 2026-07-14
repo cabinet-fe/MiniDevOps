@@ -3,7 +3,7 @@ package repository
 import (
 	"time"
 
-	"buildflow/internal/model"
+	"bedrock/internal/model"
 
 	"gorm.io/gorm"
 )
@@ -112,8 +112,8 @@ func (r *BuildRepository) MarkInterruptedBuilds(errMsg string) (int64, error) {
 	for _, b := range builds {
 		if b.Status == "success" && (b.DistributionSummary == "running" || b.DistributionSummary == "pending") {
 			if err := r.UpdateStatus(b.ID, "success", map[string]interface{}{
-				"current_stage":          "success",
-				"distribution_summary":   "cancelled",
+				"current_stage":            "success",
+				"distribution_summary":     "cancelled",
 				"redistribute_filter_json": "",
 			}); err != nil {
 				return n, err
@@ -130,10 +130,10 @@ func (r *BuildRepository) MarkInterruptedBuilds(errMsg string) (int64, error) {
 			durationMs = now.Sub(*b.StartedAt).Milliseconds()
 		}
 		fields := map[string]interface{}{
-			"current_stage":  stage,
-			"error_message":  errMsg,
-			"finished_at":    &now,
-			"duration_ms":    durationMs,
+			"current_stage": stage,
+			"error_message": errMsg,
+			"finished_at":   &now,
+			"duration_ms":   durationMs,
 		}
 		if err := r.UpdateStatus(b.ID, "failed", fields); err != nil {
 			return n, err

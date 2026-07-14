@@ -26,7 +26,7 @@ func injectEncryptionKey(html []byte, keyHex string) []byte {
 	if err != nil {
 		keyJSON = []byte(`""`)
 	}
-	snippet := `<script>window.__BUILDFLOW_ENCRYPTION_KEY__=` + string(keyJSON) + `</script>`
+	snippet := `<script>window.__BEDROCK_ENCRYPTION_KEY__=` + string(keyJSON) + `</script>`
 	const marker = "</head>"
 	idx := bytes.Index(html, []byte(marker))
 	if idx < 0 {

@@ -4,8 +4,8 @@ import (
 	"os"
 	"testing"
 
-	"buildflow/internal/model"
-	"buildflow/internal/repository"
+	"bedrock/internal/model"
+	"bedrock/internal/repository"
 	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
 )

@@ -78,7 +78,7 @@ func (d *AgentDeployer) Deploy(ctx context.Context, opts DeployOptions) error {
 
 func createArchive(sourceDir, format string) (string, error) {
 	format = normalizeAgentArchiveFormat(format)
-	tmpFile, err := os.CreateTemp("", "buildflow-agent-*."+archiveFileSuffix(format))
+	tmpFile, err := os.CreateTemp("", "bedrock-agent-*."+archiveFileSuffix(format))
 	if err != nil {
 		return "", err
 	}

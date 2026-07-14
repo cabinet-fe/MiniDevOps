@@ -1,7 +1,7 @@
 package repository
 
 import (
-	"buildflow/internal/model"
+	"bedrock/internal/model"
 
 	"gorm.io/gorm"
 )
@@ -32,7 +32,7 @@ func (r *ServerRepository) List(page, pageSize int, tag string) ([]model.Server,
 		query = query.Where("tags LIKE ?", "%"+tag+"%")
 	}
 	query.Count(&total)
-	err := query.Offset((page-1)*pageSize).Limit(pageSize).Order("id DESC").Find(&servers).Error
+	err := query.Offset((page - 1) * pageSize).Limit(pageSize).Order("id DESC").Find(&servers).Error
 	return servers, total, err
 }
 

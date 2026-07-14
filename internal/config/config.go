@@ -17,8 +17,8 @@ type DatabaseConfig struct {
 }
 
 type JWTConfig struct {
-	Secret    string `mapstructure:"secret"`
-	AccessTTL string `mapstructure:"access_ttl"`
+	Secret     string `mapstructure:"secret"`
+	AccessTTL  string `mapstructure:"access_ttl"`
 	RefreshTTL string `mapstructure:"refresh_ttl"`
 }
 
@@ -71,7 +71,7 @@ func Load(configPath string) (*Config, error) {
 		return nil, fmt.Errorf("reading config: %w", err)
 	}
 
-	v.SetEnvPrefix("BUILDFLOW")
+	v.SetEnvPrefix("BEDROCK")
 	v.AutomaticEnv()
 
 	var cfg Config

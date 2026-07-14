@@ -4,8 +4,8 @@ import (
 	"net/http"
 	"strings"
 
-	"buildflow/internal/pkg"
-	"buildflow/internal/service"
+	"bedrock/internal/pkg"
+	"bedrock/internal/service"
 
 	"github.com/gin-gonic/gin"
 )

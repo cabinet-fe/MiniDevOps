@@ -5,5 +5,5 @@ web/.env
 *.log
 cmd/server/dist/
 web/dist/
-buildflow
-buildflow-*
+bedrock
+bedrock-*

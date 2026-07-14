@@ -14,7 +14,7 @@ import (
 )
 
 // LocalDeployer copies the build output tree into a directory on the machine
-// running BuildFlow. Does not remove files that exist under the destination but
+// running Bedrock. Does not remove files that exist under the destination but
 // not in the source (only creates dirs and overwrites same relative paths).
 type LocalDeployer struct{}
 

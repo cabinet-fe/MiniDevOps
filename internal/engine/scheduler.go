@@ -8,7 +8,7 @@ import (
 
 	"go.uber.org/zap"
 
-	"buildflow/internal/model"
+	"bedrock/internal/model"
 )
 
 type Scheduler struct {

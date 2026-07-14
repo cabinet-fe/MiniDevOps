@@ -8,8 +8,8 @@ import (
 	"os/exec"
 	"sync"
 
-	"buildflow/internal/model"
-	"buildflow/internal/service"
+	"bedrock/internal/model"
+	"bedrock/internal/service"
 )
 
 // runMountedAgents 在构建产物成功后、分发前按序执行环境挂载的智能体。

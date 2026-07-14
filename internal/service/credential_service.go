@@ -4,9 +4,9 @@ import (
 	"errors"
 	"strings"
 
-	"buildflow/internal/model"
-	"buildflow/internal/pkg"
-	"buildflow/internal/repository"
+	"bedrock/internal/model"
+	"bedrock/internal/pkg"
+	"bedrock/internal/repository"
 	"gorm.io/gorm"
 )
 

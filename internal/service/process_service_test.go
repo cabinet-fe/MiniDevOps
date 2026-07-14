@@ -14,7 +14,7 @@ func TestKillProcessRejectsSelfPID(t *testing.T) {
 	if !errors.Is(err, ErrKillSelf) {
 		t.Fatalf("expected ErrKillSelf, got name=%q err=%v", name, err)
 	}
-	if err == nil || err.Error() != "不能终止 BuildFlow 自身" {
+	if err == nil || err.Error() != "不能终止 Bedrock 自身" {
 		t.Fatalf("unexpected error message: %v", err)
 	}
 }
@@ -66,7 +66,7 @@ func TestFilterProcessesByQPIDPort(t *testing.T) {
 	list := []ProcessInfo{
 		{PID: 10, Name: "nginx", Cmdline: "/usr/sbin/nginx", Ports: []uint32{80, 443}},
 		{PID: 20, Name: "redis-server", Cmdline: "redis-server *:6379", Ports: []uint32{6379}},
-		{PID: 30, Name: "buildflow", Cmdline: "./buildflow", Ports: []uint32{8080}},
+		{PID: 30, Name: "bedrock", Cmdline: "./bedrock", Ports: []uint32{8080}},
 	}
 
 	pid := int32(20)
@@ -86,7 +86,7 @@ func TestFilterProcessesByQPIDPort(t *testing.T) {
 		t.Fatalf("q filter name: %+v", filtered)
 	}
 
-	filtered = filterProcesses(list, ProcessListOptions{Q: "buildflow"})
+	filtered = filterProcesses(list, ProcessListOptions{Q: "bedrock"})
 	if len(filtered) != 1 || filtered[0].PID != 30 {
 		t.Fatalf("q filter cmdline/name: %+v", filtered)
 	}

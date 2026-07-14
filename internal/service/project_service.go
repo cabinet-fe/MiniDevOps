@@ -10,10 +10,10 @@ import (
 	"path/filepath"
 	"strings"
 
-	"buildflow/internal/config"
-	"buildflow/internal/model"
-	"buildflow/internal/pkg"
-	"buildflow/internal/repository"
+	"bedrock/internal/config"
+	"bedrock/internal/model"
+	"bedrock/internal/pkg"
+	"bedrock/internal/repository"
 )
 
 type ProjectService struct {

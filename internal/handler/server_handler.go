@@ -6,10 +6,10 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"buildflow/internal/middleware"
-	"buildflow/internal/model"
-	"buildflow/internal/pkg"
-	"buildflow/internal/service"
+	"bedrock/internal/middleware"
+	"bedrock/internal/model"
+	"bedrock/internal/pkg"
+	"bedrock/internal/service"
 )
 
 type ServerHandler struct {

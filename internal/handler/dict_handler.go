@@ -6,9 +6,9 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"buildflow/internal/model"
-	"buildflow/internal/pkg"
-	"buildflow/internal/service"
+	"bedrock/internal/model"
+	"bedrock/internal/pkg"
+	"bedrock/internal/service"
 )
 
 type DictHandler struct {

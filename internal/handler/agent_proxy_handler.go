@@ -5,8 +5,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"buildflow/internal/pkg"
-	"buildflow/internal/service"
+	"bedrock/internal/pkg"
+	"bedrock/internal/service"
 )
 
 type AgentProxyHandler struct {

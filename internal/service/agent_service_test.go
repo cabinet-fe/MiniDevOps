@@ -3,7 +3,7 @@ package service
 import (
 	"testing"
 
-	"buildflow/internal/model"
+	"bedrock/internal/model"
 )
 
 func TestIsValidProxyKey(t *testing.T) {

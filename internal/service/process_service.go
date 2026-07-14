@@ -15,8 +15,8 @@ import (
 	"github.com/shirou/gopsutil/v4/process"
 )
 
-// ErrKillSelf 禁止终止 BuildFlow 自身进程。
-var ErrKillSelf = errors.New("不能终止 BuildFlow 自身")
+// ErrKillSelf 禁止终止 Bedrock 自身进程。
+var ErrKillSelf = errors.New("不能终止 Bedrock 自身")
 
 // ProcessInfo 进程快照，供仪表盘与系统管理页使用。
 type ProcessInfo struct {

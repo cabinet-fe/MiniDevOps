@@ -4,7 +4,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"buildflow/internal/model"
+	"bedrock/internal/model"
 
 	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"

@@ -1,11 +1,11 @@
 package service
 
 import (
+	"bedrock/internal/config"
+	"bedrock/internal/model"
+	"bedrock/internal/repository"
 	"bufio"
 	"encoding/json"
-	"buildflow/internal/config"
-	"buildflow/internal/model"
-	"buildflow/internal/repository"
 	"fmt"
 	"os"
 	"sort"
@@ -50,9 +50,9 @@ type BuildDistributionDetail struct {
 // BuildDetailResponse extends Build with associated names.
 type BuildDetailResponse struct {
 	model.Build
-	ProjectName     string                  `json:"project_name"`
-	EnvironmentName string                  `json:"environment_name"`
-	TriggeredByName string                  `json:"triggered_by_name"`
+	ProjectName     string                    `json:"project_name"`
+	EnvironmentName string                    `json:"environment_name"`
+	TriggeredByName string                    `json:"triggered_by_name"`
 	Distributions   []BuildDistributionDetail `json:"distributions,omitempty"`
 }
 

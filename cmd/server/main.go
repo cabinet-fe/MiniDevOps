@@ -14,15 +14,15 @@ import (
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 
-	"buildflow/internal/config"
-	"buildflow/internal/engine"
-	"buildflow/internal/handler"
-	"buildflow/internal/middleware"
-	"buildflow/internal/model"
-	"buildflow/internal/pkg"
-	"buildflow/internal/repository"
-	"buildflow/internal/service"
-	"buildflow/internal/ws"
+	"bedrock/internal/config"
+	"bedrock/internal/engine"
+	"bedrock/internal/handler"
+	"bedrock/internal/middleware"
+	"bedrock/internal/model"
+	"bedrock/internal/pkg"
+	"bedrock/internal/repository"
+	"bedrock/internal/service"
+	"bedrock/internal/ws"
 )
 
 var version = "dev"
@@ -50,7 +50,7 @@ func main() {
 		logger, _ = zap.NewDevelopment()
 	}
 	defer logger.Sync()
-	logger.Info("BuildFlow server", zap.String("version", version))
+	logger.Info("Bedrock server", zap.String("version", version))
 
 	// Init encryption
 	if err := pkg.InitEncryption(cfg.Encryption.Key); err != nil {

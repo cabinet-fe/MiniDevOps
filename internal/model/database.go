@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"buildflow/internal/config"
+	"bedrock/internal/config"
 	"github.com/glebarez/sqlite"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"

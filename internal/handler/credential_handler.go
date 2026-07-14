@@ -5,10 +5,10 @@ import (
 	"net/http"
 	"strconv"
 
-	"buildflow/internal/middleware"
-	"buildflow/internal/model"
-	"buildflow/internal/pkg"
-	"buildflow/internal/service"
+	"bedrock/internal/middleware"
+	"bedrock/internal/model"
+	"bedrock/internal/pkg"
+	"bedrock/internal/service"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )

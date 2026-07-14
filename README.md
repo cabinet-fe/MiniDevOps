@@ -26,16 +26,16 @@
 
 | 文件类型   | 文件名示例                          | 平台         | 说明                                       |
 | ---------- | ----------------------------------- | ------------ | ------------------------------------------ |
-| **Server** | `buildflow-linux-amd64`             | Linux x86_64 | 包含 UI 与核心调度逻辑，通常部署在管理机。 |
-| **Server** | `buildflow-windows-amd64.exe`       | Windows x64  | —                                          |
-| **Agent**  | `buildflow-agent-linux-amd64`       | Linux x86_64 | 部署在目标生产服务器，接收并部署产物。     |
-| **Agent**  | `buildflow-agent-windows-amd64.exe` | Windows x64  | —                                          |
+| **Server** | `bedrock-linux-amd64`             | Linux x86_64 | 包含 UI 与核心调度逻辑，通常部署在管理机。 |
+| **Server** | `bedrock-windows-amd64.exe`       | Windows x64  | —                                          |
+| **Agent**  | `bedrock-agent-linux-amd64`       | Linux x86_64 | 部署在目标生产服务器，接收并部署产物。     |
+| **Agent**  | `bedrock-agent-windows-amd64.exe` | Windows x64  | —                                          |
 
 #### 2. 主控启动（以 Linux 为例）
 
 ```bash
 # 1. 赋予执行权限
-chmod +x buildflow-linux-amd64
+chmod +x bedrock-linux-amd64
 
 # 2. 创建配置文件 config.yaml
 cat > config.yaml << 'EOF'
@@ -64,7 +64,7 @@ admin:
 EOF
 
 # 3. 运行主控
-./buildflow-linux-amd64 --config config.yaml
+./bedrock-linux-amd64 --config config.yaml
 ```
 
 启动后访问 `http://localhost:8080`，使用配置文件中的管理员账号登录。
@@ -83,14 +83,14 @@ EOF
 
 #### 4. 执行端启动 (Agent)
 
-若环境部署方式选择 **HTTP Agent**，需在目标机器上运行 `buildflow-agent`。主控通过 HTTP 将构建产物推送到 Agent，由 Agent 解压到指定目录并可执行部署后脚本；Agent 与主控之间使用 **Bearer Token** 鉴权（请求头 `Authorization: Bearer <token>`），请确保主控「服务器管理」里填写的 Token 与 Agent 侧配置**完全一致**（明文一致即可，数据库存储为加密字段，部署时会自动解密后使用）。
+若环境部署方式选择 **HTTP Agent**，需在目标机器上运行 `bedrock-agent`。主控通过 HTTP 将构建产物推送到 Agent，由 Agent 解压到指定目录并可执行部署后脚本；Agent 与主控之间使用 **Bearer Token** 鉴权（请求头 `Authorization: Bearer <token>`），请确保主控「服务器管理」里填写的 Token 与 Agent 侧配置**完全一致**（明文一致即可，数据库存储为加密字段，部署时会自动解密后使用）。
 
 **配置方式（优先级由低到高：YAML 文件 → 环境变量 → 命令行参数）**
 
 | 来源         | 说明                                                                                                   |
 | ------------ | ------------------------------------------------------------------------------------------------------ |
-| 默认配置文件 | 与可执行文件同目录下的 `buildflow-agent.yaml`（也可用 `-config` 指定路径）。不存在则忽略，不报错。     |
-| 环境变量     | `BUILDFLOW_AGENT_ADDR`、`BUILDFLOW_AGENT_TOKEN`、`BUILDFLOW_AGENT_TLS_CERT`、`BUILDFLOW_AGENT_TLS_KEY` |
+| 默认配置文件 | 与可执行文件同目录下的 `bedrock-agent.yaml`（也可用 `-config` 指定路径）。不存在则忽略，不报错。     |
+| 环境变量     | `BEDROCK_AGENT_ADDR`、`BEDROCK_AGENT_TOKEN`、`BEDROCK_AGENT_TLS_CERT`、`BEDROCK_AGENT_TLS_KEY` |
 | 命令行       | `-addr`、`-token`、`-tls-cert`、`-tls-key`、`-config`                                                  |
 
 YAML 示例（与二进制放在同一目录时无需 `-config`）：
@@ -106,15 +106,15 @@ token: "YOUR_SECRET_TOKEN"
 最小启动示例（仅用命令行）：
 
 ```bash
-chmod +x buildflow-agent-linux-amd64
-./buildflow-agent-linux-amd64 -addr :9091 -token YOUR_SECRET_TOKEN
+chmod +x bedrock-agent-linux-amd64
+./bedrock-agent-linux-amd64 -addr :9091 -token YOUR_SECRET_TOKEN
 ```
 
 使用同目录配置文件时：
 
 ```bash
-./buildflow-agent-linux-amd64
-# 等价于读取 ./buildflow-agent.yaml 中的 addr / token 等
+./bedrock-agent-linux-amd64
+# 等价于读取 ./bedrock-agent.yaml 中的 addr / token 等
 ```
 
 **与主控对接**：在「服务器管理」中新增服务器，部署方式选 **Agent**，填写 Agent 监听地址（如 `http://192.168.1.10:9091`；若 Agent 使用 HTTPS 则填 `https://...`）、以及上述 Token。保存后可用连接测试确认可达。
@@ -140,7 +140,7 @@ chmod +x buildflow-agent-linux-amd64
 | `admin.username`       | 初始管理员用户名                                                          | `admin`             |
 | `admin.password`       | 初始管理员密码（**首次启动后请修改**）                                    | —                   |
 
-所有配置项均可通过环境变量覆盖，前缀为 `BUILDFLOW_`，例如 `BUILDFLOW_SERVER_PORT=9090`。
+所有配置项均可通过环境变量覆盖，前缀为 `BEDROCK_`，例如 `BEDROCK_SERVER_PORT=9090`。
 
 ## 开发指南
 

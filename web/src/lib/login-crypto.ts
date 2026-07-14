@@ -34,20 +34,20 @@ function useSubtleForLoginEncryption(): boolean {
 function getEncryptionKeyHex(): string {
   // 1) 嵌入二进制：Go 在返回的 index.html 中注入，与运行时 config encryption.key 一致
   if (typeof window !== "undefined") {
-    const w = window as Window & { __BUILDFLOW_ENCRYPTION_KEY__?: string };
-    const injected = typeof w.__BUILDFLOW_ENCRYPTION_KEY__ === "string" ? w.__BUILDFLOW_ENCRYPTION_KEY__.trim() : "";
+    const w = window as Window & { __BEDROCK_ENCRYPTION_KEY__?: string };
+    const injected = typeof w.__BEDROCK_ENCRYPTION_KEY__ === "string" ? w.__BEDROCK_ENCRYPTION_KEY__.trim() : "";
     if (isValidHexKey64(injected)) {
       return injected;
     }
   }
   // 2) Vite 编译时注入（dev、vite preview、非 Go 托管的静态资源等）
-  const vite = import.meta.env.VITE_BUILDFLOW_ENCRYPTION_KEY;
+  const vite = import.meta.env.VITE_BEDROCK_ENCRYPTION_KEY;
   const fromEnv = typeof vite === "string" ? vite.trim() : "";
   if (isValidHexKey64(fromEnv)) {
     return fromEnv;
   }
   throw new Error(
-    "登录需要有效的加密密钥（64 位 hex，与后端 encryption.key 一致）：嵌入部署由服务端注入 window.__BUILDFLOW_ENCRYPTION_KEY__，本地开发可设 VITE_BUILDFLOW_ENCRYPTION_KEY",
+    "登录需要有效的加密密钥（64 位 hex，与后端 encryption.key 一致）：嵌入部署由服务端注入 window.__BEDROCK_ENCRYPTION_KEY__，本地开发可设 VITE_BEDROCK_ENCRYPTION_KEY",
   );
 }
 

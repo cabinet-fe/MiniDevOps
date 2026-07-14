@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"buildflow/internal/deployer"
-	"buildflow/internal/model"
+	"bedrock/internal/deployer"
+	"bedrock/internal/model"
 )
 
 func (p *Pipeline) updateStageKeepSuccess(build *model.Build, stage string) {
@@ -127,8 +127,8 @@ func (p *Pipeline) runDistributions(ctx context.Context, build *model.Build, pro
 	if err != nil {
 		writeLine("ERROR: load distributions: " + err.Error())
 		p.buildRepo.UpdateStatus(build.ID, "success", map[string]interface{}{
-			"current_stage":          "success",
-			"distribution_summary":   "all_failed",
+			"current_stage":            "success",
+			"distribution_summary":     "all_failed",
 			"redistribute_filter_json": "",
 		})
 		return
@@ -137,8 +137,8 @@ func (p *Pipeline) runDistributions(ctx context.Context, build *model.Build, pro
 	if len(dists) == 0 {
 		writeLine("=== No distribution targets (skipped) ===")
 		p.buildRepo.UpdateStatus(build.ID, "success", map[string]interface{}{
-			"current_stage":          "success",
-			"distribution_summary":   "skipped",
+			"current_stage":            "success",
+			"distribution_summary":     "skipped",
 			"redistribute_filter_json": "",
 		})
 		return
@@ -247,7 +247,7 @@ func (p *Pipeline) executeRedistributeOnly(ctx context.Context, build *model.Bui
 	writeLine("=== 重新分发：使用已有产物 ===")
 	writeLine("Artifact: " + artifactPath)
 
-	tmpDir, err := os.MkdirTemp("", "buildflow-deploy-*")
+	tmpDir, err := os.MkdirTemp("", "bedrock-deploy-*")
 	if err != nil {
 		writeLine("ERROR: mkdir temp: " + err.Error())
 		p.buildRepo.UpdateStatus(build.ID, "success", map[string]interface{}{

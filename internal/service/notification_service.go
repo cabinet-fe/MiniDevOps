@@ -1,8 +1,8 @@
 package service
 
 import (
-	"buildflow/internal/model"
-	"buildflow/internal/repository"
+	"bedrock/internal/model"
+	"bedrock/internal/repository"
 )
 
 type NotificationService struct {

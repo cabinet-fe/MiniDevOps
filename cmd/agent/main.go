@@ -30,7 +30,7 @@ type agentYAML struct {
 }
 
 func main() {
-	configPath := flag.String("config", "", "YAML config path (default: <executable-dir>/buildflow-agent.yaml)")
+	configPath := flag.String("config", "", "YAML config path (default: <executable-dir>/bedrock-agent.yaml)")
 	addrFlag := flag.String("addr", "", "agent listen address")
 	tokenFlag := flag.String("token", "", "agent bearer token")
 	certFile := flag.String("tls-cert", "", "TLS certificate path")
@@ -43,13 +43,13 @@ func main() {
 	}
 	fileCfg := loadAgentConfigFile(cfgPath)
 
-	addr := pick(*addrFlag, os.Getenv("BUILDFLOW_AGENT_ADDR"), fileCfg.Addr, ":9091")
-	token := pick(*tokenFlag, os.Getenv("BUILDFLOW_AGENT_TOKEN"), fileCfg.Token, "")
-	cert := pick(*certFile, os.Getenv("BUILDFLOW_AGENT_TLS_CERT"), fileCfg.TLSCert, "")
-	key := pick(*keyFile, os.Getenv("BUILDFLOW_AGENT_TLS_KEY"), fileCfg.TLSKey, "")
+	addr := pick(*addrFlag, os.Getenv("BEDROCK_AGENT_ADDR"), fileCfg.Addr, ":9091")
+	token := pick(*tokenFlag, os.Getenv("BEDROCK_AGENT_TOKEN"), fileCfg.Token, "")
+	cert := pick(*certFile, os.Getenv("BEDROCK_AGENT_TLS_CERT"), fileCfg.TLSCert, "")
+	key := pick(*keyFile, os.Getenv("BEDROCK_AGENT_TLS_KEY"), fileCfg.TLSKey, "")
 
 	if strings.TrimSpace(token) == "" {
-		fmt.Fprintln(os.Stderr, "BUILDFLOW_AGENT_TOKEN, -token, or token in buildflow-agent.yaml is required")
+		fmt.Fprintln(os.Stderr, "BEDROCK_AGENT_TOKEN, -token, or token in bedrock-agent.yaml is required")
 		os.Exit(1)
 	}
 
@@ -85,7 +85,7 @@ func defaultConfigPath() string {
 	if err != nil {
 		return ""
 	}
-	return filepath.Join(filepath.Dir(exe), "buildflow-agent.yaml")
+	return filepath.Join(filepath.Dir(exe), "bedrock-agent.yaml")
 }
 
 func loadAgentConfigFile(path string) agentYAML {
@@ -201,7 +201,7 @@ func execHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func extractArchive(src io.Reader, targetDir, format string) error {
-	tmpFile, err := os.CreateTemp("", "buildflow-upload-*")
+	tmpFile, err := os.CreateTemp("", "bedrock-upload-*")
 	if err != nil {
 		return err
 	}

@@ -122,7 +122,7 @@ export function LoginPage() {
   | '_ \\ || | | / _\` |  _| / _ \\ V  V /    
   |_.__/\\_,_|_|_\\__,_|_| |_\\___/\\_/\\_/     
 
-> 系统平台：BuildFlow CI/CD 持续发布与部署系统
+> 系统平台：Bedrock CI/CD 持续发布与部署系统
 > 核心引擎：调度中心 (Scheduler) 已在线
 > 当前状态：等待认证登入以接管构建管道
 > 核心版本：${import.meta.env.VITE_APP_VERSION || "v1.0.0-dev"}
@@ -131,7 +131,7 @@ export function LoginPage() {
 
         {/* Mobile Header */}
         <div className="mb-6 block sm:hidden whitespace-pre text-xs leading-tight text-slate-900 dark:text-[#33ff00]">
-{`> 系统平台：BuildFlow CI/CD 部署系统
+{`> 系统平台：Bedrock CI/CD 部署系统
 > 核心版本：${import.meta.env.VITE_APP_VERSION || "v1.0.0-dev"}
 > 等待认证登入以接管构建管道
 ===========================`}
@@ -152,7 +152,7 @@ export function LoginPage() {
 
               <div className="grid grid-cols-1 sm:grid-cols-[max-content_1fr] gap-x-4 gap-y-4 sm:gap-y-6 sm:items-center">
                 <label htmlFor="username" className="text-sm md:text-base uppercase flex items-center shrink-0">
-                  认证用户 @buildflow:~$ 
+                  认证用户 @bedrock:~$ 
                 </label>
                 <div className="flex-1">
                   <input
@@ -208,7 +208,7 @@ export function LoginPage() {
                       ? "text-slate-400 dark:text-[#1f521f]" 
                       : "bg-slate-100 dark:bg-[#0a0a0a] text-slate-900 dark:text-[#33ff00] border border-slate-900 dark:border-[#33ff00] group-hover:bg-slate-900 group-hover:text-white dark:group-hover:bg-[#33ff00] dark:group-hover:text-[#0a0a0a] group-focus:bg-slate-900 group-focus:text-white dark:group-focus:bg-[#33ff00] dark:group-focus:text-[#0a0a0a]"
                   )}>
-                    {loading ? "[ 初始化通讯与密钥分发中... ]" : "[ 登入 BuildFlow 流水线 ]"}
+                    {loading ? "[ 初始化通讯与密钥分发中... ]" : "[ 登入 Bedrock 流水线 ]"}
                   </span>
                 </button>
               </div>
@@ -217,7 +217,7 @@ export function LoginPage() {
         </div>
 
         <div className="mt-8 text-xs text-slate-500 dark:text-[#1f521f] text-center space-y-1">
-          <p>BUILDFLOW 集中式构建引擎与工程自动化平台。</p>
+          <p>BEDROCK 集中式构建引擎与工程自动化平台。</p>
           <p>当前终端的资源配置、构建事件与持续交付行为均受 RBAC 审计追踪。</p>
         </div>
       </div>

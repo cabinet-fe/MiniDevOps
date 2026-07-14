@@ -4,8 +4,8 @@ import (
 	"errors"
 	"strings"
 
-	"buildflow/internal/model"
-	"buildflow/internal/repository"
+	"bedrock/internal/model"
+	"bedrock/internal/repository"
 )
 
 var validProxyKeys = map[string]bool{

@@ -22,7 +22,7 @@ func PrepareSlimSQLiteBackup(srcPath string) (outPath string, cleanup func(), er
 		return "", nil, err
 	}
 
-	snap, err := os.CreateTemp("", "buildflow-backup-snap-*.sqlite")
+	snap, err := os.CreateTemp("", "bedrock-backup-snap-*.sqlite")
 	if err != nil {
 		return "", nil, fmt.Errorf("create snap temp: %w", err)
 	}
