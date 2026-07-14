@@ -7,3 +7,4 @@ cmd/server/dist/
 web/dist/
 bedrock
 bedrock-*
+server
