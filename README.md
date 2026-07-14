@@ -1,4 +1,4 @@
-# BuildFlow
+# 磐石
 
 轻量级 CI/CD 构建部署平台。Go 后端 + React 前端单体仓库，前端产物通过 `embed` 嵌入后端二进制，单文件即可部署。
 
@@ -24,12 +24,12 @@
 
 #### 1. 发布文件说明
 
-| 文件类型 | 文件名示例 | 平台 | 说明 |
-|----------|------------|------|------|
-| **Server** | `buildflow-linux-amd64` | Linux x86_64 | 包含 UI 与核心调度逻辑，通常部署在管理机。 |
-| **Server** | `buildflow-windows-amd64.exe` | Windows x64 | — |
-| **Agent** | `buildflow-agent-linux-amd64` | Linux x86_64 | 部署在目标生产服务器，接收并部署产物。 |
-| **Agent** | `buildflow-agent-windows-amd64.exe` | Windows x64 | — |
+| 文件类型   | 文件名示例                          | 平台         | 说明                                       |
+| ---------- | ----------------------------------- | ------------ | ------------------------------------------ |
+| **Server** | `buildflow-linux-amd64`             | Linux x86_64 | 包含 UI 与核心调度逻辑，通常部署在管理机。 |
+| **Server** | `buildflow-windows-amd64.exe`       | Windows x64  | —                                          |
+| **Agent**  | `buildflow-agent-linux-amd64`       | Linux x86_64 | 部署在目标生产服务器，接收并部署产物。     |
+| **Agent**  | `buildflow-agent-windows-amd64.exe` | Windows x64  | —                                          |
 
 #### 2. 主控启动（以 Linux 为例）
 
@@ -73,13 +73,13 @@ EOF
 
 应用启动后会在同级或配置指定的路径下生成 `data/` 目录，其结构及用途如下：
 
-| 目录/文件 | 说明 |
-|-----------|------|
-| `data/db.sqlite` | SQLite 数据库文件，存储所有项目、环境、用户及审计数据。**务必定期备份**。 |
-| `data/workspaces/` | Git 工作区。每个环境对应一个目录，用于存放克隆的代码及执行构建。 |
-| `data/artifacts/` | 产物归档区。存储历史构建生成的压缩包（Zip/Gzip），支持按需回滚部署。 |
-| `data/logs/` | 实时日志存储。记录每次构建的完整输出，支持通过 WebSocket 实时查看。 |
-| `data/caches/` | 构建缓存。通过配置环境的缓存路径（如 `node_modules`），在清理后仍可保留。 |
+| 目录/文件          | 说明                                                                      |
+| ------------------ | ------------------------------------------------------------------------- |
+| `data/db.sqlite`   | SQLite 数据库文件，存储所有项目、环境、用户及审计数据。**务必定期备份**。 |
+| `data/workspaces/` | Git 工作区。每个环境对应一个目录，用于存放克隆的代码及执行构建。          |
+| `data/artifacts/`  | 产物归档区。存储历史构建生成的压缩包（Zip/Gzip），支持按需回滚部署。      |
+| `data/logs/`       | 实时日志存储。记录每次构建的完整输出，支持通过 WebSocket 实时查看。       |
+| `data/caches/`     | 构建缓存。通过配置环境的缓存路径（如 `node_modules`），在清理后仍可保留。 |
 
 #### 4. 执行端启动 (Agent)
 
@@ -87,11 +87,11 @@ EOF
 
 **配置方式（优先级由低到高：YAML 文件 → 环境变量 → 命令行参数）**
 
-| 来源 | 说明 |
-|------|------|
-| 默认配置文件 | 与可执行文件同目录下的 `buildflow-agent.yaml`（也可用 `-config` 指定路径）。不存在则忽略，不报错。 |
-| 环境变量 | `BUILDFLOW_AGENT_ADDR`、`BUILDFLOW_AGENT_TOKEN`、`BUILDFLOW_AGENT_TLS_CERT`、`BUILDFLOW_AGENT_TLS_KEY` |
-| 命令行 | `-addr`、`-token`、`-tls-cert`、`-tls-key`、`-config` |
+| 来源         | 说明                                                                                                   |
+| ------------ | ------------------------------------------------------------------------------------------------------ |
+| 默认配置文件 | 与可执行文件同目录下的 `buildflow-agent.yaml`（也可用 `-config` 指定路径）。不存在则忽略，不报错。     |
+| 环境变量     | `BUILDFLOW_AGENT_ADDR`、`BUILDFLOW_AGENT_TOKEN`、`BUILDFLOW_AGENT_TLS_CERT`、`BUILDFLOW_AGENT_TLS_KEY` |
+| 命令行       | `-addr`、`-token`、`-tls-cert`、`-tls-key`、`-config`                                                  |
 
 YAML 示例（与二进制放在同一目录时无需 `-config`）：
 
@@ -123,22 +123,22 @@ chmod +x buildflow-agent-linux-amd64
 
 ### 配置说明
 
-| 配置项 | 说明 | 默认值 |
-|--------|------|--------|
-| `server.port` | 监听端口 | `8080` |
-| `server.host` | 监听地址 | `0.0.0.0` |
-| `database.path` | SQLite 数据库路径 | `./data/db.sqlite` |
-| `jwt.secret` | JWT 签名密钥（**生产环境务必修改**） | — |
-| `jwt.access_ttl` | Access Token 有效期 | `2h` |
-| `jwt.refresh_ttl` | Refresh Token 有效期 | `168h` |
-| `build.max_concurrent` | 最大并发构建数 | `3` |
-| `build.workspace_dir` | Git 工作区目录 | `./data/workspaces` |
-| `build.artifact_dir` | 构建产物目录 | `./data/artifacts` |
-| `build.log_dir` | 构建日志目录 | `./data/logs` |
-| `build.cache_dir` | 构建缓存目录 | `./data/caches` |
-| `encryption.key` | AES-GCM 密钥（64 位 hex，**生产环境务必修改**）。用于加密凭据及敏感变量。 | — |
-| `admin.username` | 初始管理员用户名 | `admin` |
-| `admin.password` | 初始管理员密码（**首次启动后请修改**） | — |
+| 配置项                 | 说明                                                                      | 默认值              |
+| ---------------------- | ------------------------------------------------------------------------- | ------------------- |
+| `server.port`          | 监听端口                                                                  | `8080`              |
+| `server.host`          | 监听地址                                                                  | `0.0.0.0`           |
+| `database.path`        | SQLite 数据库路径                                                         | `./data/db.sqlite`  |
+| `jwt.secret`           | JWT 签名密钥（**生产环境务必修改**）                                      | —                   |
+| `jwt.access_ttl`       | Access Token 有效期                                                       | `2h`                |
+| `jwt.refresh_ttl`      | Refresh Token 有效期                                                      | `168h`              |
+| `build.max_concurrent` | 最大并发构建数                                                            | `3`                 |
+| `build.workspace_dir`  | Git 工作区目录                                                            | `./data/workspaces` |
+| `build.artifact_dir`   | 构建产物目录                                                              | `./data/artifacts`  |
+| `build.log_dir`        | 构建日志目录                                                              | `./data/logs`       |
+| `build.cache_dir`      | 构建缓存目录                                                              | `./data/caches`     |
+| `encryption.key`       | AES-GCM 密钥（64 位 hex，**生产环境务必修改**）。用于加密凭据及敏感变量。 | —                   |
+| `admin.username`       | 初始管理员用户名                                                          | `admin`             |
+| `admin.password`       | 初始管理员密码（**首次启动后请修改**）                                    | —                   |
 
 所有配置项均可通过环境变量覆盖，前缀为 `BUILDFLOW_`，例如 `BUILDFLOW_SERVER_PORT=9090`。
 
