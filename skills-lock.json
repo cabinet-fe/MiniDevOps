@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "skills": {
+    "cat-kit": {
+      "source": "cabinet-fe/cat-kit",
+      "ref": "main",
+      "sourceType": "github",
+      "skillPath": "skills/cat-kit/SKILL.md",
+      "computedHash": "f4160025b7670b15366ab3da7dd4362cd24690b84a90a4ee27f72ab6b1a87943"
+    },
+    "git-commit": {
+      "source": "cabinet-fe/prompt-engineering",
+      "ref": "main",
+      "sourceType": "github",
+      "skillPath": "skills/git-commit/SKILL.md",
+      "computedHash": "c38af995173ff71610d9485e0461e8e4bb1808f682fb4bd31692a96aa7075aa7"
+    },
+    "veltra-ui": {
+      "source": "cabinet-fe/ultra-ui",
+      "ref": "dev",
+      "sourceType": "github",
+      "skillPath": "skills/veltra-ui/SKILL.md",
+      "computedHash": "905e27bf0da9ecf962bef4f20ba10a62b32aceef9928433b2ae31e734efceb01"
+    },
+    "vue-best-practices": {
+      "source": "cabinet-fe/prompt-engineering",
+      "ref": "main",
+      "sourceType": "github",
+      "skillPath": "skills/vue-best-practices/SKILL.md",
+      "computedHash": "cee824892a1d576ea7cea2ee8c42e762df3b844433abc4b6da29b008e034a542"
+    }
+  }
+}
