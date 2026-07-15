@@ -1,4 +1,4 @@
-import { HTTPClient, TokenPlugin } from "@cat-kit/http";
+import { HTTPClient, TokenPlugin, type HTTPClientPlugin } from "@cat-kit/http";
 
 import type { ApiEnvelope, TokenPair } from "./types";
 
@@ -23,10 +23,55 @@ export function clearTokens(): void {
   localStorage.removeItem(REFRESH_KEY);
 }
 
+function isApiEnvelope(body: unknown): body is ApiEnvelope {
+  if (body === null || typeof body !== "object") return false;
+  const o = body as Record<string, unknown>;
+  return typeof o.code === "number" && typeof o.message === "string";
+}
+
+function envelopeErrorMessage(envelope: ApiEnvelope | undefined, fallback: string): string {
+  const msg = envelope?.message || fallback;
+  return envelope?.request_id ? `${msg} [${envelope.request_id}]` : msg;
+}
+
+/**
+ * Unwraps Bedrock `{ code, message, data?, request_id? }` envelopes.
+ * Successful calls resolve with `response.body === data`.
+ * Must run after TokenPlugin so 401 refresh/retry happens first.
+ */
+function BedrockEnvelopePlugin(): HTTPClientPlugin {
+  return {
+    name: "bedrock-envelope",
+    afterRespond({ response }) {
+      const { code, body } = response;
+
+      // Already unwrapped (e.g. TokenPlugin retry returned a processed response).
+      if (!isApiEnvelope(body)) {
+        if (code < 200 || code >= 300) {
+          throw new Error(`HTTP ${code}`);
+        }
+        return;
+      }
+
+      if (code < 200 || code >= 300) {
+        throw new Error(envelopeErrorMessage(body, `HTTP ${code}`));
+      }
+      if (body.code !== 0) {
+        throw new Error(envelopeErrorMessage(body, "request failed"));
+      }
+
+      return { ...response, body: body.data };
+    },
+  };
+}
+
+const envelopePlugin = BedrockEnvelopePlugin();
+
 /** Bare client for login/refresh (no Bearer injection). */
 export const bareHttp = new HTTPClient("/api/v1", {
   timeout: 30_000,
   credentials: false,
+  plugins: [envelopePlugin],
 });
 
 let onAuthExpired: (() => void) | null = null;
@@ -40,14 +85,13 @@ async function refreshAccessToken(): Promise<void> {
   if (!refresh) {
     throw new Error("missing refresh token");
   }
-  const res = await bareHttp.post<ApiEnvelope<TokenPair>>("/auth/refresh", {
+  const { body } = await bareHttp.post<TokenPair>("/auth/refresh", {
     refresh_token: refresh,
   });
-  const body = res.body;
-  if (res.code !== 200 || !body || body.code !== 0 || !body.data) {
-    throw new Error(body?.message || "refresh failed");
+  if (!body?.access_token || !body?.refresh_token) {
+    throw new Error("refresh failed");
   }
-  setTokens(body.data.access_token, body.data.refresh_token);
+  setTokens(body.access_token, body.refresh_token);
 }
 
 export const http = new HTTPClient("/api/v1", {
@@ -66,20 +110,6 @@ export const http = new HTTPClient("/api/v1", {
       },
       isRefreshExpired: () => !getRefreshToken(),
     }),
+    envelopePlugin,
   ],
 });
-
-/** Unwrap Bedrock envelope; throw on business or HTTP failure. */
-export async function apiData<T>(
-  promise: Promise<{ code: number; body: ApiEnvelope<T> }>,
-): Promise<T> {
-  const res = await promise;
-  const body = res.body;
-  if (res.code < 200 || res.code >= 300) {
-    throw new Error(body?.message || `HTTP ${res.code}`);
-  }
-  if (!body || body.code !== 0) {
-    throw new Error(body?.message || "request failed");
-  }
-  return body.data as T;
-}

@@ -1,42 +1,35 @@
 # web-v2
 
-This template should help get you started developing with Vue 3 in Vite.
+Bedrock 2.0 frontend (Vue 3 + Veltra + CatKit), built with [Vite+](https://viteplus.dev/guide) (`vp`).
 
-## Recommended IDE Setup
+## Prerequisites
 
-[VS Code](https://code.visualstudio.com/) + [Vue (Official)](https://marketplace.visualstudio.com/items?itemName=Vue.volar) (and disable Vetur).
+Install the global `vp` CLI: https://viteplus.dev/guide
 
-## Recommended Browser Setup
-
-- Chromium-based browsers (Chrome, Edge, Brave, etc.):
-  - [Vue.js devtools](https://chromewebstore.google.com/detail/vuejs-devtools/nhdogjmejiglipccpnnnanhbledajbpd)
-  - [Turn on Custom Object Formatter in Chrome DevTools](http://bit.ly/object-formatters)
-- Firefox:
-  - [Vue.js devtools](https://addons.mozilla.org/en-US/firefox/addon/vue-js-devtools/)
-  - [Turn on Custom Object Formatter in Firefox DevTools](https://fxdx.dev/firefox-devtools-custom-object-formatters/)
-
-## Type Support for `.vue` Imports in TS
-
-TypeScript cannot handle type information for `.vue` imports by default, so we replace the `tsc` CLI with `vue-tsc` for type checking. In editors, we need [Volar](https://marketplace.visualstudio.com/items?itemName=Vue.volar) to make the TypeScript language service aware of `.vue` types.
-
-## Customize configuration
-
-See [Vite Configuration Reference](https://vite.dev/config/).
-
-## Project Setup
+## Setup
 
 ```sh
-bun install
+vp install
 ```
 
-### Compile and Hot-Reload for Development
+### Develop
 
 ```sh
-bun dev
+vp dev
 ```
 
-### Type-Check, Compile and Minify for Production
+Dev server proxies `/api` and `/ws` to the Go backend on `:8080` (see `vite.config.ts`).
+
+### Check (format + lint + typecheck)
 
 ```sh
-bun run build
+vp check
 ```
+
+### Build
+
+```sh
+vp build
+```
+
+From the repo root, `make build-frontend` / `make build` run `vp install && vp build` and embed `dist/` into the Go binary.

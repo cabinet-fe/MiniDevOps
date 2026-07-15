@@ -40,12 +40,6 @@ const router = createRouter({
           meta: { permission: "system.resources:view" },
         },
         {
-          path: "system/menus",
-          name: "system-menus",
-          component: () => import("@/views/system/menus-view.vue"),
-          meta: { permission: "system.menus:view" },
-        },
-        {
           path: "system/dictionaries",
           name: "system-dictionaries",
           component: () => import("@/views/system/dictionaries-view.vue"),

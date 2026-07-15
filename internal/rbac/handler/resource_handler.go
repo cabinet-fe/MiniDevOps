@@ -28,12 +28,12 @@ func (h *ResourceHandler) RegisterRoutes(rg *gin.RouterGroup, authMW gin.Handler
 	res.GET("/:id", rbacmw.RequirePermission(h.perm, "system.resources:view"), h.Get)
 	res.POST("", rbacmw.RequirePermission(h.perm, "system.resources:create"), h.Create)
 	res.PUT("/:id", rbacmw.RequirePermission(h.perm, "system.resources:update"), h.Update)
+	res.PUT("/:id/icon", rbacmw.RequirePermission(h.perm, "system.resources:update"), h.UpdateIcon)
 	res.DELETE("/:id", rbacmw.RequirePermission(h.perm, "system.resources:delete"), h.Delete)
 
+	// Menu tree for role permission editor (menu-type nodes only).
 	menus := rg.Group("/menus", authMW)
-	menus.GET("", rbacmw.RequirePermission(h.perm, "system.menus:view"), h.ListMenus)
-	menus.PUT("/:id", rbacmw.RequirePermission(h.perm, "system.menus:update"), h.UpdateMenu)
-	menus.PUT("/:id/icon", rbacmw.RequirePermission(h.perm, "system.menus:update"), h.UpdateIcon)
+	menus.GET("", rbacmw.RequirePermission(h.perm, "system.roles:update"), h.ListMenus)
 }
 
 func (h *ResourceHandler) List(c *gin.Context) {
@@ -99,10 +99,6 @@ func (h *ResourceHandler) Update(c *gin.Context) {
 		return
 	}
 	pkg.Success(c, res)
-}
-
-func (h *ResourceHandler) UpdateMenu(c *gin.Context) {
-	h.Update(c)
 }
 
 func (h *ResourceHandler) UpdateIcon(c *gin.Context) {

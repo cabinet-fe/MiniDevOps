@@ -53,9 +53,8 @@ func EnsureRBACResources(db *gorm.DB) error {
 				{Path: "system.users", Title: "用户", Route: "/system/users", SortKey: 10},
 				{Path: "system.roles", Title: "角色", Route: "/system/roles", SortKey: 20},
 				{Path: "system.resources", Title: "权限资源", Route: "/system/resources", SortKey: 30},
-				{Path: "system.menus", Title: "菜单", Route: "/system/menus", SortKey: 40},
-				{Path: "system.dictionaries", Title: "字典", Route: "/system/dictionaries", SortKey: 50},
-				{Path: "system.operation_logs", Title: "操作日志", Route: "/system/operation-logs", SortKey: 60},
+				{Path: "system.dictionaries", Title: "字典", Route: "/system/dictionaries", SortKey: 40},
+				{Path: "system.operation_logs", Title: "操作日志", Route: "/system/operation-logs", SortKey: 50},
 			},
 		},
 	}

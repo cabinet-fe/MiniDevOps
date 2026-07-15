@@ -1,4 +1,4 @@
-import { apiData, getAccessToken, http } from "./http";
+import { getAccessToken, http } from "./http";
 import type { BuildJob, BuildRun, Credential, PageResult, Repository, Server } from "./types";
 
 export type ListQuery = Record<string, string | number | boolean | undefined | null>;
@@ -15,135 +15,171 @@ function toQuery(params?: ListQuery): Record<string, string | number | boolean> 
 
 // —— Credentials ——
 export async function listCredentials(params?: ListQuery): Promise<PageResult<Credential>> {
-  return apiData(http.get("/credentials", { query: toQuery(params) }));
+  const { body } = await http.get<PageResult<Credential>>("/credentials", {
+    query: toQuery(params),
+  });
+  return body;
 }
 
 export async function createCredential(body: Record<string, unknown>): Promise<Credential> {
-  return apiData(http.post("/credentials", body));
+  const { body: data } = await http.post<Credential>("/credentials", body);
+  return data;
 }
 
 export async function updateCredential(
   id: number,
   body: Record<string, unknown>,
 ): Promise<Credential> {
-  return apiData(http.put(`/credentials/${id}`, body));
+  const { body: data } = await http.put<Credential>(`/credentials/${id}`, body);
+  return data;
 }
 
 export async function deleteCredential(id: number): Promise<void> {
-  await apiData(http.delete(`/credentials/${id}`));
+  await http.delete(`/credentials/${id}`);
 }
 
 // —— Repositories ——
 export async function listRepositories(params?: ListQuery): Promise<PageResult<Repository>> {
-  return apiData(http.get("/repositories", { query: toQuery(params) }));
+  const { body } = await http.get<PageResult<Repository>>("/repositories", {
+    query: toQuery(params),
+  });
+  return body;
 }
 
 export async function getRepository(id: number): Promise<Repository> {
-  return apiData(http.get(`/repositories/${id}`));
+  const { body } = await http.get<Repository>(`/repositories/${id}`);
+  return body;
 }
 
 export async function createRepository(body: Record<string, unknown>): Promise<Repository> {
-  return apiData(http.post("/repositories", body));
+  const { body: data } = await http.post<Repository>("/repositories", body);
+  return data;
 }
 
 export async function updateRepository(
   id: number,
   body: Record<string, unknown>,
 ): Promise<Repository> {
-  return apiData(http.put(`/repositories/${id}`, body));
+  const { body: data } = await http.put<Repository>(`/repositories/${id}`, body);
+  return data;
 }
 
 export async function deleteRepository(id: number): Promise<void> {
-  await apiData(http.delete(`/repositories/${id}`));
+  await http.delete(`/repositories/${id}`);
 }
 
 export async function testRepository(id: number): Promise<{ ok: boolean; branches?: string[] }> {
-  return apiData(http.post(`/repositories/${id}/test`, {}));
+  const { body } = await http.post<{ ok: boolean; branches?: string[] }>(
+    `/repositories/${id}/test`,
+    {},
+  );
+  return body;
 }
 
 export async function getWebhookSecret(
   id: number,
 ): Promise<{ webhook_secret: string; webhook_url: string }> {
-  return apiData(http.get(`/repositories/${id}/webhook-secret`));
+  const { body } = await http.get<{ webhook_secret: string; webhook_url: string }>(
+    `/repositories/${id}/webhook-secret`,
+  );
+  return body;
 }
 
 export async function rotateWebhookSecret(
   id: number,
 ): Promise<{ webhook_secret: string; webhook_url: string }> {
-  return apiData(http.post(`/repositories/${id}/webhook-secret/rotate`, {}));
+  const { body } = await http.post<{ webhook_secret: string; webhook_url: string }>(
+    `/repositories/${id}/webhook-secret/rotate`,
+    {},
+  );
+  return body;
 }
 
 // —— Servers ——
 export async function listServers(params?: ListQuery): Promise<PageResult<Server>> {
-  return apiData(http.get("/servers", { query: toQuery(params) }));
+  const { body } = await http.get<PageResult<Server>>("/servers", { query: toQuery(params) });
+  return body;
 }
 
 export async function createServer(body: Record<string, unknown>): Promise<Server> {
-  return apiData(http.post("/servers", body));
+  const { body: data } = await http.post<Server>("/servers", body);
+  return data;
 }
 
 export async function updateServer(id: number, body: Record<string, unknown>): Promise<Server> {
-  return apiData(http.put(`/servers/${id}`, body));
+  const { body: data } = await http.put<Server>(`/servers/${id}`, body);
+  return data;
 }
 
 export async function deleteServer(id: number): Promise<void> {
-  await apiData(http.delete(`/servers/${id}`));
+  await http.delete(`/servers/${id}`);
 }
 
 export async function testServer(id: number): Promise<{ ok: boolean; output?: string }> {
-  return apiData(http.post(`/servers/${id}/test`, {}));
+  const { body } = await http.post<{ ok: boolean; output?: string }>(`/servers/${id}/test`, {});
+  return body;
 }
 
 // —— Build jobs ——
 export async function listBuildJobs(params?: ListQuery): Promise<PageResult<BuildJob>> {
-  return apiData(http.get("/build-jobs", { query: toQuery(params) }));
+  const { body } = await http.get<PageResult<BuildJob>>("/build-jobs", { query: toQuery(params) });
+  return body;
 }
 
 export async function getBuildJob(id: number): Promise<BuildJob> {
-  return apiData(http.get(`/build-jobs/${id}`));
+  const { body } = await http.get<BuildJob>(`/build-jobs/${id}`);
+  return body;
 }
 
 export async function createBuildJob(body: Record<string, unknown>): Promise<BuildJob> {
-  return apiData(http.post("/build-jobs", body));
+  const { body: data } = await http.post<BuildJob>("/build-jobs", body);
+  return data;
 }
 
 export async function updateBuildJob(id: number, body: Record<string, unknown>): Promise<BuildJob> {
-  return apiData(http.put(`/build-jobs/${id}`, body));
+  const { body: data } = await http.put<BuildJob>(`/build-jobs/${id}`, body);
+  return data;
 }
 
 export async function deleteBuildJob(id: number): Promise<void> {
-  await apiData(http.delete(`/build-jobs/${id}`));
+  await http.delete(`/build-jobs/${id}`);
 }
 
 export async function enqueueBuildRun(
   jobId: number,
   body?: Record<string, unknown>,
 ): Promise<BuildRun> {
-  return apiData(http.post(`/build-jobs/${jobId}/runs`, body ?? {}));
+  const { body: data } = await http.post<BuildRun>(`/build-jobs/${jobId}/runs`, body ?? {});
+  return data;
 }
 
 // —— Build runs ——
 export async function listBuildRuns(params?: ListQuery): Promise<PageResult<BuildRun>> {
-  return apiData(http.get("/build-runs", { query: toQuery(params) }));
+  const { body } = await http.get<PageResult<BuildRun>>("/build-runs", { query: toQuery(params) });
+  return body;
 }
 
 export async function getBuildRun(id: number): Promise<BuildRun> {
-  return apiData(http.get(`/build-runs/${id}`));
+  const { body } = await http.get<BuildRun>(`/build-runs/${id}`);
+  return body;
 }
 
 export async function cancelBuildRun(id: number): Promise<BuildRun> {
-  return apiData(http.post(`/build-runs/${id}/cancel`, {}));
+  const { body } = await http.post<BuildRun>(`/build-runs/${id}/cancel`, {});
+  return body;
 }
 
 export async function retryBuildRun(id: number): Promise<BuildRun> {
-  return apiData(http.post(`/build-runs/${id}/retry`, {}));
+  const { body } = await http.post<BuildRun>(`/build-runs/${id}/retry`, {});
+  return body;
 }
 
 export async function redeployBuildRun(
   id: number,
   body?: { target_ids?: number[] },
 ): Promise<BuildRun> {
-  return apiData(http.post(`/build-runs/${id}/redeploy`, body ?? {}));
+  const { body: data } = await http.post<BuildRun>(`/build-runs/${id}/redeploy`, body ?? {});
+  return data;
 }
 
 /** Artifact download URL (Bearer via browser navigation with token query is not used; open with fetch blob). */

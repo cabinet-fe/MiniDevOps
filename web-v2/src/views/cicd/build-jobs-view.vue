@@ -8,14 +8,13 @@ import {
   deleteBuildJob,
   enqueueBuildRun,
   getBuildJob,
-  listBuildJobs,
   listRepositories,
   listServers,
   updateBuildJob,
 } from "@/api/cicd";
 import type { BuildJob, DeployTarget, Repository, Server } from "@/api/types";
 import FormDialog from "@/components/form-dialog.vue";
-import ResourceList from "@/components/resource-list.vue";
+import ProTable from "@/components/pro-table.vue";
 import { usePermission } from "@/composables/use-permission";
 
 const BRANCH_POLICY_OPTIONS = [
@@ -39,7 +38,7 @@ const ARTIFACT_OPTIONS = [
 const { hasPermission } = usePermission();
 const router = useRouter();
 const listRef = useTemplateRef("list");
-const filters = reactive({ keyword: "", repository_id: undefined as number | undefined });
+const query = reactive({ keyword: "", repository_id: undefined as number | undefined });
 const dialogOpen = ref(false);
 const editing = ref<BuildJob | null>(null);
 const repoOptions = ref<{ label: string; value: number }[]>([]);
@@ -76,14 +75,6 @@ const columns = defineTableColumns([
   { key: "triggers", name: "触发", minWidth: 140 },
   { key: "action", name: "操作", width: 240, minWidth: 180 },
 ]);
-
-async function fetcher(params: { page: number; page_size: number }) {
-  return listBuildJobs({
-    ...params,
-    keyword: filters.keyword,
-    repository_id: filters.repository_id,
-  });
-}
 
 onMounted(async () => {
   try {
@@ -234,7 +225,7 @@ async function save() {
       message.success("已创建");
     }
     dialogOpen.value = false;
-    await listRef.value?.refresh();
+    await listRef.value?.reload();
   } catch (err) {
     message.error(err instanceof Error ? err.message : "保存失败");
   }
@@ -244,7 +235,7 @@ async function remove(row: BuildJob) {
   try {
     await deleteBuildJob(row.id);
     message.success("已删除");
-    await listRef.value?.refresh();
+    await listRef.value?.reload();
   } catch (err) {
     message.error(err instanceof Error ? err.message : "删除失败");
   }
@@ -270,17 +261,24 @@ async function trigger(row: BuildJob) {
       </u-button>
     </div>
 
-    <ResourceList ref="list" :fetcher="fetcher" :columns="columns" :filters="filters">
-      <template #filters="{ reload }">
+    <ProTable
+      ref="list"
+      url="/build-jobs"
+      v-model:query="query"
+      :columns="columns"
+      :auto-query-fields="['repository_id']"
+      pagination
+    >
+      <template #filters="{ search }">
         <u-select
-          v-model="filters.repository_id"
+          v-model="query.repository_id"
           :options="repoOptions"
           placeholder="全部仓库"
           clearable
           style="width: 180px"
         />
-        <u-input v-model="filters.keyword" placeholder="名称" style="width: 160px" />
-        <u-button @click="reload">刷新</u-button>
+        <u-input v-model="query.keyword" placeholder="名称" style="width: 160px" />
+        <u-button type="primary" @click="search">查询</u-button>
       </template>
       <template #column:enabled="{ rowData }">
         {{ (rowData as BuildJob).enabled ? "是" : "否" }}
@@ -312,7 +310,7 @@ async function trigger(row: BuildJob) {
           </u-action>
         </u-action-group>
       </template>
-    </ResourceList>
+    </ProTable>
 
     <FormDialog
       v-model="dialogOpen"

@@ -2,22 +2,15 @@
 import { onMounted, reactive, ref, useTemplateRef } from "vue";
 import { defineTableColumns, message } from "@veltra/desktop";
 
-import {
-  createServer,
-  deleteServer,
-  listCredentials,
-  listServers,
-  testServer,
-  updateServer,
-} from "@/api/cicd";
+import { createServer, deleteServer, listCredentials, testServer, updateServer } from "@/api/cicd";
 import type { Credential, Server } from "@/api/types";
 import FormDialog from "@/components/form-dialog.vue";
-import ResourceList from "@/components/resource-list.vue";
+import ProTable from "@/components/pro-table.vue";
 import { usePermission } from "@/composables/use-permission";
 
 const { hasPermission } = usePermission();
 const listRef = useTemplateRef("list");
-const filters = reactive({ keyword: "" });
+const query = reactive({ keyword: "" });
 const dialogOpen = ref(false);
 const editing = ref<Server | null>(null);
 const credOptions = ref<{ label: string; value: number }[]>([]);
@@ -44,10 +37,6 @@ const columns = defineTableColumns([
   { key: "status", name: "状态", width: 100, minWidth: 80 },
   { key: "action", name: "操作", width: 220, minWidth: 160 },
 ]);
-
-async function fetcher(params: { page: number; page_size: number }) {
-  return listServers({ ...params, keyword: filters.keyword });
-}
 
 onMounted(async () => {
   try {
@@ -116,7 +105,7 @@ async function save() {
       message.success("已创建");
     }
     dialogOpen.value = false;
-    await listRef.value?.refresh();
+    await listRef.value?.reload();
   } catch (err) {
     message.error(err instanceof Error ? err.message : "保存失败");
   }
@@ -126,7 +115,7 @@ async function remove(row: Server) {
   try {
     await deleteServer(row.id);
     message.success("已删除");
-    await listRef.value?.refresh();
+    await listRef.value?.reload();
   } catch (err) {
     message.error(err instanceof Error ? err.message : "删除失败");
   }
@@ -136,7 +125,7 @@ async function onTest(row: Server) {
   try {
     const res = await testServer(row.id);
     message.success(res.output?.slice(0, 120) || "连接成功");
-    await listRef.value?.refresh();
+    await listRef.value?.reload();
   } catch (err) {
     message.error(err instanceof Error ? err.message : "连接失败");
   }
@@ -152,10 +141,10 @@ async function onTest(row: Server) {
       </u-button>
     </div>
 
-    <ResourceList ref="list" :fetcher="fetcher" :columns="columns" :filters="filters">
-      <template #filters="{ reload }">
-        <u-input v-model="filters.keyword" placeholder="名称/主机" style="width: 200px" />
-        <u-button @click="reload">刷新</u-button>
+    <ProTable ref="list" url="/servers" v-model:query="query" :columns="columns" pagination>
+      <template #filters="{ search }">
+        <u-input v-model="query.keyword" placeholder="名称/主机" style="width: 200px" />
+        <u-button type="primary" @click="search">查询</u-button>
       </template>
       <template #column:action="{ rowData }">
         <u-action-group :max="4">
@@ -170,7 +159,7 @@ async function onTest(row: Server) {
           </u-action>
         </u-action-group>
       </template>
-    </ResourceList>
+    </ProTable>
 
     <FormDialog
       v-model="dialogOpen"

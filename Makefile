@@ -10,17 +10,17 @@ LDFLAGS := -s -w -X main.version=$(VERSION)
 dev:
 	@trap 'kill 0' INT TERM; \
 	(cd cmd/server && go run -tags dev . --config ../../config.yaml) & \
-	(cd $(FRONTEND_DIR) && (command -v vp >/dev/null && vp dev || bun run dev)) & \
+	(cd $(FRONTEND_DIR) && vp dev) & \
 	wait
 
 dev-backend:
 	cd cmd/server && go run -tags dev . --config ../../config.yaml
 
 dev-frontend:
-	cd $(FRONTEND_DIR) && (command -v vp >/dev/null && vp dev || bun run dev)
+	cd $(FRONTEND_DIR) && vp dev
 
 build-frontend:
-	cd $(FRONTEND_DIR) && (command -v vp >/dev/null && vp install || bun install) && (command -v vp >/dev/null && vp build || bun run build)
+	cd $(FRONTEND_DIR) && vp install && vp build
 
 build-backend:
 	CGO_ENABLED=0 go build -ldflags "$(LDFLAGS)" -o bedrock ./cmd/server

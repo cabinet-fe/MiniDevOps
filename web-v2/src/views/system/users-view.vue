@@ -2,17 +2,17 @@
 import { computed, onMounted, reactive, ref, useTemplateRef } from "vue";
 import { defineTableColumns, message } from "@veltra/desktop";
 
-import { createUser, deleteUser, listRoles, listUsers, updateUser } from "@/api/system";
+import { createUser, deleteUser, listRoles, updateUser } from "@/api/system";
 import type { Role, User } from "@/api/types";
 import FormDialog from "@/components/form-dialog.vue";
-import ResourceList from "@/components/resource-list.vue";
+import ProTable from "@/components/pro-table.vue";
 import { usePermission } from "@/composables/use-permission";
 import { useAuthStore } from "@/stores/auth";
 
 const { hasPermission } = usePermission();
 const auth = useAuthStore();
 const listRef = useTemplateRef("list");
-const filters = reactive({ keyword: "" });
+const query = reactive({ keyword: "" });
 const dialogOpen = ref(false);
 const editing = ref<User | null>(null);
 const roles = ref<Role[]>([]);
@@ -45,10 +45,6 @@ const columns = defineTableColumns([
   { key: "is_super_admin", name: "超管", width: 80, minWidth: 60 },
   { key: "action", name: "操作", width: 160, minWidth: 120 },
 ]);
-
-async function fetcher(params: { page: number; page_size: number }) {
-  return listUsers(params);
-}
 
 onMounted(async () => {
   try {
@@ -116,7 +112,7 @@ async function save() {
       message.success("已创建");
     }
     dialogOpen.value = false;
-    await listRef.value?.refresh();
+    await listRef.value?.reload();
   } catch (err) {
     message.error(err instanceof Error ? err.message : "保存失败");
   }
@@ -126,7 +122,7 @@ async function remove(row: User) {
   try {
     await deleteUser(row.id);
     message.success("已删除");
-    await listRef.value?.refresh();
+    await listRef.value?.reload();
   } catch (err) {
     message.error(err instanceof Error ? err.message : "删除失败");
   }
@@ -142,10 +138,10 @@ async function remove(row: User) {
       </u-button>
     </div>
 
-    <ResourceList ref="list" :fetcher="fetcher" :columns="columns" :filters="filters">
-      <template #filters="{ reload }">
-        <u-input v-model="filters.keyword" placeholder="用户名（本地提示）" style="width: 200px" />
-        <u-button @click="reload">刷新</u-button>
+    <ProTable ref="list" url="/users" v-model:query="query" :columns="columns" pagination>
+      <template #filters="{ search }">
+        <u-input v-model="query.keyword" placeholder="用户名关键词" style="width: 200px" />
+        <u-button type="primary" @click="search">查询</u-button>
       </template>
       <template #column:role_ids="{ rowData }">
         {{ roleLabels((rowData as User).role_ids) }}
@@ -171,7 +167,7 @@ async function remove(row: User) {
           </u-action>
         </u-action-group>
       </template>
-    </ResourceList>
+    </ProTable>
 
     <FormDialog
       v-model="dialogOpen"

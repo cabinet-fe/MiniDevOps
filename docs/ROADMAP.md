@@ -336,7 +336,7 @@ flowchart TB
 | --- | --- |
 | 分期顺序或 Gate | 本文件 + DESIGN §1 决策表 |
 | 表结构 / 状态机 / API | DESIGN + OpenAPI |
-| 日常开发约定 | AGENTS.md |
+| 日常开发约定 | AGENTS.md（入口）+ `.agents/fe.md` / `.agents/be.md` |
 | 产品需求语义 | PRD.md（重大变更需同步回填本路线图决策摘要） |
 
 **文档结束。**

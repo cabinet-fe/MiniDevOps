@@ -2,17 +2,10 @@
 import { computed, reactive, ref, useTemplateRef } from "vue";
 import { defineTableColumns, message } from "@veltra/desktop";
 
-import {
-  createRole,
-  deleteRole,
-  listMenus,
-  listRoles,
-  setRolePermissions,
-  updateRole,
-} from "@/api/system";
+import { createRole, deleteRole, listMenus, setRolePermissions, updateRole } from "@/api/system";
 import type { RbacResource, Role } from "@/api/types";
 import FormDialog from "@/components/form-dialog.vue";
-import ResourceList from "@/components/resource-list.vue";
+import ProTable from "@/components/pro-table.vue";
 import { usePermission } from "@/composables/use-permission";
 import { useAuthStore } from "@/stores/auth";
 
@@ -44,10 +37,6 @@ function flattenMenus(nodes: RbacResource[], out: RbacResource[] = []): RbacReso
     if (n.children?.length) flattenMenus(n.children, out);
   }
   return out;
-}
-
-async function fetcher(params: { page: number; page_size: number }) {
-  return listRoles(params);
 }
 
 function openCreate() {
@@ -97,7 +86,7 @@ async function save() {
       message.success("已创建");
     }
     dialogOpen.value = false;
-    await listRef.value?.refresh();
+    await listRef.value?.reload();
   } catch (err) {
     message.error(err instanceof Error ? err.message : "保存失败");
   }
@@ -109,7 +98,7 @@ async function savePerms() {
     await setRolePermissions(editing.value.id, [...checked.value]);
     message.success("权限已保存");
     permOpen.value = false;
-    await listRef.value?.refresh();
+    await listRef.value?.reload();
     // Role permission changes affect current session menus/buttons.
     await auth.refreshMe(true);
   } catch (err) {
@@ -121,7 +110,7 @@ async function remove(row: Role) {
   try {
     await deleteRole(row.id);
     message.success("已删除");
-    await listRef.value?.refresh();
+    await listRef.value?.reload();
   } catch (err) {
     message.error(err instanceof Error ? err.message : "删除失败");
   }
@@ -137,7 +126,7 @@ async function remove(row: Role) {
       </u-button>
     </div>
 
-    <ResourceList ref="list" :fetcher="fetcher" :columns="columns">
+    <ProTable ref="list" url="/roles" :columns="columns" pagination>
       <template #column:action="{ rowData }">
         <u-action-group :max="4">
           <u-action v-if="hasPermission('system.roles:update')" @run="openEdit(rowData as Role)">
@@ -156,7 +145,7 @@ async function remove(row: Role) {
           </u-action>
         </u-action-group>
       </template>
-    </ResourceList>
+    </ProTable>
 
     <FormDialog
       v-model="dialogOpen"

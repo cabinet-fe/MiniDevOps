@@ -1,15 +1,13 @@
 <script setup lang="ts">
-import { reactive, useTemplateRef } from "vue";
+import { reactive } from "vue";
 import { useRouter } from "vue-router";
 import { defineTableColumns } from "@veltra/desktop";
 
-import { listBuildRuns } from "@/api/cicd";
 import type { BuildRun } from "@/api/types";
-import ResourceList from "@/components/resource-list.vue";
+import ProTable from "@/components/pro-table.vue";
 
 const router = useRouter();
-const listRef = useTemplateRef("list");
-const filters = reactive({ build_job_id: undefined as number | undefined, status: "" });
+const query = reactive({ build_job_id: "", status: "" });
 
 const columns = defineTableColumns([
   { key: "id", name: "ID", width: 80, minWidth: 60 },
@@ -20,17 +18,9 @@ const columns = defineTableColumns([
   { key: "distribution_summary", name: "分发", width: 120, minWidth: 90 },
   { key: "branch", name: "分支", minWidth: 100 },
   { key: "trigger_type", name: "触发", width: 100, minWidth: 80 },
-  { key: "created_at", name: "创建时间", minWidth: 160 },
+  { key: "created_at", name: "创建时间", minWidth: 160, sortable: true },
   { key: "action", name: "操作", width: 100, minWidth: 80 },
 ]);
-
-async function fetcher(params: { page: number; page_size: number }) {
-  return listBuildRuns({
-    ...params,
-    build_job_id: filters.build_job_id,
-    status: filters.status || undefined,
-  });
-}
 
 function openDetail(row: BuildRun) {
   void router.push({ name: "cicd-build-run-detail", params: { id: String(row.id) } });
@@ -43,16 +33,22 @@ function openDetail(row: BuildRun) {
       <h2>构建执行</h2>
     </div>
 
-    <ResourceList ref="list" :fetcher="fetcher" :columns="columns" :filters="filters">
-      <template #filters="{ reload }">
+    <ProTable
+      url="/build-runs"
+      v-model:query="query"
+      :columns="columns"
+      :auto-query-fields="['status']"
+      pagination
+    >
+      <template #filters="{ search }">
         <u-input
-          v-model.number="filters.build_job_id"
+          v-model="query.build_job_id"
           type="number"
           placeholder="任务 ID"
           style="width: 120px"
         />
         <u-select
-          v-model="filters.status"
+          v-model="query.status"
           clearable
           placeholder="状态"
           style="width: 140px"
@@ -65,12 +61,12 @@ function openDetail(row: BuildRun) {
             { label: 'interrupted', value: 'interrupted' },
           ]"
         />
-        <u-button @click="reload">刷新</u-button>
+        <u-button type="primary" @click="search">查询</u-button>
       </template>
       <template #column:action="{ rowData }">
         <u-action @run="openDetail(rowData as BuildRun)">详情</u-action>
       </template>
-    </ResourceList>
+    </ProTable>
   </div>
 </template>
 

@@ -7,19 +7,18 @@ import {
   deleteRepository,
   getWebhookSecret,
   listCredentials,
-  listRepositories,
   rotateWebhookSecret,
   testRepository,
   updateRepository,
 } from "@/api/cicd";
 import type { Credential, Repository } from "@/api/types";
 import FormDialog from "@/components/form-dialog.vue";
-import ResourceList from "@/components/resource-list.vue";
+import ProTable from "@/components/pro-table.vue";
 import { usePermission } from "@/composables/use-permission";
 
 const { hasPermission } = usePermission();
 const listRef = useTemplateRef("list");
-const filters = reactive({ keyword: "" });
+const query = reactive({ keyword: "" });
 const dialogOpen = ref(false);
 const secretOpen = ref(false);
 const editing = ref<Repository | null>(null);
@@ -43,10 +42,6 @@ const columns = defineTableColumns([
   { key: "auth_type", name: "认证", width: 100, minWidth: 80 },
   { key: "action", name: "操作", width: 260, minWidth: 200 },
 ]);
-
-async function fetcher(params: { page: number; page_size: number }) {
-  return listRepositories({ ...params, keyword: filters.keyword });
-}
 
 onMounted(async () => {
   if (hasPermission("cicd.credentials:view") || hasPermission("cicd.credentials:use")) {
@@ -112,7 +107,7 @@ async function save() {
       message.success("已创建");
     }
     dialogOpen.value = false;
-    await listRef.value?.refresh();
+    await listRef.value?.reload();
   } catch (err) {
     message.error(err instanceof Error ? err.message : "保存失败");
   }
@@ -122,7 +117,7 @@ async function remove(row: Repository) {
   try {
     await deleteRepository(row.id);
     message.success("已删除");
-    await listRef.value?.refresh();
+    await listRef.value?.reload();
   } catch (err) {
     message.error(err instanceof Error ? err.message : "删除失败");
   }
@@ -171,10 +166,10 @@ async function rotateSecret() {
       </u-button>
     </div>
 
-    <ResourceList ref="list" :fetcher="fetcher" :columns="columns" :filters="filters">
-      <template #filters="{ reload }">
-        <u-input v-model="filters.keyword" placeholder="名称/URL" style="width: 200px" />
-        <u-button @click="reload">刷新</u-button>
+    <ProTable ref="list" url="/repositories" v-model:query="query" :columns="columns" pagination>
+      <template #filters="{ search }">
+        <u-input v-model="query.keyword" placeholder="名称/URL" style="width: 200px" />
+        <u-button type="primary" @click="search">查询</u-button>
       </template>
       <template #column:action="{ rowData }">
         <u-action-group :max="5">
@@ -204,7 +199,7 @@ async function rotateSecret() {
           </u-action>
         </u-action-group>
       </template>
-    </ResourceList>
+    </ProTable>
 
     <FormDialog
       v-model="dialogOpen"

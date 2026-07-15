@@ -1,18 +1,31 @@
 import { fileURLToPath, URL } from "node:url";
 
-import { defineConfig } from "vite";
+import { defineConfig, lazyPlugins } from "vite-plus";
 import vue from "@vitejs/plugin-vue";
 import Components from "unplugin-vue-components/vite";
 import { VeltraDesktopUIResolver } from "@veltra/vite";
 import { NodePackageImporter } from "sass-embedded";
 
 export default defineConfig({
-  plugins: [
+  fmt: {
+    ignorePatterns: ["components.d.ts"],
+  },
+  lint: {
+    jsPlugins: [{ name: "vite-plus", specifier: "vite-plus/oxlint-plugin" }],
+    rules: {
+      "vite-plus/prefer-vite-plus-imports": "error",
+    },
+    options: {
+      typeAware: true,
+      typeCheck: true,
+    },
+  },
+  plugins: lazyPlugins(() => [
     vue(),
     Components({
       resolvers: [VeltraDesktopUIResolver()],
     }),
-  ],
+  ]),
   resolve: {
     alias: {
       "@": fileURLToPath(new URL("./src", import.meta.url)),

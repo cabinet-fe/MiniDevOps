@@ -2,10 +2,9 @@
 import { reactive } from "vue";
 import { defineTableColumns } from "@veltra/desktop";
 
-import { listOperationLogs } from "@/api/system";
-import ResourceList from "@/components/resource-list.vue";
+import ProTable from "@/components/pro-table.vue";
 
-const filters = reactive({
+const query = reactive({
   action: "",
   resource_type: "",
 });
@@ -17,12 +16,8 @@ const columns = defineTableColumns([
   { key: "resource_type", name: "资源", minWidth: 160 },
   { key: "resource_id", name: "资源ID", width: 100, minWidth: 80 },
   { key: "ip_address", name: "IP", width: 140, minWidth: 100 },
-  { key: "created_at", name: "时间", minWidth: 180 },
+  { key: "created_at", name: "时间", minWidth: 180, sortable: true },
 ]);
-
-async function fetcher(params: { page: number; page_size: number }) {
-  return listOperationLogs({ ...params, ...filters });
-}
 </script>
 
 <template>
@@ -31,13 +26,13 @@ async function fetcher(params: { page: number; page_size: number }) {
       <h2>操作日志</h2>
     </div>
 
-    <ResourceList :fetcher="fetcher" :columns="columns" :filters="filters">
-      <template #filters="{ reload }">
-        <u-input v-model="filters.action" placeholder="动作 (POST/PUT…)" style="width: 160px" />
-        <u-input v-model="filters.resource_type" placeholder="资源路径" style="width: 220px" />
-        <u-button @click="reload">查询</u-button>
+    <ProTable url="/operation-logs" v-model:query="query" :columns="columns" pagination>
+      <template #filters="{ search }">
+        <u-input v-model="query.action" placeholder="动作 (POST/PUT…)" style="width: 160px" />
+        <u-input v-model="query.resource_type" placeholder="资源路径" style="width: 220px" />
+        <u-button type="primary" @click="search">查询</u-button>
       </template>
-    </ResourceList>
+    </ProTable>
   </div>
 </template>
 

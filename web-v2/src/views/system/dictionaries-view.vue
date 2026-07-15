@@ -2,16 +2,10 @@
 import { reactive, ref, useTemplateRef } from "vue";
 import { defineTableColumns, message } from "@veltra/desktop";
 
-import {
-  createDictionary,
-  deleteDictionary,
-  getDictionary,
-  listDictionaries,
-  updateDictionary,
-} from "@/api/system";
+import { createDictionary, deleteDictionary, getDictionary, updateDictionary } from "@/api/system";
 import type { DictItem, Dictionary } from "@/api/types";
 import FormDialog from "@/components/form-dialog.vue";
-import ResourceList from "@/components/resource-list.vue";
+import ProTable from "@/components/pro-table.vue";
 import { usePermission } from "@/composables/use-permission";
 
 const { hasPermission } = usePermission();
@@ -32,10 +26,6 @@ const columns = defineTableColumns([
   { key: "description", name: "描述", minWidth: 160 },
   { key: "action", name: "操作", width: 160, minWidth: 120 },
 ]);
-
-async function fetcher(params: { page: number; page_size: number }) {
-  return listDictionaries(params);
-}
 
 function openCreate() {
   editing.value = null;
@@ -105,7 +95,7 @@ async function save() {
       message.success("已创建");
     }
     dialogOpen.value = false;
-    await listRef.value?.refresh();
+    await listRef.value?.reload();
   } catch (err) {
     message.error(err instanceof Error ? err.message : "保存失败");
   }
@@ -115,7 +105,7 @@ async function remove(row: Dictionary) {
   try {
     await deleteDictionary(row.id);
     message.success("已删除");
-    await listRef.value?.refresh();
+    await listRef.value?.reload();
   } catch (err) {
     message.error(err instanceof Error ? err.message : "删除失败");
   }
@@ -135,7 +125,7 @@ async function remove(row: Dictionary) {
       </u-button>
     </div>
 
-    <ResourceList ref="list" :fetcher="fetcher" :columns="columns">
+    <ProTable ref="list" url="/dictionaries" :columns="columns" pagination>
       <template #column:action="{ rowData }">
         <u-action-group :max="3">
           <u-action
@@ -154,7 +144,7 @@ async function remove(row: Dictionary) {
           </u-action>
         </u-action-group>
       </template>
-    </ResourceList>
+    </ProTable>
 
     <FormDialog
       v-model="dialogOpen"

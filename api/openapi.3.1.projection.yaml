@@ -488,66 +488,14 @@ paths:
                 $ref: "#/components/schemas/SuccessEnvelope"
         "400":
           $ref: "#/components/responses/Error"
-  /menus:
-    get:
-      tags: [Menus]
-      summary: List menu resource tree
-      operationId: menusList
-      responses:
-        "200":
-          description: OK
-          content:
-            application/json:
-              schema:
-                allOf:
-                  - $ref: "#/components/schemas/SuccessEnvelope"
-                  - type: object
-                    properties:
-                      data:
-                        type: object
-                        properties:
-                          items:
-                            type: array
-                            items:
-                              $ref: "#/components/schemas/RbacResource"
-        "403":
-          $ref: "#/components/responses/Error"
-  /menus/{id}:
+  /rbac/resources/{id}/icon:
     parameters:
       - $ref: "#/components/parameters/ID"
     put:
-      tags: [Menus]
-      summary: Update menu metadata
-      operationId: menusUpdate
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/RbacResourceUpdateRequest"
-      responses:
-        "200":
-          description: OK
-          content:
-            application/json:
-              schema:
-                allOf:
-                  - $ref: "#/components/schemas/SuccessEnvelope"
-                  - type: object
-                    properties:
-                      data:
-                        $ref: "#/components/schemas/RbacResource"
-        "400":
-          $ref: "#/components/responses/Error"
-        "403":
-          $ref: "#/components/responses/Error"
-  /menus/{id}/icon:
-    parameters:
-      - $ref: "#/components/parameters/ID"
-    put:
-      tags: [Menus]
+      tags: [RBAC]
       summary: Upload/replace level-1 menu icon (raw ≤32KB)
-      operationId: menusUpdateIcon
+      description: Only top-level menu-type resources may set an icon. Requires system.resources:update.
+      operationId: rbacResourcesUpdateIcon
       requestBody:
         required: true
         content:
@@ -576,6 +524,31 @@ paths:
                         $ref: "#/components/schemas/RbacResource"
         "400":
           $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+  /menus:
+    get:
+      tags: [Menus]
+      summary: List menu resource tree
+      description: Menu-type nodes only; used by the role permission editor. Requires system.roles:update.
+      operationId: menusList
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          items:
+                            type: array
+                            items:
+                              $ref: "#/components/schemas/RbacResource"
         "403":
           $ref: "#/components/responses/Error"
   /dictionaries:

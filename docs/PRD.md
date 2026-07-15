@@ -208,7 +208,7 @@ level1.level2.level3:action
 | `ai.skills:download`           | 下载 Skill 包                               |
 | `system.roles:update`          | 编辑角色权限                                |
 | `system.resources:view`        | 查看权限资源目录                            |
-| `system.menus:update`          | 维护菜单（含上传一级菜单图标）              |
+| `system.resources:update`      | 维护权限资源（含一级菜单图标上传）          |
 
 #### 4.2.2 菜单资源（左侧导航）
 
@@ -278,7 +278,7 @@ level1.level2.level3:action
 | `cicd`        | CI/CD    | `cicd.repositories`、`cicd.build_jobs`、`cicd.build_runs`、`cicd.servers`、`cicd.credentials`                      |
 | `project`     | 项目管理 | `project.projects`、`project.requirements`、`project.docs`                                                         |
 | `ai`          | AI       | `ai.clis`、`ai.agents`、`ai.skills`                                                                                |
-| `system`      | 系统管理 | `system.users`、`system.roles`、`system.resources`、`system.menus`、`system.dictionaries`、`system.operation_logs` |
+| `system`      | 系统管理 | `system.users`、`system.roles`、`system.resources`、`system.dictionaries`、`system.operation_logs` |
 
 进入页所需权限示例：叶子菜单对应 `{path}:view`；一级分组可见性见 §4.2.2。
 
@@ -645,9 +645,8 @@ level1.level2.level3:action
 
 维护 RBAC 权限资源目录（**含左侧菜单资源**），编码为 `{path}:action`（path 为 `level1[.level2[…]]`），供角色授权勾选。
 
-- 系统预置资源与预置菜单；支持维护菜单标题、排序、路由、启用状态。
-- **一级菜单必须支持上传/更换图标**：图片转 Base64 后入库；**单张原始大小 ≤ 32KB**，超限拒绝。
-- 可单独提供菜单管理能力（`system.menus:*`），或在资源管理中编辑 `type=menu` 的节点；二者数据一致。
+- 系统预置资源与预置菜单；在权限资源中维护 `type=menu` 节点的标题、排序、路由、启用状态与一级图标。
+- **一级菜单必须支持上传/更换图标**：图片转 Base64 后入库；**单张原始大小 ≤ 32KB**，超限拒绝（`PUT /rbac/resources/:id/icon`）。
 - 资源管理页自身权限示例：`system.resources:view` / `system.resources:update`。
 - 「资源管理」指权限/菜单资源目录，**不是**磁盘工作区管理。
 
@@ -774,9 +773,9 @@ flowchart TB
 | GET  | `/auth/me`        | 当前用户、权限摘要、**按角色裁剪的菜单树**      |
 | CRUD | `/users`          | 用户管理                                        |
 | CRUD | `/roles`          | 角色                                            |
-| GET  | `/rbac/resources` | 资源树（含菜单）                                |
-| CRUD | `/menus`          | 菜单维护（含一级菜单图标；图标为 Base64 字段）  |
-| PUT  | `/menus/:id/icon` | 设置一级菜单图标（Body 含 Base64；校验 ≤ 32KB） |
+| GET  | `/rbac/resources` | 资源树（含菜单元数据）                          |
+| PUT  | `/rbac/resources/:id/icon` | 设置一级菜单图标（Base64；≤ 32KB）       |
+| GET  | `/menus`          | 菜单型资源树（角色授权勾选用）                  |
 | CRUD | `/dictionaries`   | 字典                                            |
 | GET  | `/operation-logs` | 操作日志                                        |
 | CRUD | `/tokens`         | 个人访问令牌                                    |

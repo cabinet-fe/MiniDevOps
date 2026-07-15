@@ -564,7 +564,7 @@ web-v2/src/
 | PRD.md | 产品需求与验收意图 |
 | ROADMAP.md | 分期、依赖、Gate |
 | DESIGN.md | 技术真源（本文） |
-| AGENTS.md | 代理/开发者日常约束（目标态） |
+| AGENTS.md | 命令、目录与读写指引；FE/BE 约定见 `.agents/fe.md` / `.agents/be.md` |
 | api/openapi.yaml | API 真源 |
 
 冲突时：实现与 OpenAPI/DESIGN 对齐；需求争议回退 PRD，并开变更同步三份文档。

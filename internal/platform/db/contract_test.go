@@ -23,7 +23,7 @@ import (
 	"gorm.io/gorm/logger"
 )
 
-// Three-driver migration + thin CI/CD CRUD contract (AGENTS.md).
+// Three-driver migration + thin CI/CD CRUD contract (see .agents/be.md).
 //
 //	go test ./internal/platform/db/... -tags=contract
 //

@@ -4,11 +4,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "run-p type-check \"build-only {@}\" --",
-    "preview": "vite preview",
-    "build-only": "vite build",
-    "type-check": "vue-tsc --build"
+    "dev": "vp dev",
+    "build": "vp build",
+    "preview": "vp preview",
+    "check": "vp check"
   },
   "dependencies": {
     "@cat-kit/core": "^1.1.8",
@@ -24,18 +23,25 @@
   },
   "devDependencies": {
     "@cat-kit/tsconfig": "^2.0.1",
-    "@tsconfig/node24": "^24.0.4",
     "@types/node": "^24.13.2",
     "@veltra/vite": "^1.2.31",
     "@vitejs/plugin-vue": "^6.0.7",
-    "@vue/tsconfig": "^0.9.1",
-    "npm-run-all2": "^9.0.2",
     "sass-embedded": "^1.100.0",
     "typescript": "~6.0.0",
     "unplugin-vue-components": "^32.1.0",
-    "vite": "^8.0.16",
-    "vite-plugin-vue-devtools": "^8.1.2",
-    "vue-tsc": "^3.3.5"
+    "vite": "npm:@voidzero-dev/vite-plus-core@0.2.4",
+    "vite-plus": "0.2.4"
+  },
+  "overrides": {
+    "vite": "npm:@voidzero-dev/vite-plus-core@0.2.4",
+    "vitest": "4.1.9"
+  },
+  "devEngines": {
+    "packageManager": {
+      "name": "bun",
+      "version": "1.3.14",
+      "onFail": "download"
+    }
   },
   "engines": {
     "node": "^22.18.0 || >=24.12.0"
