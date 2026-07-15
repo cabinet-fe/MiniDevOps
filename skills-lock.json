@@ -6,7 +6,7 @@
       "ref": "main",
       "sourceType": "github",
       "skillPath": "skills/cat-kit/SKILL.md",
-      "computedHash": "f4160025b7670b15366ab3da7dd4362cd24690b84a90a4ee27f72ab6b1a87943"
+      "computedHash": "23ef4e1e5ac2dd8072ffe34c81188191456715c32c7430fc6c98d1bb30a67d3e"
     },
     "git-commit": {
       "source": "cabinet-fe/prompt-engineering",
