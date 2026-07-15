@@ -14,14 +14,28 @@ import (
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 
-	"bedrock/internal/config"
+	authhandler "bedrock/internal/auth/handler"
+	authmiddleware "bedrock/internal/auth/middleware"
+	authrepo "bedrock/internal/auth/repository"
+	authservice "bedrock/internal/auth/service"
+	cicdhandler "bedrock/internal/cicd/handler"
+	cicdrepo "bedrock/internal/cicd/repository"
+	cicdservice "bedrock/internal/cicd/service"
 	"bedrock/internal/engine"
-	"bedrock/internal/handler"
 	"bedrock/internal/middleware"
-	"bedrock/internal/model"
 	"bedrock/internal/pkg"
-	"bedrock/internal/repository"
-	"bedrock/internal/service"
+	"bedrock/internal/platform/config"
+	"bedrock/internal/platform/db"
+	"bedrock/internal/platform/migration"
+	_ "bedrock/internal/platform/migration/migrations"
+	"bedrock/internal/platform/seed"
+	rbachandler "bedrock/internal/rbac/handler"
+	rbacrepo "bedrock/internal/rbac/repository"
+	rbacservice "bedrock/internal/rbac/service"
+	systemhandler "bedrock/internal/system/handler"
+	systemmw "bedrock/internal/system/middleware"
+	systemrepo "bedrock/internal/system/repository"
+	systemservice "bedrock/internal/system/service"
 	"bedrock/internal/ws"
 )
 
@@ -36,7 +50,6 @@ func main() {
 		os.Exit(0)
 	}
 
-	// Load config
 	cfg, err := config.Load(*configPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to load config: %v\n", err)
@@ -50,290 +63,163 @@ func main() {
 		logger, _ = zap.NewDevelopment()
 	}
 	defer logger.Sync()
-	logger.Info("Bedrock server", zap.String("version", version))
+	logger.Info("Bedrock server",
+		zap.String("version", version),
+		zap.String("db_driver", cfg.Database.Driver),
+	)
+	logger.Info("database driver change does not migrate data; 2.0 supports fresh install only")
+	logger.Info("build scripts execute as the same OS user as Bedrock (no sandbox isolation)")
 
-	// Init encryption
 	if err := pkg.InitEncryption(cfg.Encryption.Key); err != nil {
 		logger.Fatal("Failed to init encryption", zap.Error(err))
 	}
 
-	// Init database
-	db, err := model.InitDB()
+	gdb, err := db.Open(&cfg.Database)
 	if err != nil {
-		logger.Fatal("Failed to init database", zap.Error(err))
+		logger.Fatal("Failed to open database", zap.Error(err))
 	}
 
-	// Init repositories
-	userRepo := repository.NewUserRepository(db)
-	serverRepo := repository.NewServerRepository(db)
-	projectRepo := repository.NewProjectRepository(db)
-	credentialRepo := repository.NewCredentialRepository(db)
-	envRepo := repository.NewEnvironmentRepository(db)
-	envVarRepo := repository.NewEnvVarRepository(db)
-	varGroupRepo := repository.NewVarGroupRepository(db)
-	buildRepo := repository.NewBuildRepository(db)
-	buildDistRepo := repository.NewBuildDistributionRepository(db)
-	distRepo := repository.NewDistributionRepository(db)
-	notifRepo := repository.NewNotificationRepository(db)
-	auditRepo := repository.NewAuditRepository(db)
-	dictRepo := repository.NewDictRepository(db)
-	agentRepo := repository.NewAgentRepository(db)
+	if err := migration.Up(context.Background(), gdb, migration.Driver(cfg.Database.Driver)); err != nil {
+		logger.Fatal("Failed to apply migrations", zap.Error(err))
+	}
+	if err := seed.EnsureSuperAdmin(gdb, cfg.Admin); err != nil {
+		logger.Fatal("Failed to seed super-admin", zap.Error(err))
+	}
+	if err := seed.EnsureRBACResources(gdb); err != nil {
+		logger.Fatal("Failed to seed RBAC resources", zap.Error(err))
+	}
 
-	// Init services
-	authService, err := service.NewAuthService(cfg)
+	userRepo := authrepo.NewUserRepository(gdb)
+	roleRepo := rbacrepo.NewRoleRepository(gdb)
+	resourceRepo := rbacrepo.NewResourceRepository(gdb)
+	dictRepo := systemrepo.NewDictionaryRepository(gdb)
+	logRepo := systemrepo.NewOperationLogRepository(gdb)
+
+	permSvc := rbacservice.NewPermissionService(roleRepo, resourceRepo)
+	roleSvc := rbacservice.NewRoleService(roleRepo)
+	resourceSvc := rbacservice.NewResourceService(resourceRepo)
+	userSvc := systemservice.NewUserService(userRepo, roleRepo)
+	dictSvc := systemservice.NewDictionaryService(dictRepo)
+	auditSvc := systemservice.NewAuditService(logRepo)
+
+	authSvc, err := authservice.NewAuthService(cfg, userRepo, permSvc)
 	if err != nil {
 		logger.Fatal("Failed to init auth service", zap.Error(err))
 	}
-	userService := service.NewUserService(userRepo)
-	serverService := service.NewServerService(serverRepo)
-	credentialService := service.NewCredentialService(credentialRepo, projectRepo, userRepo)
-	projectService := service.NewProjectService(projectRepo, credentialRepo, envRepo, buildRepo, envVarRepo, varGroupRepo, distRepo, agentRepo)
-	buildService := service.NewBuildService(buildRepo, projectRepo, envRepo, userRepo, distRepo, buildDistRepo)
-	if n, err := buildRepo.MarkInterruptedBuilds("服务异常中断，构建未正常结束"); err != nil {
-		logger.Error("reconcile interrupted builds", zap.Error(err))
-	} else if n > 0 {
-		logger.Info("marked interrupted builds as failed", zap.Int64("count", n))
-	}
-	notifService := service.NewNotificationService(notifRepo)
-	auditService := service.NewAuditService(auditRepo)
-	dictService := service.NewDictService(dictRepo)
-	processService := service.NewProcessService()
-	agentService := service.NewAgentService(agentRepo, projectRepo)
-	agentProxyService := service.NewAgentProxyService()
 
-	// Init WebSocket hub
+	authHandler := authhandler.NewAuthHandler(authSvc)
+	userHandler := systemhandler.NewUserHandler(userSvc, permSvc)
+	roleHandler := rbachandler.NewRoleHandler(roleSvc, permSvc)
+	resourceHandler := rbachandler.NewResourceHandler(resourceSvc, permSvc)
+	dictHandler := systemhandler.NewDictionaryHandler(dictSvc, permSvc)
+	logHandler := systemhandler.NewOperationLogHandler(auditSvc, permSvc)
+
+	credRepo := cicdrepo.NewCredentialRepository(gdb)
+	repoRepo := cicdrepo.NewRepositoryRepository(gdb)
+	serverRepo := cicdrepo.NewServerRepository(gdb)
+	jobRepo := cicdrepo.NewBuildJobRepository(gdb)
+	runRepo := cicdrepo.NewBuildRunRepository(gdb)
+	deliveryRepo := cicdrepo.NewWebhookDeliveryRepository(gdb)
+
+	credSvc := cicdservice.NewCredentialService(credRepo)
+	repoSvc := cicdservice.NewRepositoryService(repoRepo, credSvc)
+	serverSvc := cicdservice.NewServerService(serverRepo, credSvc)
+	jobSvc := cicdservice.NewBuildJobService(jobRepo, repoRepo)
+	runSvc := cicdservice.NewBuildRunService(runRepo, jobRepo)
+	webhookSvc := cicdservice.NewWebhookService(repoRepo, jobRepo, deliveryRepo, runSvc)
+
 	hub := ws.NewHub()
-
-	// Init build pipeline and scheduler
 	pipeline := engine.NewPipeline(
-		buildRepo, buildDistRepo, projectRepo, credentialRepo, envRepo, distRepo, envVarRepo, varGroupRepo, agentRepo, serverRepo, notifRepo,
+		runRepo, jobRepo, repoRepo, serverRepo,
+		cicdservice.NewCredentialSecretResolver(credSvc),
 		hub, logger,
 		cfg.Build.WorkspaceDir, cfg.Build.ArtifactDir, cfg.Build.LogDir, cfg.Build.CacheDir,
 	)
-	scheduler := engine.NewScheduler(cfg.Build.MaxConcurrent, pipeline, logger)
-	scheduler.Start()
+	sched := engine.NewScheduler(cfg.Build.MaxConcurrent, pipeline, runRepo, logger)
+	runSvc.SetScheduler(sched)
+	cronSched := engine.NewCronScheduler(jobRepo, runRepo, runSvc, sched, logger)
+	jobSvc.SetCron(cronSched)
 
-	// Init cron scheduler for timed builds
-	cronScheduler := engine.NewCronScheduler(envRepo, buildRepo, scheduler, logger)
-	if err := cronScheduler.Start(); err != nil {
-		logger.Error("Failed to start cron scheduler", zap.Error(err))
-	}
+	credHandler := cicdhandler.NewCredentialHandler(credSvc, permSvc)
+	repoHandler := cicdhandler.NewRepositoryHandler(repoSvc, permSvc)
+	serverHandler := cicdhandler.NewServerHandler(serverSvc, permSvc)
+	jobHandler := cicdhandler.NewBuildJobHandler(jobSvc, runSvc, permSvc)
+	runHandler := cicdhandler.NewBuildRunHandler(runSvc, permSvc)
+	webhookHandler := cicdhandler.NewWebhookHandler(webhookSvc)
 
-	// Init handlers
-	authHandler := handler.NewAuthHandler(userService, authService)
-	userHandler := handler.NewUserHandler(userService)
-	serverHandler := handler.NewServerHandler(serverService)
-	credentialHandler := handler.NewCredentialHandler(credentialService)
-	projectHandler := handler.NewProjectHandler(projectService, credentialService, cronScheduler)
-	corsCfg := middleware.DefaultCORSConfig()
-
-	buildHandler := handler.NewBuildHandler(buildService, processService, projectRepo, scheduler)
-	webhookHandler := handler.NewWebhookHandler(projectService, buildService, envRepo, scheduler)
-	notifHandler := handler.NewNotificationHandler(notifService)
-	systemHandler := handler.NewSystemHandler(auditService, processService)
-	dictHandler := handler.NewDictHandler(dictService)
-	agentHandler := handler.NewAgentHandler(agentService)
-	agentProxyHandler := handler.NewAgentProxyHandler(agentProxyService)
-	wsHandler := handler.NewWSHandler(authService, buildRepo, projectRepo, hub, corsCfg)
-
-	// Setup Gin
 	r := gin.Default()
-	r.Use(gzip.Gzip(gzip.DefaultCompression, gzip.WithExcludedPaths([]string{
-		"/api/v1/system/backup", // handler already writes gzip; avoid double-compression
-	})))
+	r.Use(gzip.Gzip(gzip.DefaultCompression))
+	corsCfg := middleware.DefaultCORSConfig()
 	r.Use(middleware.CORSGin(corsCfg))
 
-	// Audit middleware (must be before route registration)
-	r.Use(middleware.Audit(db))
-
-	// API routes
 	api := r.Group("/api/v1")
-	{
-		// Auth (public)
-		api.POST("/auth/login", authHandler.Login)
+	api.Use(systemmw.AuditWrite(auditSvc))
+	authMW := authmiddleware.Auth(authSvc)
+	authHandler.RegisterRoutes(api, authMW)
+	userHandler.RegisterRoutes(api, authMW)
+	roleHandler.RegisterRoutes(api, authMW)
+	resourceHandler.RegisterRoutes(api, authMW)
+	dictHandler.RegisterRoutes(api, authMW)
+	logHandler.RegisterRoutes(api, authMW)
+	credHandler.RegisterRoutes(api, authMW)
+	repoHandler.RegisterRoutes(api, authMW)
+	serverHandler.RegisterRoutes(api, authMW)
+	jobHandler.RegisterRoutes(api, authMW)
+	runHandler.RegisterRoutes(api, authMW)
+	webhookHandler.RegisterRoutes(api)
 
-		// Auth (authenticated)
-		auth := api.Group("", middleware.Auth(authService))
-		{
-			auth.POST("/auth/logout", authHandler.Logout)
-			auth.POST("/auth/refresh", authHandler.Refresh)
-			auth.GET("/auth/me", authHandler.Me)
-			auth.PUT("/auth/profile", authHandler.UpdateProfile)
+	api.GET("/health", func(c *gin.Context) {
+		pkg.Success(c, gin.H{
+			"status":  "ok",
+			"version": version,
+			"driver":  cfg.Database.Driver,
+		})
+	})
 
-			// Users (admin only)
-			users := auth.Group("/users", middleware.RequireRole("admin"))
-			{
-				users.GET("", userHandler.List)
-				users.POST("", userHandler.Create)
-				users.GET("/:id", userHandler.GetByID)
-				users.PUT("/:id", userHandler.Update)
-				users.DELETE("/:id", userHandler.Delete)
-			}
-
-			// Servers
-			auth.GET("/servers", serverHandler.List)
-			servers := auth.Group("/servers", middleware.RequireRole("ops", "admin"))
-			{
-				servers.POST("", serverHandler.Create)
-				servers.GET("/:id", serverHandler.GetByID)
-				servers.PUT("/:id", serverHandler.Update)
-				servers.DELETE("/:id", serverHandler.Delete)
-				servers.POST("/:id/test", serverHandler.TestConnection)
-			}
-
-			// Projects
-			auth.GET("/credentials", credentialHandler.List)
-			auth.POST("/credentials", credentialHandler.Create)
-			auth.GET("/credentials/select", credentialHandler.ListForSelect)
-			auth.GET("/credentials/:id", credentialHandler.GetByID)
-			auth.PUT("/credentials/:id", credentialHandler.Update)
-			auth.DELETE("/credentials/:id", credentialHandler.Delete)
-
-			auth.GET("/environments", projectHandler.ListEnvironmentsGlobal)
-
-			// Projects
-			auth.GET("/projects", projectHandler.List)
-			auth.POST("/projects", projectHandler.Create)
-			auth.GET("/projects/:id", projectHandler.GetByID)
-			auth.PUT("/projects/:id", projectHandler.Update)
-			auth.DELETE("/projects/:id", middleware.RequireRole("ops", "admin"), projectHandler.Delete)
-			auth.GET("/projects/:id/export", middleware.RequireRole("admin"), projectHandler.Export)
-			auth.POST("/projects/import", middleware.RequireRole("admin"), projectHandler.Import)
-
-			// Environments
-			auth.GET("/projects/:id/envs", projectHandler.ListEnvironments)
-			auth.POST("/projects/:id/envs", projectHandler.CreateEnvironment)
-			auth.PUT("/projects/:id/envs/:envId", projectHandler.UpdateEnvironment)
-			auth.DELETE("/projects/:id/envs/:envId", middleware.RequireRole("ops", "admin"), projectHandler.DeleteEnvironment)
-			auth.GET("/projects/:id/envs/:envId/vars", projectHandler.ListEnvVars)
-			auth.POST("/projects/:id/envs/:envId/vars", projectHandler.CreateEnvVar)
-			auth.PUT("/projects/:id/envs/:envId/vars/:varId", projectHandler.UpdateEnvVar)
-			auth.DELETE("/projects/:id/envs/:envId/vars/:varId", projectHandler.DeleteEnvVar)
-			auth.GET("/projects/:id/branches", projectHandler.ListBranches)
-			auth.GET("/var-groups", projectHandler.ListVarGroups)
-			auth.POST("/var-groups", middleware.RequireRole("admin"), projectHandler.CreateVarGroup)
-			auth.PUT("/var-groups/:groupId", middleware.RequireRole("admin"), projectHandler.UpdateVarGroup)
-			auth.DELETE("/var-groups/:groupId", middleware.RequireRole("admin"), projectHandler.DeleteVarGroup)
-
-			// Builds
-			auth.GET("/builds", buildHandler.ListAll)
-			auth.GET("/projects/:id/builds", buildHandler.ListByProject)
-			auth.POST("/projects/:id/builds", buildHandler.TriggerBuild)
-			auth.GET("/builds/:id", buildHandler.GetByID)
-			auth.GET("/builds/:id/log", buildHandler.GetLog)
-			auth.POST("/builds/:id/cancel", buildHandler.Cancel)
-			auth.POST("/builds/:id/deploy", buildHandler.Deploy)
-			auth.GET("/builds/:id/artifact", buildHandler.DownloadArtifact)
-			auth.POST("/builds/:id/retry", buildHandler.Retry)
-
-			// Dashboard
-			auth.GET("/dashboard/stats", buildHandler.DashboardStats)
-			auth.GET("/dashboard/system-resources", buildHandler.DashboardSystemResources)
-			auth.GET("/dashboard/active-builds", buildHandler.DashboardActiveBuilds)
-			auth.GET("/dashboard/recent-builds", buildHandler.DashboardRecentBuilds)
-			auth.GET("/dashboard/trend", buildHandler.DashboardTrend)
-			auth.GET("/dashboard/top-processes", buildHandler.DashboardTopProcesses)
-
-			// Notifications
-			auth.GET("/notifications", notifHandler.List)
-			auth.PUT("/notifications/:id/read", notifHandler.MarkRead)
-			auth.PUT("/notifications/read-all", notifHandler.MarkAllRead)
-
-			// Agents
-			auth.GET("/agents", agentHandler.List)
-			auth.GET("/agents/:id", agentHandler.GetByID)
-			agents := auth.Group("/agents", middleware.RequireRole("ops", "admin"))
-			{
-				agents.POST("", agentHandler.Create)
-				agents.PUT("/:id", agentHandler.Update)
-				agents.DELETE("/:id", agentHandler.Delete)
-			}
-
-			// Agent proxies (CLI)
-			auth.GET("/agent-proxies", middleware.RequireRole("ops", "admin"), agentProxyHandler.List)
-			auth.POST("/agent-proxies/:key/install", middleware.RequireRole("ops", "admin"), agentProxyHandler.Install)
-			auth.POST("/agent-proxies/:key/upgrade", middleware.RequireRole("ops", "admin"), agentProxyHandler.Upgrade)
-
-			// Dictionaries
-			auth.GET("/dictionaries", dictHandler.ListDictionaries)
-			auth.GET("/dictionaries/code/:code/items", dictHandler.GetItemsByCode)
-			dicts := auth.Group("/dictionaries", middleware.RequireRole("admin"))
-			{
-				dicts.POST("", dictHandler.CreateDictionary)
-				dicts.GET("/:id", dictHandler.GetDictionary)
-				dicts.PUT("/:id", dictHandler.UpdateDictionary)
-				dicts.DELETE("/:id", dictHandler.DeleteDictionary)
-				dicts.GET("/:id/items", dictHandler.ListItems)
-				dicts.POST("/:id/items", dictHandler.CreateItem)
-				dicts.PUT("/:id/items/:itemId", dictHandler.UpdateItem)
-				dicts.DELETE("/:id/items/:itemId", dictHandler.DeleteItem)
-			}
-
-			// System (admin/ops)
-			auth.GET("/system/audit-logs", middleware.RequireRole("admin", "ops"), systemHandler.AuditLogs)
-			auth.POST("/system/backup", middleware.RequireRole("admin"), systemHandler.Backup)
-			auth.POST("/system/restore", middleware.RequireRole("admin"), systemHandler.Restore)
-			auth.GET("/system/workspaces", middleware.RequireRole("admin", "ops"), systemHandler.ListWorkspaces)
-			auth.DELETE("/system/workspaces/:projectId", middleware.RequireRole("admin", "ops"), systemHandler.CleanWorkspace)
-			auth.DELETE("/system/caches/:projectId", middleware.RequireRole("admin", "ops"), systemHandler.CleanCache)
-			auth.GET("/system/processes", middleware.RequireRole("admin", "ops"), systemHandler.ListProcesses)
-			auth.DELETE("/system/processes/:pid", middleware.RequireRole("admin"), systemHandler.KillProcess)
-		}
-
-		// Webhook (public, secret-verified)
-		api.POST("/webhook/:projectId/:secret", webhookHandler.Handle)
-	}
-
-	// WebSocket routes
-	r.GET("/ws/builds/:id/logs", wsHandler.HandleBuildLogs)
-	r.GET("/ws/notifications", wsHandler.HandleNotifications)
+	wsHandler := cicdhandler.NewWSHandler(authSvc, permSvc, runSvc, hub, corsCfg)
+	wsHandler.RegisterRoutes(r)
 
 	serveSPA(r, cfg.Encryption.Key)
 
-	// Create data directories
-	os.MkdirAll(cfg.Build.WorkspaceDir, 0755)
-	os.MkdirAll(cfg.Build.ArtifactDir, 0755)
-	os.MkdirAll(cfg.Build.LogDir, 0755)
-	os.MkdirAll(cfg.Build.CacheDir, 0755)
-
-	// Start server
-	addr := fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port)
-	srv := &http.Server{
-		Addr:    addr,
-		Handler: r,
+	for _, dir := range []string{cfg.Build.WorkspaceDir, cfg.Build.ArtifactDir, cfg.Build.LogDir, cfg.Build.CacheDir} {
+		if dir != "" {
+			_ = os.MkdirAll(dir, 0o755)
+		}
 	}
 
+	sched.Start()
+	if err := sched.RecoverOnStartup(); err != nil {
+		logger.Error("scheduler recovery failed", zap.Error(err))
+	}
+	if err := cronSched.Start(); err != nil {
+		logger.Error("cron start failed", zap.Error(err))
+	}
+
+	addr := fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port)
+	srv := &http.Server{Addr: addr, Handler: r}
+
 	go func() {
+		logger.Info("listening", zap.String("addr", addr))
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			logger.Fatal("Server failed", zap.Error(err))
 		}
 	}()
 
-	// Graceful shutdown
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 	logger.Info("Shutting down...")
 
+	cronSched.Stop()
+	sched.Shutdown()
+	hub.Shutdown()
+
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-
-	// 1. Stop accepting new HTTP requests
 	if err := srv.Shutdown(ctx); err != nil {
 		logger.Error("HTTP server forced shutdown", zap.Error(err))
 	}
-
-	// 2. Stop cron (no new builds will be triggered)
-	cronScheduler.Stop()
-
-	// 3. Close WebSocket connections
-	hub.Shutdown()
-
-	// 4. Wait for all running builds to finish
-	scheduler.Shutdown()
-
-	// 5. Close database
-	if sqlDB, err := db.DB(); err == nil {
-		sqlDB.Close()
+	if sqlDB, err := gdb.DB(); err == nil {
+		_ = sqlDB.Close()
 	}
 }

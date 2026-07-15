@@ -1,0 +1,2183 @@
+openapi: 3.2.0
+info:
+  title: Bedrock API
+  version: 2.0.0
+  description: |
+    Bedrock 2.0 HTTP API. Envelope `{ code, message, data? }`.
+    Pagination data shape: `{ items, total, page, page_size, total_pages }`.
+servers:
+  - url: /api/v1
+    description: Relative to the Bedrock host
+security:
+  - bearerAuth: []
+tags:
+  - name: Auth
+  - name: Users
+  - name: Roles
+  - name: RBAC
+  - name: Menus
+  - name: Dictionaries
+  - name: OperationLogs
+  - name: Repositories
+  - name: BuildJobs
+  - name: BuildRuns
+  - name: Servers
+  - name: Credentials
+  - name: Webhook
+paths:
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Login
+      security: []
+      operationId: authLogin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/LoginResponse"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+  /auth/refresh:
+    post:
+      tags: [Auth]
+      summary: Refresh tokens
+      security: []
+      operationId: authRefresh
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refresh_token]
+              properties:
+                refresh_token:
+                  type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/TokenPair"
+        "401":
+          $ref: "#/components/responses/Error"
+  /auth/logout:
+    post:
+      tags: [Auth]
+      summary: Logout
+      operationId: authLogout
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessEnvelope"
+        "401":
+          $ref: "#/components/responses/Error"
+  /auth/me:
+    get:
+      tags: [Auth]
+      summary: Current user, permissions, trimmed menus
+      operationId: authMe
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/MeResponse"
+        "401":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+  /users:
+    get:
+      tags: [Users]
+      summary: List users
+      operationId: usersList
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/UserPage"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+    post:
+      tags: [Users]
+      summary: Create user
+      operationId: usersCreate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserCreateRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/User"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+  /users/{id}:
+    parameters:
+      - $ref: "#/components/parameters/ID"
+    get:
+      tags: [Users]
+      summary: Get user
+      operationId: usersGet
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/User"
+        "404":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+    put:
+      tags: [Users]
+      summary: Update user
+      operationId: usersUpdate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserUpdateRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/User"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+    delete:
+      tags: [Users]
+      summary: Delete user
+      operationId: usersDelete
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessEnvelope"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+  /roles:
+    get:
+      tags: [Roles]
+      summary: List roles
+      operationId: rolesList
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/RolePage"
+        "403":
+          $ref: "#/components/responses/Error"
+    post:
+      tags: [Roles]
+      summary: Create role
+      operationId: rolesCreate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RoleCreateRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/Role"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+  /roles/{id}:
+    parameters:
+      - $ref: "#/components/parameters/ID"
+    get:
+      tags: [Roles]
+      summary: Get role
+      operationId: rolesGet
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/Role"
+        "404":
+          $ref: "#/components/responses/Error"
+    put:
+      tags: [Roles]
+      summary: Update role
+      operationId: rolesUpdate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                description:
+                  type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/Role"
+        "400":
+          $ref: "#/components/responses/Error"
+    delete:
+      tags: [Roles]
+      summary: Delete role
+      operationId: rolesDelete
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessEnvelope"
+  /roles/{id}/permissions:
+    parameters:
+      - $ref: "#/components/parameters/ID"
+    put:
+      tags: [Roles]
+      summary: Replace role permission codes
+      operationId: rolesSetPermissions
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [permissions]
+              properties:
+                permissions:
+                  type: array
+                  items:
+                    type: string
+                    description: "{path}:action"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/Role"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+  /rbac/resources:
+    get:
+      tags: [RBAC]
+      summary: List RBAC resource tree
+      operationId: rbacResourcesList
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          items:
+                            type: array
+                            items:
+                              $ref: "#/components/schemas/RbacResource"
+        "403":
+          $ref: "#/components/responses/Error"
+    post:
+      tags: [RBAC]
+      summary: Create RBAC resource
+      operationId: rbacResourcesCreate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RbacResourceCreateRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/RbacResource"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+  /rbac/resources/{id}:
+    parameters:
+      - $ref: "#/components/parameters/ID"
+    get:
+      tags: [RBAC]
+      summary: Get RBAC resource
+      operationId: rbacResourcesGet
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/RbacResource"
+        "404":
+          $ref: "#/components/responses/Error"
+    put:
+      tags: [RBAC]
+      summary: Update RBAC resource
+      operationId: rbacResourcesUpdate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RbacResourceUpdateRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/RbacResource"
+        "400":
+          $ref: "#/components/responses/Error"
+    delete:
+      tags: [RBAC]
+      summary: Delete RBAC resource
+      operationId: rbacResourcesDelete
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessEnvelope"
+        "400":
+          $ref: "#/components/responses/Error"
+  /menus:
+    get:
+      tags: [Menus]
+      summary: List menu resource tree
+      operationId: menusList
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          items:
+                            type: array
+                            items:
+                              $ref: "#/components/schemas/RbacResource"
+        "403":
+          $ref: "#/components/responses/Error"
+  /menus/{id}:
+    parameters:
+      - $ref: "#/components/parameters/ID"
+    put:
+      tags: [Menus]
+      summary: Update menu metadata
+      operationId: menusUpdate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RbacResourceUpdateRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/RbacResource"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+  /menus/{id}/icon:
+    parameters:
+      - $ref: "#/components/parameters/ID"
+    put:
+      tags: [Menus]
+      summary: Upload/replace level-1 menu icon (raw ≤32KB)
+      operationId: menusUpdateIcon
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [icon_base64]
+              properties:
+                icon_base64:
+                  type: string
+                  description: Base64 or data URL; decoded raw size must be ≤32KB
+                icon_mime:
+                  type: string
+                  example: image/png
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/RbacResource"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+  /dictionaries:
+    get:
+      tags: [Dictionaries]
+      summary: List dictionaries
+      operationId: dictionariesList
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/DictionaryPage"
+        "403":
+          $ref: "#/components/responses/Error"
+    post:
+      tags: [Dictionaries]
+      summary: Create dictionary
+      operationId: dictionariesCreate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DictionaryCreateRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/Dictionary"
+        "400":
+          $ref: "#/components/responses/Error"
+  /dictionaries/{id}:
+    parameters:
+      - $ref: "#/components/parameters/ID"
+    get:
+      tags: [Dictionaries]
+      summary: Get dictionary
+      operationId: dictionariesGet
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/Dictionary"
+        "404":
+          $ref: "#/components/responses/Error"
+    put:
+      tags: [Dictionaries]
+      summary: Update dictionary
+      operationId: dictionariesUpdate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DictionaryUpdateRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/Dictionary"
+        "400":
+          $ref: "#/components/responses/Error"
+    delete:
+      tags: [Dictionaries]
+      summary: Delete dictionary
+      operationId: dictionariesDelete
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessEnvelope"
+  /operation-logs:
+    get:
+      tags: [OperationLogs]
+      summary: Query operation logs
+      operationId: operationLogsList
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+        - name: user_id
+          in: query
+          schema:
+            type: integer
+        - name: action
+          in: query
+          schema:
+            type: string
+        - name: resource_type
+          in: query
+          schema:
+            type: string
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/OperationLogPage"
+        "403":
+          $ref: "#/components/responses/Error"
+
+  /repositories:
+    get:
+      tags: [Repositories]
+      summary: List repositories
+      operationId: repositoriesList
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+        - name: keyword
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/RepositoryPage"
+        "403":
+          $ref: "#/components/responses/Error"
+    post:
+      tags: [Repositories]
+      summary: Create repository
+      operationId: repositoriesCreate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RepositoryCreateRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/Repository"
+        "403":
+          $ref: "#/components/responses/Error"
+  /repositories/{id}:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    get:
+      tags: [Repositories]
+      summary: Get repository
+      operationId: repositoriesGet
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/Repository"
+        "404":
+          $ref: "#/components/responses/Error"
+    put:
+      tags: [Repositories]
+      summary: Update repository
+      operationId: repositoriesUpdate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RepositoryUpdateRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/Repository"
+        "403":
+          $ref: "#/components/responses/Error"
+    delete:
+      tags: [Repositories]
+      summary: Delete repository
+      operationId: repositoriesDelete
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessEnvelope"
+        "409":
+          $ref: "#/components/responses/Error"
+  /repositories/{id}/branches:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    get:
+      tags: [Repositories]
+      summary: List remote branches
+      operationId: repositoriesBranches
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          items:
+                            type: array
+                            items: { type: string }
+  /repositories/{id}/test:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    post:
+      tags: [Repositories]
+      summary: Test fetch / list branches
+      operationId: repositoriesTest
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessEnvelope"
+  /repositories/{id}/webhook-secret:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    get:
+      tags: [Repositories]
+      summary: View webhook secret and URL
+      operationId: repositoriesWebhookSecretGet
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessEnvelope"
+  /repositories/{id}/webhook-secret/rotate:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    post:
+      tags: [Repositories]
+      summary: Rotate webhook secret
+      operationId: repositoriesWebhookSecretRotate
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessEnvelope"
+  /build-jobs:
+    get:
+      tags: [BuildJobs]
+      summary: List build jobs
+      operationId: buildJobsList
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+        - name: repository_id
+          in: query
+          schema: { type: integer }
+        - name: keyword
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/BuildJobPage"
+    post:
+      tags: [BuildJobs]
+      summary: Create build job
+      operationId: buildJobsCreate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BuildJobCreateRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/BuildJob"
+  /build-jobs/{id}:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    get:
+      tags: [BuildJobs]
+      summary: Get build job (includes deploy targets)
+      operationId: buildJobsGet
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/BuildJob"
+    put:
+      tags: [BuildJobs]
+      summary: Update build job / replace deploy targets
+      operationId: buildJobsUpdate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BuildJobUpdateRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/BuildJob"
+    delete:
+      tags: [BuildJobs]
+      summary: Delete build job
+      operationId: buildJobsDelete
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessEnvelope"
+  /build-jobs/{id}/runs:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    post:
+      tags: [BuildJobs]
+      summary: Enqueue build run (Wave 3 stub queue; Wave 4 executes)
+      description: |
+        Requires `cicd.build_jobs:execute` only. Credential `:use` is NOT required at
+        trigger time (bound credential snapshot is used at execution).
+      operationId: buildJobsEnqueueRun
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                branch: { type: string }
+                trigger_type: { type: string }
+      responses:
+        "202":
+          description: Accepted
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/BuildRun"
+  /build-runs:
+    get:
+      tags: [BuildRuns]
+      summary: List build runs
+      operationId: buildRunsList
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+        - name: build_job_id
+          in: query
+          schema: { type: integer }
+        - name: status
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/BuildRunPage"
+  /build-runs/{id}:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    get:
+      tags: [BuildRuns]
+      summary: Get build run detail (includes deploy attempts)
+      operationId: buildRunsGet
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/BuildRun"
+  /build-runs/{id}/cancel:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    post:
+      tags: [BuildRuns]
+      summary: Cancel a build run (or cancel in-flight distribution if already success)
+      operationId: buildRunsCancel
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/BuildRun"
+  /build-runs/{id}/retry:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    post:
+      tags: [BuildRuns]
+      summary: Retry by creating a new BuildRun
+      operationId: buildRunsRetry
+      responses:
+        "202":
+          description: Accepted
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/BuildRun"
+  /build-runs/{id}/redeploy:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    post:
+      tags: [BuildRuns]
+      summary: Redeploy artifact on the same BuildRun (appends BuildDeployAttempt batch)
+      operationId: buildRunsRedeploy
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                target_ids:
+                  type: array
+                  items: { type: integer }
+      responses:
+        "202":
+          description: Accepted
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/BuildRun"
+  /build-runs/{id}/artifact:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    get:
+      tags: [BuildRuns]
+      summary: Download build artifact archive
+      operationId: buildRunsArtifact
+      responses:
+        "200":
+          description: Artifact file
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+  /build-runs/{id}/log:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    get:
+      tags: [BuildRuns]
+      summary: Fetch build log text (WS preferred for live streaming)
+      operationId: buildRunsLog
+      responses:
+        "200":
+          description: Plain text log
+          content:
+            text/plain:
+              schema:
+                type: string
+  /servers:
+    get:
+      tags: [Servers]
+      summary: List servers
+      operationId: serversList
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+        - name: keyword
+          in: query
+          schema: { type: string }
+        - name: tag
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/ServerPage"
+    post:
+      tags: [Servers]
+      summary: Create server
+      operationId: serversCreate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ServerCreateRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/Server"
+  /servers/{id}:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    get:
+      tags: [Servers]
+      summary: Get server
+      operationId: serversGet
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/Server"
+    put:
+      tags: [Servers]
+      summary: Update server
+      operationId: serversUpdate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ServerUpdateRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/Server"
+    delete:
+      tags: [Servers]
+      summary: Delete server
+      operationId: serversDelete
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessEnvelope"
+        "409":
+          $ref: "#/components/responses/Error"
+  /servers/{id}/test:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    post:
+      tags: [Servers]
+      summary: Test server connection
+      operationId: serversTest
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessEnvelope"
+  /credentials:
+    get:
+      tags: [Credentials]
+      summary: List credentials (metadata only; never plaintext)
+      operationId: credentialsList
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+        - name: keyword
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/CredentialPage"
+    post:
+      tags: [Credentials]
+      summary: Create credential
+      operationId: credentialsCreate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CredentialCreateRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/Credential"
+  /credentials/{id}:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    get:
+      tags: [Credentials]
+      summary: Get credential metadata
+      operationId: credentialsGet
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/Credential"
+    put:
+      tags: [Credentials]
+      summary: Update credential (empty secret keeps existing)
+      operationId: credentialsUpdate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CredentialUpdateRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/Credential"
+    delete:
+      tags: [Credentials]
+      summary: Delete credential
+      operationId: credentialsDelete
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessEnvelope"
+        "409":
+          $ref: "#/components/responses/Error"
+  /webhook/repos/{repository_id}/{secret}:
+    parameters:
+      - name: repository_id
+        in: path
+        required: true
+        schema: { type: integer }
+      - name: secret
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      tags: [Webhook]
+      summary: Receive repository webhook (signature preferred; URL secret fallback; delivery dedup)
+      security: []
+      operationId: webhookReceive
+      parameters:
+        - name: build_job_id
+          in: query
+          schema: { type: integer }
+          description: Optional narrow to a single BuildJob
+      responses:
+        "202":
+          description: Accepted (may be duplicate with triggered=0)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessEnvelope"
+        "401":
+          $ref: "#/components/responses/Error"
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    Id:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: integer
+    Page:
+      name: page
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+    PageSize:
+      name: page_size
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+    ID:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: integer
+  responses:
+    Error:
+      description: Error
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+  schemas:
+    SuccessEnvelope:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: integer
+          example: 0
+        message:
+          type: string
+          example: success
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: integer
+        message:
+          type: string
+        request_id:
+          type: string
+    LoginRequest:
+      type: object
+      required: [username]
+      properties:
+        username:
+          type: string
+        password_cipher:
+          type: string
+          description: hex(IV || AES-256-CBC PKCS#7 ciphertext); preferred for web-v2
+        password:
+          type: string
+          description: Plaintext password for debug only; web-v2 must not send this
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+        username:
+          type: string
+        display_name:
+          type: string
+        email:
+          type: string
+        avatar:
+          type: string
+        is_active:
+          type: boolean
+        is_super_admin:
+          type: boolean
+        role_ids:
+          type: array
+          items:
+            type: integer
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    UserCreateRequest:
+      type: object
+      required: [username, password]
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+        display_name:
+          type: string
+        email:
+          type: string
+        is_active:
+          type: boolean
+        role_ids:
+          type: array
+          items:
+            type: integer
+    UserUpdateRequest:
+      type: object
+      properties:
+        display_name:
+          type: string
+        email:
+          type: string
+        password:
+          type: string
+        is_active:
+          type: boolean
+        role_ids:
+          type: array
+          items:
+            type: integer
+    TokenPair:
+      type: object
+      properties:
+        access_token:
+          type: string
+        refresh_token:
+          type: string
+        user:
+          $ref: "#/components/schemas/User"
+    LoginResponse:
+      allOf:
+        - $ref: "#/components/schemas/TokenPair"
+        - type: object
+          properties:
+            permissions:
+              type: array
+              items:
+                type: string
+            menus:
+              type: array
+              items:
+                $ref: "#/components/schemas/MenuNode"
+    MenuNode:
+      type: object
+      description: Trimmed menu for sidebar; map title/route/icon/children → NavItem (path ← route)
+      properties:
+        path:
+          type: string
+          description: Resource path (e.g. system.users)
+        title:
+          type: string
+        route:
+          type: string
+          description: Frontend route used as NavItem.path
+        icon:
+          type: string
+          description: Level-1 icon as data URL or Base64
+        sort:
+          type: integer
+        children:
+          type: array
+          items:
+            $ref: "#/components/schemas/MenuNode"
+    MeResponse:
+      type: object
+      properties:
+        user:
+          $ref: "#/components/schemas/User"
+        permissions:
+          type: array
+          items:
+            type: string
+        menus:
+          type: array
+          items:
+            $ref: "#/components/schemas/MenuNode"
+    Role:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        code:
+          type: string
+        description:
+          type: string
+        permissions:
+          type: array
+          items:
+            $ref: "#/components/schemas/RolePermission"
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    RolePermission:
+      type: object
+      properties:
+        id:
+          type: integer
+        role_id:
+          type: integer
+        permission:
+          type: string
+    RoleCreateRequest:
+      type: object
+      required: [name, code]
+      properties:
+        name:
+          type: string
+        code:
+          type: string
+        description:
+          type: string
+        permissions:
+          type: array
+          items:
+            type: string
+    MenuMetadata:
+      type: object
+      properties:
+        id:
+          type: integer
+        resource_id:
+          type: integer
+        title:
+          type: string
+        route:
+          type: string
+        icon_base64:
+          type: string
+        icon_mime:
+          type: string
+    RbacResource:
+      type: object
+      properties:
+        id:
+          type: integer
+        path:
+          type: string
+        type:
+          type: string
+          enum: [menu, page, action, card]
+        parent_id:
+          type: integer
+          nullable: true
+        enabled:
+          type: boolean
+        sort_key:
+          type: integer
+        menu_metadata:
+          $ref: "#/components/schemas/MenuMetadata"
+        children:
+          type: array
+          items:
+            $ref: "#/components/schemas/RbacResource"
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    RbacResourceCreateRequest:
+      type: object
+      required: [path, type]
+      properties:
+        path:
+          type: string
+        type:
+          type: string
+          enum: [menu, page, action, card]
+        parent_id:
+          type: integer
+          nullable: true
+        enabled:
+          type: boolean
+        sort_key:
+          type: integer
+        title:
+          type: string
+        route:
+          type: string
+    RbacResourceUpdateRequest:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        sort_key:
+          type: integer
+        title:
+          type: string
+        route:
+          type: string
+    Dictionary:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        code:
+          type: string
+        description:
+          type: string
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/DictItem"
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    DictItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        dictionary_id:
+          type: integer
+        label:
+          type: string
+        value:
+          type: string
+        sort_order:
+          type: integer
+        enabled:
+          type: boolean
+    DictionaryCreateRequest:
+      type: object
+      required: [name, code]
+      properties:
+        name:
+          type: string
+        code:
+          type: string
+        description:
+          type: string
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/DictItem"
+    DictionaryUpdateRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/DictItem"
+    OperationLog:
+      type: object
+      properties:
+        id:
+          type: integer
+        user_id:
+          type: integer
+        username:
+          type: string
+        action:
+          type: string
+        resource_type:
+          type: string
+        resource_id:
+          type: string
+        details:
+          type: string
+        ip_address:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+    Page:
+      type: object
+      required: [items, total, page, page_size, total_pages]
+      properties:
+        items:
+          type: array
+          items: {}
+        total:
+          type: integer
+          format: int64
+        page:
+          type: integer
+        page_size:
+          type: integer
+        total_pages:
+          type: integer
+    UserPage:
+      allOf:
+        - $ref: "#/components/schemas/Page"
+        - type: object
+          properties:
+            items:
+              type: array
+              items:
+                $ref: "#/components/schemas/User"
+    RolePage:
+      allOf:
+        - $ref: "#/components/schemas/Page"
+        - type: object
+          properties:
+            items:
+              type: array
+              items:
+                $ref: "#/components/schemas/Role"
+    DictionaryPage:
+      allOf:
+        - $ref: "#/components/schemas/Page"
+        - type: object
+          properties:
+            items:
+              type: array
+              items:
+                $ref: "#/components/schemas/Dictionary"
+    OperationLogPage:
+      allOf:
+        - $ref: "#/components/schemas/Page"
+        - type: object
+          properties:
+            items:
+              type: array
+              items:
+                $ref: "#/components/schemas/OperationLog"
+
+    Repository:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        description: { type: string }
+        tags: { type: string }
+        repo_url: { type: string }
+        default_branch: { type: string }
+        auth_type: { type: string, enum: [none, credential] }
+        credential_id: { type: integer, nullable: true }
+        webhook_secret: { type: string, description: "Only present on secret view/rotate" }
+        webhook_type: { type: string }
+        webhook_ref_path: { type: string }
+        webhook_commit_path: { type: string }
+        webhook_message_path: { type: string }
+        created_by: { type: integer }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    RepositoryCreateRequest:
+      type: object
+      required: [name, repo_url]
+      properties:
+        name: { type: string }
+        description: { type: string }
+        tags: { type: string }
+        repo_url: { type: string }
+        default_branch: { type: string }
+        auth_type: { type: string }
+        credential_id: { type: integer, nullable: true }
+        webhook_type: { type: string }
+        webhook_ref_path: { type: string }
+        webhook_commit_path: { type: string }
+        webhook_message_path: { type: string }
+    RepositoryUpdateRequest:
+      type: object
+      properties:
+        name: { type: string }
+        description: { type: string }
+        tags: { type: string }
+        repo_url: { type: string }
+        default_branch: { type: string }
+        auth_type: { type: string }
+        credential_id: { type: integer, nullable: true }
+        clear_credential: { type: boolean }
+        webhook_type: { type: string }
+        webhook_ref_path: { type: string }
+        webhook_commit_path: { type: string }
+        webhook_message_path: { type: string }
+    RepositoryPage:
+      allOf:
+        - $ref: "#/components/schemas/Page"
+        - type: object
+          properties:
+            items:
+              type: array
+              items:
+                $ref: "#/components/schemas/Repository"
+    DeployTarget:
+      type: object
+      properties:
+        id: { type: integer }
+        build_job_id: { type: integer }
+        server_id: { type: integer, nullable: true }
+        remote_path: { type: string }
+        method: { type: string, enum: [rsync, sftp, scp, agent, local] }
+        post_deploy_script: { type: string }
+        sort_order: { type: integer }
+    BuildJob:
+      type: object
+      properties:
+        id: { type: integer }
+        repository_id: { type: integer }
+        name: { type: string }
+        description: { type: string }
+        enabled: { type: boolean }
+        branch_policy: { type: string }
+        branch: { type: string }
+        shallow_clone: { type: boolean }
+        build_script_type: { type: string }
+        build_script: { type: string }
+        work_dir: { type: string }
+        output_dir: { type: string }
+        cache_paths: { type: string }
+        env_var_names:
+          type: array
+          items: { type: string }
+        trigger_manual: { type: boolean }
+        trigger_webhook: { type: boolean }
+        trigger_cron: { type: boolean }
+        cron_expression: { type: string }
+        cron_timezone: { type: string }
+        max_artifacts: { type: integer }
+        artifact_format: { type: string }
+        agent_trigger_event: { type: string }
+        deploy_targets:
+          type: array
+          items:
+            $ref: "#/components/schemas/DeployTarget"
+        created_by: { type: integer }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    BuildJobCreateRequest:
+      type: object
+      required: [repository_id, name]
+      properties:
+        repository_id: { type: integer }
+        name: { type: string }
+        description: { type: string }
+        enabled: { type: boolean }
+        branch_policy: { type: string }
+        branch: { type: string }
+        shallow_clone: { type: boolean }
+        build_script_type: { type: string }
+        build_script: { type: string }
+        work_dir: { type: string }
+        output_dir: { type: string }
+        cache_paths: { type: string }
+        env_var_names:
+          type: array
+          items: { type: string }
+        trigger_manual: { type: boolean }
+        trigger_webhook: { type: boolean }
+        trigger_cron: { type: boolean }
+        cron_expression: { type: string }
+        cron_timezone: { type: string }
+        max_artifacts: { type: integer }
+        artifact_format: { type: string }
+        agent_trigger_event: { type: string }
+        deploy_targets:
+          type: array
+          items:
+            $ref: "#/components/schemas/DeployTarget"
+    BuildJobUpdateRequest:
+      type: object
+      properties:
+        name: { type: string }
+        description: { type: string }
+        enabled: { type: boolean }
+        branch_policy: { type: string }
+        branch: { type: string }
+        shallow_clone: { type: boolean }
+        build_script_type: { type: string }
+        build_script: { type: string }
+        work_dir: { type: string }
+        output_dir: { type: string }
+        cache_paths: { type: string }
+        env_var_names:
+          type: array
+          items: { type: string }
+        trigger_manual: { type: boolean }
+        trigger_webhook: { type: boolean }
+        trigger_cron: { type: boolean }
+        cron_expression: { type: string }
+        cron_timezone: { type: string }
+        max_artifacts: { type: integer }
+        artifact_format: { type: string }
+        agent_trigger_event: { type: string }
+        deploy_targets:
+          type: array
+          items:
+            $ref: "#/components/schemas/DeployTarget"
+    BuildJobPage:
+      allOf:
+        - $ref: "#/components/schemas/Page"
+        - type: object
+          properties:
+            items:
+              type: array
+              items:
+                $ref: "#/components/schemas/BuildJob"
+    BuildDeployAttempt:
+      type: object
+      properties:
+        id: { type: integer }
+        build_run_id: { type: integer }
+        batch_no: { type: integer }
+        deploy_target_id: { type: integer, nullable: true }
+        target_snapshot_json: { type: string }
+        status: { type: string }
+        log_path: { type: string }
+        error_message: { type: string }
+        started_at: { type: string, format: date-time, nullable: true }
+        finished_at: { type: string, format: date-time, nullable: true }
+        created_at: { type: string, format: date-time }
+    BuildRun:
+      type: object
+      properties:
+        id: { type: integer }
+        build_job_id: { type: integer }
+        build_number: { type: integer }
+        status:
+          type: string
+          enum: [queued, running, success, failed, cancelled, interrupted]
+        stage:
+          type: string
+          enum: [pending, cloning, building, archiving, distributing, idle]
+        trigger_type: { type: string }
+        triggered_by: { type: integer }
+        branch: { type: string }
+        commit_hash: { type: string }
+        commit_message: { type: string }
+        log_path: { type: string }
+        artifact_path: { type: string }
+        duration_ms: { type: integer, format: int64 }
+        error_message: { type: string }
+        distribution_summary:
+          type: string
+          enum: [none, running, all_success, partial, all_failed, cancelled]
+        snapshot_json: { type: string }
+        started_at: { type: string, format: date-time, nullable: true }
+        finished_at: { type: string, format: date-time, nullable: true }
+        created_at: { type: string, format: date-time }
+        deploy_attempts:
+          type: array
+          items:
+            $ref: "#/components/schemas/BuildDeployAttempt"
+    BuildRunPage:
+      allOf:
+        - $ref: "#/components/schemas/Page"
+        - type: object
+          properties:
+            items:
+              type: array
+              items:
+                $ref: "#/components/schemas/BuildRun"
+    Server:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        host: { type: string }
+        port: { type: integer }
+        os_type: { type: string }
+        username: { type: string }
+        auth_type: { type: string }
+        credential_id: { type: integer, nullable: true }
+        agent_url: { type: string }
+        agent_credential_id: { type: integer, nullable: true }
+        description: { type: string }
+        tags: { type: string }
+        status: { type: string }
+        created_by: { type: integer }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    ServerCreateRequest:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string }
+        host: { type: string }
+        port: { type: integer }
+        os_type: { type: string }
+        username: { type: string }
+        auth_type: { type: string }
+        credential_id: { type: integer, nullable: true }
+        agent_url: { type: string }
+        agent_credential_id: { type: integer, nullable: true }
+        description: { type: string }
+        tags: { type: string }
+    ServerUpdateRequest:
+      type: object
+      properties:
+        name: { type: string }
+        host: { type: string }
+        port: { type: integer }
+        os_type: { type: string }
+        username: { type: string }
+        auth_type: { type: string }
+        credential_id: { type: integer, nullable: true }
+        clear_credential: { type: boolean }
+        agent_url: { type: string }
+        agent_credential_id: { type: integer, nullable: true }
+        clear_agent_credential: { type: boolean }
+        description: { type: string }
+        tags: { type: string }
+    ServerPage:
+      allOf:
+        - $ref: "#/components/schemas/Page"
+        - type: object
+          properties:
+            items:
+              type: array
+              items:
+                $ref: "#/components/schemas/Server"
+    Credential:
+      type: object
+      description: Metadata only; secret never returned
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        type: { type: string, enum: [password, token, ssh_key, api_key] }
+        username: { type: string }
+        description: { type: string }
+        has_secret: { type: boolean }
+        has_passphrase: { type: boolean }
+        created_by: { type: integer }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    CredentialCreateRequest:
+      type: object
+      required: [name, type, secret]
+      properties:
+        name: { type: string }
+        type: { type: string }
+        username: { type: string }
+        secret: { type: string }
+        passphrase: { type: string }
+        description: { type: string }
+    CredentialUpdateRequest:
+      type: object
+      properties:
+        name: { type: string }
+        type: { type: string }
+        username: { type: string }
+        secret: { type: string, description: "Empty keeps existing" }
+        passphrase: { type: string, description: "Empty keeps existing" }
+        description: { type: string }
+    CredentialPage:
+      allOf:
+        - $ref: "#/components/schemas/Page"
+        - type: object
+          properties:
+            items:
+              type: array
+              items:
+                $ref: "#/components/schemas/Credential"

@@ -84,6 +84,15 @@ func runGit(ctx context.Context, dir string, logFn func(string), args ...string)
 	return err
 }
 
+func runGitOutput(ctx context.Context, dir string, args ...string) (string, error) {
+	cmd := exec.CommandContext(ctx, "git", args...)
+	if dir != "" {
+		cmd.Dir = dir
+	}
+	out, err := cmd.CombinedOutput()
+	return strings.TrimSpace(string(out)), err
+}
+
 func buildAuthURL(repoURL, authType, username, password string) string {
 	if authType == "none" || (username == "" && password == "") {
 		return repoURL

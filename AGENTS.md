@@ -195,16 +195,28 @@ make clean
 ### 前端规范（web-v2）
 
 - 路径别名 `@` → `web-v2/src/`。
-- UI 优先 `@veltra/*`；工具优先 `@cat-kit/*`。需要 API 细节时读 `.agents/skills/veltra-ui` 与 `.agents/skills/cat-kit`，**渐进检索**，勿整包预加载。
+- **组件与工具必须优先 `@veltra/*` 与 `@cat-kit/*`**（二者已含大量可复用能力）。写 UI 前先检索 `.agents/skills/veltra-ui`（尤其 `packages/desktop/`）；写工具/HTTP 前检索 `.agents/skills/cat-kit`。**渐进检索**，勿整包预加载。仅确认库内无合适能力后才自研或引入第三方。
+- 字段与交互形态须对齐 `@veltra/desktop` 组件契约（查 `components/<name>/types.d.ts` 与 `api.md`）。例如侧栏菜单应对齐 `UNav` / `UDualNav` 的 `NavItem`（`title`/`path`/`icon`/`children` 等），表格列用 `defineTableColumns`，分页用 `UPaginator`，表单用 `UForm`/`UFormItem`。API/DTO 命名可与后端 `snake_case` 并存，但映射到组件 props 时保持类型兼容。
 - Vue 开发遵循 `.agents/skills/vue-best-practices`（避免巨型组件、可预测状态、Composition API）。
 - HTTP 只走 `@cat-kit/http` 封装客户端（含 refresh）；禁止页面内散落 `fetch`（除非 DESIGN 标明的特例并抽 helper）。
 - 状态：Pinia；权限辅助：composables。
 - Token：`localStorage` + Bearer（已接受风险；勿改称「安全 Cookie 方案」除非产品变更决策）。
 - 枚举与后端 `snake_case` JSON 字段保持一致。
 
+### 列表与分页（前后端统一封装）
+
+- **后端**：列表接口统一分页信封 `{ items, total, page, page_size, total_pages }`（见 DESIGN）；在 `internal/pkg`（或 platform）提供可复用的分页解析/响应 helper（query：`page`/`page_size`，默认与上限约定一致）。无分页的列表仍可返回 `items`（或文档约定的数组），但禁止各 handler 手写不一致的分页字段名。
+- **前端**：封装通用列表组件（如 `ResourceList` / `QueryList`），调用方传入：
+  - **API**：请求函数（接收 filters + 分页参数，返回分页或纯列表数据）；
+  - **filters 插槽**：过滤表单/条件区（内部收集后触发请求）；
+  - **列/行展示**：基于 `UTable` / `UList` 等 Veltra 组件；
+  - 组件内部负责请求、加载态、空态（`UEmpty`）、以及有分页时渲染 `UPaginator`。
+- 是否展示分页由**接口返回形态**决定（有 `page`/`total` 等则分页；纯列表则不分页），页面勿各自复制请求+表格+分页样板代码。
+
 ### 安全边界（必须遵守表述）
 
 1. 构建与 AI CLI **同 Bedrock UID** 执行 → **无** OS/容器隔离；不得在注释/文档中声称「沙箱安全」。
+   - **用户可见说明：** 构建脚本与部署后脚本以运行 Bedrock 的同一操作系统用户执行，可访问该用户可读的文件与网络；请仅授予可信人员脚本编辑权限，并对写操作保留审计。
 2. 允许 HTTP + localStorage → **无**传输层防窃听保证；不得声称 `password_cipher` 替代 TLS。
 3. 生产强烈建议 HTTPS；运维与自定义命令仅超管。
 

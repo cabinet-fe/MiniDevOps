@@ -149,15 +149,6 @@ func TestSyncGitRemoteOrigin(t *testing.T) {
 	}
 }
 
-func runGitOutput(ctx context.Context, dir string, args ...string) (string, error) {
-	cmd := exec.CommandContext(ctx, "git", args...)
-	if dir != "" {
-		cmd.Dir = dir
-	}
-	output, err := cmd.CombinedOutput()
-	return strings.TrimSpace(string(output)), err
-}
-
 func contains(s, substr string) bool {
 	return len(s) >= len(substr) && searchString(s, substr)
 }

@@ -2,8 +2,20 @@ server:
   port: 8080
   host: "0.0.0.0"
 
+# driver: sqlite | postgres | mysql
+# Changing driver does NOT migrate data (2.0 fresh install only).
 database:
-  path: "./data/db.sqlite"
+  driver: sqlite
+  path: "./data/bedrock.sqlite"
+  # host: 127.0.0.1
+  # port: 5432
+  # name: bedrock
+  # user: bedrock
+  # password: ""
+  # ssl_mode: disable
+  max_open_conns: 25
+  max_idle_conns: 5
+  conn_max_lifetime: 1h
 
 jwt:
   secret: "bedrock-dev-secret-change-in-production"

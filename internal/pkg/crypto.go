@@ -93,6 +93,11 @@ func pkcs7Unpad(data []byte, blockSize int) ([]byte, error) {
 	return data[:len(data)-padLen], nil
 }
 
+// EncryptLoginPasswordCipherForTest builds the same hex format as the frontend (IV || CBC||PKCS#7).
+func EncryptLoginPasswordCipherForTest(plaintext string) (string, error) {
+	return encryptAES256CBCHexForTest(plaintext)
+}
+
 // encryptAES256CBCHexForTest builds the same hex format as the frontend (IV || CBC||PKCS#7); package tests only.
 func encryptAES256CBCHexForTest(plaintext string) (string, error) {
 	if len(encryptionKey) != 32 {

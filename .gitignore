@@ -1,10 +1,12 @@
 data/
 .DS_Store
 web/.env
+web-v2/.env.local
 .env.local
 *.log
 cmd/server/dist/
 web/dist/
+web-v2/dist/
 bedrock
 bedrock-*
 server

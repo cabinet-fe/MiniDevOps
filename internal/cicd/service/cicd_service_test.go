@@ -1,0 +1,433 @@
+package service_test
+
+import (
+	"context"
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"bedrock/internal/cicd/repository"
+	"bedrock/internal/cicd/service"
+	"bedrock/internal/pkg"
+	"bedrock/internal/platform/config"
+	"bedrock/internal/platform/db"
+	"bedrock/internal/platform/migration"
+	_ "bedrock/internal/platform/migration/migrations"
+
+	"gorm.io/gorm"
+)
+
+type stubGit struct {
+	branches []string
+	err      error
+}
+
+func (s stubGit) ListBranches(repoURL, authType, username, password string) ([]string, error) {
+	if s.err != nil {
+		return nil, s.err
+	}
+	return s.branches, nil
+}
+
+func setupCICD(t *testing.T) (
+	*service.CredentialService,
+	*service.RepositoryService,
+	*service.ServerService,
+	*service.BuildJobService,
+	*service.BuildRunService,
+	*gorm.DB,
+) {
+	t.Helper()
+	const keyHex = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+	if err := pkg.InitEncryption(keyHex); err != nil {
+		t.Fatal(err)
+	}
+	gdb, err := db.Open(&config.DatabaseConfig{
+		Driver: "sqlite",
+		Path:   filepath.Join(t.TempDir(), "cicd.sqlite"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		sqlDB, _ := gdb.DB()
+		if sqlDB != nil {
+			_ = sqlDB.Close()
+		}
+	})
+	if err := migration.Up(context.Background(), gdb, "sqlite"); err != nil {
+		t.Fatal(err)
+	}
+
+	credRepo := repository.NewCredentialRepository(gdb)
+	repoRepo := repository.NewRepositoryRepository(gdb)
+	serverRepo := repository.NewServerRepository(gdb)
+	jobRepo := repository.NewBuildJobRepository(gdb)
+	runRepo := repository.NewBuildRunRepository(gdb)
+
+	credSvc := service.NewCredentialService(credRepo)
+	repoSvc := service.NewRepositoryService(repoRepo, credSvc)
+	repoSvc.SetGitLister(stubGit{branches: []string{"main", "develop"}})
+	serverSvc := service.NewServerService(serverRepo, credSvc)
+	jobSvc := service.NewBuildJobService(jobRepo, repoRepo)
+	runSvc := service.NewBuildRunService(runRepo, jobRepo)
+	return credSvc, repoSvc, serverSvc, jobSvc, runSvc, gdb
+}
+
+func TestCredential_CRUD_neverReturnsPlaintext(t *testing.T) {
+	credSvc, _, _, _, _, _ := setupCICD(t)
+
+	created, err := credSvc.Create(1, service.CreateCredentialInput{
+		Name:   "gh-token",
+		Type:   "token",
+		Secret: "super-secret-token",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := json.Marshal(created)
+	if strings.Contains(string(raw), "super-secret-token") {
+		t.Fatalf("plaintext leaked in JSON: %s", raw)
+	}
+	if !created.HasSecret {
+		t.Fatal("expected has_secret=true")
+	}
+
+	got, err := credSvc.Get(created.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, _ = json.Marshal(got)
+	if strings.Contains(string(raw), "super-secret-token") {
+		t.Fatalf("plaintext leaked on get: %s", raw)
+	}
+
+	updated, err := credSvc.Update(created.ID, service.UpdateCredentialInput{
+		Description: strPtr("desc"),
+		Secret:      strPtr(""), // keep
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, _ = json.Marshal(updated)
+	if strings.Contains(string(raw), "super-secret-token") {
+		t.Fatalf("plaintext leaked on update: %s", raw)
+	}
+
+	_, secret, _, err := credSvc.GetDecrypted(created.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if secret != "super-secret-token" {
+		t.Fatalf("decrypt got %q", secret)
+	}
+}
+
+func TestCredential_DeleteProtection(t *testing.T) {
+	credSvc, repoSvc, _, _, _, _ := setupCICD(t)
+
+	cred, err := credSvc.Create(1, service.CreateCredentialInput{
+		Name: "repo-cred", Type: "password", Username: "u", Secret: "p",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cid := cred.ID
+	_, err = repoSvc.Create(1, service.CreateRepositoryInput{
+		Name: "r1", RepoURL: "https://example.com/a.git", AuthType: "credential", CredentialID: &cid,
+	}, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = credSvc.Delete(cid)
+	if err == nil || !service.IsConflict(err) {
+		t.Fatalf("expected conflict, got %v", err)
+	}
+}
+
+func TestRepository_CRUD_and_deleteProtection(t *testing.T) {
+	_, repoSvc, _, jobSvc, _, _ := setupCICD(t)
+
+	repo, err := repoSvc.Create(1, service.CreateRepositoryInput{
+		Name: "demo", RepoURL: "https://example.com/demo.git", DefaultBranch: "main",
+	}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if repo.WebhookSecret != "" {
+		t.Fatal("list/create without reveal should hide webhook secret")
+	}
+
+	branches, err := repoSvc.ListBranches(repo.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(branches) != 2 {
+		t.Fatalf("branches=%v", branches)
+	}
+
+	_, err = jobSvc.Create(1, service.CreateBuildJobInput{
+		RepositoryID: repo.ID,
+		Name:         "job-a",
+		BuildScript:  "echo hi",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = repoSvc.Delete(repo.ID)
+	if err == nil || !service.IsConflict(err) {
+		t.Fatalf("expected conflict when jobs reference repo, got %v", err)
+	}
+}
+
+func TestRepository_credentialsUseEnforcedOnBind(t *testing.T) {
+	credSvc, repoSvc, _, _, _, _ := setupCICD(t)
+	cred, err := credSvc.Create(1, service.CreateCredentialInput{
+		Name: "c1", Type: "token", Secret: "tok",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cid := cred.ID
+	_, err = repoSvc.Create(1, service.CreateRepositoryInput{
+		Name: "r", RepoURL: "https://example.com/x.git", AuthType: "credential", CredentialID: &cid,
+	}, false)
+	if err == nil || !service.IsForbidden(err) {
+		t.Fatalf("expected forbidden without credentials:use, got %v", err)
+	}
+	_, err = repoSvc.Create(1, service.CreateRepositoryInput{
+		Name: "r", RepoURL: "https://example.com/x.git", AuthType: "credential", CredentialID: &cid,
+	}, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestServer_CRUD_and_deleteProtection(t *testing.T) {
+	_, repoSvc, serverSvc, jobSvc, _, _ := setupCICD(t)
+
+	srv, err := serverSvc.Create(1, service.CreateServerInput{
+		Name: "s1", Host: "10.0.0.1", Port: 22, AuthType: "password", Username: "root",
+	}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	repo, err := repoSvc.Create(1, service.CreateRepositoryInput{
+		Name: "r2", RepoURL: "https://example.com/y.git",
+	}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sid := srv.ID
+	_, err = jobSvc.Create(1, service.CreateBuildJobInput{
+		RepositoryID: repo.ID,
+		Name:         "job-deploy",
+		DeployTargets: []service.DeployTargetInput{
+			{ServerID: &sid, RemotePath: "/var/www", Method: "rsync", SortOrder: 0},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = serverSvc.Delete(srv.ID)
+	if err == nil || !service.IsConflict(err) {
+		t.Fatalf("expected conflict, got %v", err)
+	}
+}
+
+func TestServer_credentialsUseOnBind(t *testing.T) {
+	credSvc, _, serverSvc, _, _, _ := setupCICD(t)
+	cred, err := credSvc.Create(1, service.CreateCredentialInput{
+		Name: "ssh", Type: "password", Username: "root", Secret: "pw",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cid := cred.ID
+	_, err = serverSvc.Create(1, service.CreateServerInput{
+		Name: "s2", Host: "10.0.0.2", AuthType: "password", CredentialID: &cid,
+	}, false)
+	if err == nil || !service.IsForbidden(err) {
+		t.Fatalf("expected forbidden, got %v", err)
+	}
+}
+
+func TestBuildJob_and_BuildRun_enqueue(t *testing.T) {
+	_, repoSvc, _, jobSvc, runSvc, _ := setupCICD(t)
+	repo, err := repoSvc.Create(1, service.CreateRepositoryInput{
+		Name: "r3", RepoURL: "https://example.com/z.git",
+	}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	job, err := jobSvc.Create(1, service.CreateBuildJobInput{
+		RepositoryID: repo.ID,
+		Name:         "build",
+		EnvVarNames:  []string{"FOO", "BAR"},
+		BuildScript:  "make",
+		DeployTargets: []service.DeployTargetInput{
+			{Method: "local", RemotePath: "/tmp/out", SortOrder: 1},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(job.DeployTargets) != 1 {
+		t.Fatalf("deploy targets=%d", len(job.DeployTargets))
+	}
+	if len(job.EnvVarNames) != 2 {
+		t.Fatalf("env names=%v", job.EnvVarNames)
+	}
+
+	run, err := runSvc.Enqueue(job.ID, 1, service.EnqueueRunInput{TriggerType: "manual"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if run.Status != "queued" || run.Stage != "pending" || run.DistributionSummary != "none" {
+		t.Fatalf("run=%+v", run)
+	}
+	if run.SnapshotJSON == "" {
+		t.Fatal("expected snapshot")
+	}
+	got, err := runSvc.Get(run.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.BuildNumber != 1 {
+		t.Fatalf("build_number=%d", got.BuildNumber)
+	}
+}
+
+func TestBuildJob_TwoJobsSameRepo_EachEnqueue(t *testing.T) {
+	_, repoSvc, _, jobSvc, runSvc, _ := setupCICD(t)
+	repo, err := repoSvc.Create(1, service.CreateRepositoryInput{
+		Name: "r-multi-job", RepoURL: "https://example.com/multi-job.git",
+	}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	jobA, err := jobSvc.Create(1, service.CreateBuildJobInput{
+		RepositoryID: repo.ID, Name: "job-a", BuildScript: "echo a",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	jobB, err := jobSvc.Create(1, service.CreateBuildJobInput{
+		RepositoryID: repo.ID, Name: "job-b", BuildScript: "echo b",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	runA, err := runSvc.Enqueue(jobA.ID, 1, service.EnqueueRunInput{TriggerType: "manual"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	runB, err := runSvc.Enqueue(jobB.ID, 1, service.EnqueueRunInput{TriggerType: "manual"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if runA.ID == runB.ID {
+		t.Fatal("expected distinct runs")
+	}
+	if runA.BuildJobID != jobA.ID || runB.BuildJobID != jobB.ID {
+		t.Fatalf("runA.job=%d runB.job=%d", runA.BuildJobID, runB.BuildJobID)
+	}
+	if runA.Status != "queued" || runB.Status != "queued" {
+		t.Fatalf("statuses %s/%s", runA.Status, runB.Status)
+	}
+}
+
+func TestBuildRun_RetryAfterInterrupted(t *testing.T) {
+	_, repoSvc, _, jobSvc, runSvc, gdb := setupCICD(t)
+	repo, err := repoSvc.Create(1, service.CreateRepositoryInput{
+		Name: "r-retry", RepoURL: "https://example.com/retry.git",
+	}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	job, err := jobSvc.Create(1, service.CreateBuildJobInput{
+		RepositoryID: repo.ID, Name: "retry-job", BuildScript: "echo",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	prev, err := runSvc.Enqueue(job.ID, 1, service.EnqueueRunInput{TriggerType: "manual", Branch: "main"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := gdb.Model(prev).Updates(map[string]interface{}{
+		"status": "interrupted",
+		"stage":  "idle",
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	next, err := runSvc.Retry(prev.ID, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if next.ID == prev.ID {
+		t.Fatal("retry must create a new BuildRun")
+	}
+	if next.Status != "queued" || next.TriggerType != "retry" {
+		t.Fatalf("next=%+v", next)
+	}
+	if next.BuildJobID != job.ID || next.Branch != "main" {
+		t.Fatalf("next job/branch mismatch: %+v", next)
+	}
+	if next.BuildNumber != 2 {
+		t.Fatalf("build_number=%d want 2", next.BuildNumber)
+	}
+}
+
+func TestBuildRun_ArtifactPathDownloadable(t *testing.T) {
+	_, repoSvc, _, jobSvc, runSvc, gdb := setupCICD(t)
+	repo, err := repoSvc.Create(1, service.CreateRepositoryInput{
+		Name: "r-art", RepoURL: "https://example.com/art.git",
+	}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	job, err := jobSvc.Create(1, service.CreateBuildJobInput{
+		RepositoryID: repo.ID, Name: "art-job", BuildScript: "echo", ArtifactFormat: "gzip",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	run, err := runSvc.Enqueue(job.ID, 1, service.EnqueueRunInput{TriggerType: "manual"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	artDir := t.TempDir()
+	artPath := filepath.Join(artDir, "build-001.tar.gz")
+	if err := os.WriteFile(artPath, []byte("fake-tar-gz-bytes"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := gdb.Model(run).Updates(map[string]interface{}{
+		"status":        "success",
+		"stage":         "idle",
+		"artifact_path": artPath,
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	path, filename, err := runSvc.ArtifactPath(run.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if path != artPath || filename != "build-001.tar.gz" {
+		t.Fatalf("path=%q filename=%q", path, filename)
+	}
+	got, err := os.ReadFile(path)
+	if err != nil || string(got) != "fake-tar-gz-bytes" {
+		t.Fatalf("download content: %s %v", got, err)
+	}
+}
+
+func strPtr(s string) *string { return &s }
+func boolPtr(b bool) *bool    { return &b }

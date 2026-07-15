@@ -1,179 +1,542 @@
 package engine
 
 import (
-	"archive/tar"
-	"archive/zip"
-	"compress/gzip"
-	"io"
+	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
-	"bedrock/internal/model"
-	"bedrock/internal/repository"
-	"bedrock/internal/ws"
-	"github.com/glebarez/sqlite"
-	"gorm.io/gorm"
+	"go.uber.org/zap"
+
+	"bedrock/internal/cicd/model"
 )
 
-func newPipelineTestDB(t *testing.T) *gorm.DB {
-	t.Helper()
-
-	db, err := gorm.Open(sqlite.Open("file:"+t.Name()+"?mode=memory&cache=shared"), &gorm.Config{})
-	if err != nil {
-		t.Fatalf("open sqlite: %v", err)
-	}
-
-	if err := db.AutoMigrate(&model.Build{}, &model.Notification{}); err != nil {
-		t.Fatalf("auto migrate: %v", err)
-	}
-
-	return db
+type memRunStore struct {
+	mu       sync.Mutex
+	runs     map[uint]*model.BuildRun
+	attempts []model.BuildDeployAttempt
+	nextID   uint
 }
 
-func TestFailBuildKeepsCurrentStage(t *testing.T) {
-	db := newPipelineTestDB(t)
-	buildRepo := repository.NewBuildRepository(db)
-	notifRepo := repository.NewNotificationRepository(db)
-
-	startedAt := time.Now().Add(-2 * time.Second)
-	build := &model.Build{
-		ProjectID:     1,
-		EnvironmentID: 1,
-		BuildNumber:   1,
-		Status:        "building",
-		CurrentStage:  "building",
-		TriggeredBy:   1,
-		StartedAt:     &startedAt,
+func newMemRunStore(runs ...*model.BuildRun) *memRunStore {
+	m := &memRunStore{runs: map[uint]*model.BuildRun{}, nextID: 1}
+	for _, r := range runs {
+		cp := *r
+		m.runs[r.ID] = &cp
 	}
-	if err := buildRepo.Create(build); err != nil {
-		t.Fatalf("create build: %v", err)
-	}
-
-	pipeline := &Pipeline{
-		buildRepo: buildRepo,
-		notifRepo: notifRepo,
-		hub:       ws.NewHub(),
-	}
-
-	pipeline.failBuild(build, "构建失败: exit status 1")
-
-	saved, err := buildRepo.FindByID(build.ID)
-	if err != nil {
-		t.Fatalf("find build: %v", err)
-	}
-
-	if saved.Status != "failed" {
-		t.Fatalf("expected status failed, got %q", saved.Status)
-	}
-	if saved.CurrentStage != "building" {
-		t.Fatalf("expected current stage building, got %q", saved.CurrentStage)
-	}
-	if saved.ErrorMessage != "构建失败: exit status 1" {
-		t.Fatalf("unexpected error message %q", saved.ErrorMessage)
-	}
-	if saved.DurationMs <= 0 {
-		t.Fatalf("expected positive duration, got %d", saved.DurationMs)
-	}
+	return m
 }
 
-func TestFailBuildNoOpWhenAlreadySuccess(t *testing.T) {
-	db := newPipelineTestDB(t)
-	buildRepo := repository.NewBuildRepository(db)
-	notifRepo := repository.NewNotificationRepository(db)
-
-	build := &model.Build{
-		ProjectID:     1,
-		EnvironmentID: 1,
-		BuildNumber:   1,
-		Status:        "success",
-		CurrentStage:  "success",
-		TriggeredBy:   1,
+func (m *memRunStore) FindByID(id uint) (*model.BuildRun, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	r, ok := m.runs[id]
+	if !ok {
+		return nil, os.ErrNotExist
 	}
-	if err := buildRepo.Create(build); err != nil {
-		t.Fatalf("create build: %v", err)
-	}
-
-	pipeline := &Pipeline{
-		buildRepo: buildRepo,
-		notifRepo: notifRepo,
-		hub:       ws.NewHub(),
-	}
-
-	pipeline.failBuild(build, "should not apply")
-
-	saved, err := buildRepo.FindByID(build.ID)
-	if err != nil {
-		t.Fatalf("find build: %v", err)
-	}
-	if saved.Status != "success" {
-		t.Fatalf("expected status to stay success, got %q", saved.Status)
-	}
+	cp := *r
+	return &cp, nil
 }
 
-func TestCreateArtifactArchiveSupportsZipAndGzip(t *testing.T) {
-	sourceDir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(sourceDir, "index.html"), []byte("hello"), 0644); err != nil {
-		t.Fatalf("write source file: %v", err)
+func (m *memRunStore) UpdateFields(id uint, fields map[string]interface{}) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	r, ok := m.runs[id]
+	if !ok {
+		return os.ErrNotExist
 	}
-
-	gzipPath := filepath.Join(t.TempDir(), "artifact.tar.gz")
-	if err := createArtifactArchive(gzipPath, sourceDir, "gzip"); err != nil {
-		t.Fatalf("create gzip archive: %v", err)
-	}
-	if err := assertTarGzContainsFile(gzipPath, "index.html"); err != nil {
-		t.Fatalf("verify gzip archive: %v", err)
-	}
-
-	zipPath := filepath.Join(t.TempDir(), "artifact.zip")
-	if err := createArtifactArchive(zipPath, sourceDir, "zip"); err != nil {
-		t.Fatalf("create zip archive: %v", err)
-	}
-	if err := assertZipContainsFile(zipPath, "index.html"); err != nil {
-		t.Fatalf("verify zip archive: %v", err)
-	}
+	applyRunFields(r, fields)
+	return nil
 }
 
-func assertTarGzContainsFile(path, name string) error {
-	file, err := os.Open(path)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-
-	gzipReader, err := gzip.NewReader(file)
-	if err != nil {
-		return err
-	}
-	defer gzipReader.Close()
-
-	tarReader := tar.NewReader(gzipReader)
-	for {
-		header, err := tarReader.Next()
-		if err == io.EOF {
-			return os.ErrNotExist
-		}
-		if err != nil {
-			return err
-		}
-		if header.Name == name {
-			return nil
+func applyRunFields(r *model.BuildRun, fields map[string]interface{}) {
+	for k, v := range fields {
+		switch k {
+		case "status":
+			r.Status = v.(string)
+		case "stage":
+			r.Stage = v.(string)
+		case "distribution_summary":
+			r.DistributionSummary = v.(string)
+		case "error_message":
+			r.ErrorMessage = v.(string)
+		case "log_path":
+			r.LogPath = v.(string)
+		case "artifact_path":
+			r.ArtifactPath = v.(string)
+		case "commit_hash":
+			r.CommitHash = v.(string)
+		case "trigger_type":
+			r.TriggerType = v.(string)
+		case "snapshot_json":
+			r.SnapshotJSON = v.(string)
+		case "duration_ms":
+			r.DurationMs = v.(int64)
+		case "finished_at":
+			if t, ok := v.(time.Time); ok {
+				r.FinishedAt = &t
+			} else if t, ok := v.(*time.Time); ok {
+				r.FinishedAt = t
+			}
+		case "started_at":
+			if t, ok := v.(*time.Time); ok {
+				r.StartedAt = t
+			}
 		}
 	}
 }
 
-func assertZipContainsFile(path, name string) error {
-	reader, err := zip.OpenReader(path)
-	if err != nil {
-		return err
-	}
-	defer reader.Close()
+func (m *memRunStore) CreateAttempt(a *model.BuildDeployAttempt) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.nextID++
+	cp := *a
+	cp.ID = m.nextID
+	m.attempts = append(m.attempts, cp)
+	*a = cp
+	return nil
+}
 
-	for _, file := range reader.File {
-		if file.Name == name {
+func (m *memRunStore) UpdateAttempt(a *model.BuildDeployAttempt) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for i := range m.attempts {
+		if m.attempts[i].ID == a.ID {
+			m.attempts[i] = *a
 			return nil
 		}
 	}
 	return os.ErrNotExist
+}
+
+func (m *memRunStore) NextBatchNo(runID uint) (int, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	max := 0
+	for _, a := range m.attempts {
+		if a.BuildRunID == runID && a.BatchNo > max {
+			max = a.BatchNo
+		}
+	}
+	return max + 1, nil
+}
+
+func (m *memRunStore) ListByStatuses(statuses ...string) ([]model.BuildRun, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	want := map[string]bool{}
+	for _, s := range statuses {
+		want[s] = true
+	}
+	var out []model.BuildRun
+	for _, r := range m.runs {
+		if want[r.Status] {
+			out = append(out, *r)
+		}
+	}
+	return out, nil
+}
+
+func (m *memRunStore) MarkRunningInterrupted() (int64, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var n int64
+	for _, r := range m.runs {
+		if r.Status == "running" {
+			r.Status = "interrupted"
+			r.Stage = "idle"
+			n++
+		}
+	}
+	return n, nil
+}
+
+func (m *memRunStore) HasNonTerminal(jobID uint) (bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, r := range m.runs {
+		if r.BuildJobID == jobID && (r.Status == "queued" || r.Status == "running") {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func (m *memRunStore) ListArtifactsByJob(jobID uint) ([]model.BuildRun, error) {
+	return nil, nil
+}
+
+type memJobStore struct {
+	job     *model.BuildJob
+	targets []model.DeployTarget
+}
+
+func (m *memJobStore) FindByID(id uint) (*model.BuildJob, error) {
+	if m.job == nil || m.job.ID != id {
+		return nil, os.ErrNotExist
+	}
+	cp := *m.job
+	return &cp, nil
+}
+func (m *memJobStore) ListDeployTargets(jobID uint) ([]model.DeployTarget, error) {
+	return append([]model.DeployTarget(nil), m.targets...), nil
+}
+func (m *memJobStore) ListCronEnabled() ([]model.BuildJob, error) { return nil, nil }
+func (m *memJobStore) ListByRepositoryID(uint) ([]model.BuildJob, error) {
+	return nil, nil
+}
+
+type memRepoStore struct{ repo *model.Repository }
+
+func (m *memRepoStore) FindByID(id uint) (*model.Repository, error) {
+	if m.repo == nil || m.repo.ID != id {
+		return nil, os.ErrNotExist
+	}
+	cp := *m.repo
+	return &cp, nil
+}
+
+type memServerStore struct{}
+
+func (m *memServerStore) FindByID(uint) (*model.Server, error) { return nil, os.ErrNotExist }
+
+type nopSecrets struct{}
+
+func (nopSecrets) Resolve(uint) (string, string, string, string, error) {
+	return "", "", "", "", nil
+}
+
+func TestDistributionFailureKeepsSuccess(t *testing.T) {
+	t.Parallel()
+	tmp := t.TempDir()
+	src := filepath.Join(tmp, "out")
+	_ = os.MkdirAll(src, 0755)
+	_ = os.WriteFile(filepath.Join(src, "a.txt"), []byte("x"), 0644)
+
+	run := &model.BuildRun{
+		ID: 1, BuildJobID: 10, BuildNumber: 1,
+		Status: "success", Stage: "distributing", DistributionSummary: "running",
+	}
+	store := newMemRunStore(run)
+	jobStore := &memJobStore{
+		job: &model.BuildJob{ID: 10, ArtifactFormat: "gzip"},
+		targets: []model.DeployTarget{
+			{ID: 1, BuildJobID: 10, Method: "local", RemotePath: filepath.Join(tmp, "ok")},
+			{ID: 2, BuildJobID: 10, Method: "local", RemotePath: "relative-bad"}, // fails: not absolute
+		},
+	}
+	p := NewPipeline(store, jobStore, &memRepoStore{}, &memServerStore{}, nopSecrets{}, nil, zap.NewNop(), tmp, tmp, tmp, tmp)
+	p.runDistributions(context.Background(), run, jobStore.job, src, func(string) {}, nil)
+
+	got, _ := store.FindByID(1)
+	if got.Status != "success" {
+		t.Fatalf("status=%s want success", got.Status)
+	}
+	if got.DistributionSummary != "partial" {
+		t.Fatalf("summary=%s want partial", got.DistributionSummary)
+	}
+	if len(store.attempts) != 2 {
+		t.Fatalf("attempts=%d want 2", len(store.attempts))
+	}
+}
+
+func TestDistributionAllFailedKeepsSuccess(t *testing.T) {
+	t.Parallel()
+	tmp := t.TempDir()
+	src := filepath.Join(tmp, "out")
+	_ = os.MkdirAll(src, 0755)
+	_ = os.WriteFile(filepath.Join(src, "a.txt"), []byte("x"), 0644)
+
+	run := &model.BuildRun{
+		ID: 1, BuildJobID: 10, BuildNumber: 1,
+		Status: "success", Stage: "distributing", DistributionSummary: "running",
+	}
+	store := newMemRunStore(run)
+	jobStore := &memJobStore{
+		job: &model.BuildJob{ID: 10, ArtifactFormat: "gzip"},
+		targets: []model.DeployTarget{
+			{ID: 1, BuildJobID: 10, Method: "local", RemotePath: "relative-bad-1"},
+			{ID: 2, BuildJobID: 10, Method: "local", RemotePath: "relative-bad-2"},
+		},
+	}
+	p := NewPipeline(store, jobStore, &memRepoStore{}, &memServerStore{}, nopSecrets{}, nil, zap.NewNop(), tmp, tmp, tmp, tmp)
+	p.runDistributions(context.Background(), run, jobStore.job, src, func(string) {}, nil)
+
+	got, _ := store.FindByID(1)
+	if got.Status != "success" {
+		t.Fatalf("status=%s want success", got.Status)
+	}
+	if got.DistributionSummary != "all_failed" {
+		t.Fatalf("summary=%s want all_failed", got.DistributionSummary)
+	}
+	if got.Stage != "idle" {
+		t.Fatalf("stage=%s want idle", got.Stage)
+	}
+	if len(store.attempts) != 2 {
+		t.Fatalf("attempts=%d want 2", len(store.attempts))
+	}
+}
+
+// TestArchiveMarksSuccessAndArtifactDownloadable exercises clone→build→archive→markArtifactSuccess
+// (not only distribute-assuming-already-success) and proves the artifact file is on disk.
+func TestArchiveMarksSuccessAndArtifactDownloadable(t *testing.T) {
+	t.Parallel()
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available")
+	}
+
+	repoDir := initLocalGitRepo(t)
+	tmp := t.TempDir()
+	workspace := filepath.Join(tmp, "ws")
+	artifactRoot := filepath.Join(tmp, "artifacts")
+	logDir := filepath.Join(tmp, "logs")
+	cacheDir := filepath.Join(tmp, "cache")
+
+	run := &model.BuildRun{
+		ID: 1, BuildJobID: 10, BuildNumber: 3,
+		Status: "queued", Stage: "pending", Branch: "main",
+	}
+	store := newMemRunStore(run)
+	jobStore := &memJobStore{
+		job: &model.BuildJob{
+			ID:             10,
+			RepositoryID:   1,
+			Branch:         "main",
+			BuildScript:    "mkdir -p dist && echo hello > dist/app.txt",
+			OutputDir:      "dist",
+			ArtifactFormat: "gzip",
+			MaxArtifacts:   5,
+		},
+	}
+	repoStore := &memRepoStore{
+		repo: &model.Repository{ID: 1, RepoURL: repoDir, AuthType: "none", DefaultBranch: "main"},
+	}
+	p := NewPipeline(store, jobStore, repoStore, &memServerStore{}, nopSecrets{}, nil, zap.NewNop(),
+		workspace, artifactRoot, logDir, cacheDir)
+
+	p.Execute(context.Background(), 1)
+
+	got, err := store.FindByID(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Status != "success" {
+		t.Fatalf("status=%s want success (error=%q)", got.Status, got.ErrorMessage)
+	}
+	if got.Stage != "idle" {
+		t.Fatalf("stage=%s want idle (no deploy targets)", got.Stage)
+	}
+	if got.DistributionSummary != "none" {
+		t.Fatalf("summary=%s want none", got.DistributionSummary)
+	}
+	if strings.TrimSpace(got.ArtifactPath) == "" {
+		t.Fatal("expected artifact_path after archive")
+	}
+	if !strings.HasSuffix(got.ArtifactPath, "build-003.tar.gz") {
+		t.Fatalf("artifact_path=%q want build-003.tar.gz", got.ArtifactPath)
+	}
+	info, err := os.Stat(got.ArtifactPath)
+	if err != nil {
+		t.Fatalf("artifact not downloadable on disk: %v", err)
+	}
+	if info.Size() == 0 {
+		t.Fatal("artifact file is empty")
+	}
+	// Round-trip: archive must contain the build output.
+	extractDir := filepath.Join(tmp, "extract")
+	if err := extractArtifactArchive(got.ArtifactPath, extractDir, "gzip"); err != nil {
+		t.Fatalf("extract artifact: %v", err)
+	}
+	body, err := os.ReadFile(filepath.Join(extractDir, "app.txt"))
+	if err != nil {
+		t.Fatalf("read extracted app.txt: %v", err)
+	}
+	if strings.TrimSpace(string(body)) != "hello" {
+		t.Fatalf("artifact content=%q want hello", body)
+	}
+}
+
+func TestMarkArtifactSuccess_WithDistributeStage(t *testing.T) {
+	t.Parallel()
+	tmp := t.TempDir()
+	run := &model.BuildRun{ID: 1, BuildJobID: 10, BuildNumber: 1, Status: "running", Stage: "archiving"}
+	store := newMemRunStore(run)
+	p := NewPipeline(store, &memJobStore{}, &memRepoStore{}, &memServerStore{}, nopSecrets{}, nil, zap.NewNop(), tmp, tmp, tmp, tmp)
+
+	p.markArtifactSuccess(run, func(string) {}, true)
+	got, _ := store.FindByID(1)
+	if got.Status != "success" {
+		t.Fatalf("status=%s", got.Status)
+	}
+	if got.Stage != "distributing" {
+		t.Fatalf("stage=%s want distributing", got.Stage)
+	}
+	if got.DistributionSummary != "running" {
+		t.Fatalf("summary=%s want running", got.DistributionSummary)
+	}
+}
+
+func initLocalGitRepo(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	run := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = dir
+		cmd.Env = append(os.Environ(), "GIT_AUTHOR_NAME=test", "GIT_AUTHOR_EMAIL=test@example.com",
+			"GIT_COMMITTER_NAME=test", "GIT_COMMITTER_EMAIL=test@example.com")
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	run("init", "-b", "main")
+	run("config", "user.email", "test@example.com")
+	run("config", "user.name", "test")
+	if err := os.WriteFile(filepath.Join(dir, "README.md"), []byte("repo\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	run("add", ".")
+	run("commit", "-m", "init")
+	return dir
+}
+
+func TestRedeployAppendsAttempts(t *testing.T) {
+	t.Parallel()
+	tmp := t.TempDir()
+	src := filepath.Join(tmp, "out")
+	_ = os.MkdirAll(src, 0755)
+	_ = os.WriteFile(filepath.Join(src, "a.txt"), []byte("x"), 0644)
+	dest := filepath.Join(tmp, "dest")
+
+	run := &model.BuildRun{
+		ID: 1, BuildJobID: 10, BuildNumber: 1,
+		Status: "success", Stage: "idle", DistributionSummary: "all_success",
+	}
+	store := newMemRunStore(run)
+	jobStore := &memJobStore{
+		job:     &model.BuildJob{ID: 10, ArtifactFormat: "gzip"},
+		targets: []model.DeployTarget{{ID: 1, BuildJobID: 10, Method: "local", RemotePath: dest}},
+	}
+	p := NewPipeline(store, jobStore, &memRepoStore{}, &memServerStore{}, nopSecrets{}, nil, zap.NewNop(), tmp, tmp, tmp, tmp)
+
+	p.runDistributions(context.Background(), run, jobStore.job, src, func(string) {}, nil)
+	if len(store.attempts) != 1 || store.attempts[0].BatchNo != 1 {
+		t.Fatalf("batch1 attempts=%v", store.attempts)
+	}
+	p.runDistributions(context.Background(), run, jobStore.job, src, func(string) {}, nil)
+	if len(store.attempts) != 2 {
+		t.Fatalf("after redeploy attempts=%d want 2", len(store.attempts))
+	}
+	if store.attempts[1].BatchNo != 2 {
+		t.Fatalf("batch_no=%d want 2", store.attempts[1].BatchNo)
+	}
+	got, _ := store.FindByID(1)
+	if got.Status != "success" || got.DistributionSummary != "all_success" {
+		t.Fatalf("status=%s summary=%s", got.Status, got.DistributionSummary)
+	}
+}
+
+func TestSchedulerRecovery_QueuedAndInterrupted(t *testing.T) {
+	t.Parallel()
+	store := newMemRunStore(
+		&model.BuildRun{ID: 1, Status: "queued", Stage: "pending"},
+		&model.BuildRun{ID: 2, Status: "running", Stage: "building"},
+		&model.BuildRun{ID: 3, Status: "success", Stage: "idle"},
+	)
+	// Pipeline that no-ops quickly for missing job
+	p := NewPipeline(store, &memJobStore{}, &memRepoStore{}, &memServerStore{}, nopSecrets{}, nil, zap.NewNop(), t.TempDir(), t.TempDir(), t.TempDir(), t.TempDir())
+	s := NewScheduler(2, p, store, zap.NewNop())
+	s.Start()
+	defer s.Shutdown()
+
+	if err := s.RecoverOnStartup(); err != nil {
+		t.Fatal(err)
+	}
+	r2, _ := store.FindByID(2)
+	if r2.Status != "interrupted" {
+		t.Fatalf("running→interrupted got %s", r2.Status)
+	}
+	// queued should still be queued (submitted to channel; may flip to failed quickly due to missing job)
+	time.Sleep(50 * time.Millisecond)
+	r1, _ := store.FindByID(1)
+	if r1.Status == "running" {
+		// ok if started
+	} else if r1.Status != "queued" && r1.Status != "failed" {
+		t.Fatalf("unexpected queued recovery status %s", r1.Status)
+	}
+}
+
+func TestCronOverlapSkip(t *testing.T) {
+	t.Parallel()
+	store := newMemRunStore(&model.BuildRun{ID: 1, BuildJobID: 5, Status: "running"})
+	var enqueued int
+	enq := &stubEnqueuer{fn: func(jobID, _ uint, _ EnqueueParams) (*model.BuildRun, error) {
+		enqueued++
+		return &model.BuildRun{ID: 99, BuildJobID: jobID, Status: "queued"}, nil
+	}}
+	cs := NewCronScheduler(&memJobStore{}, store, enq, nil, zap.NewNop())
+	cs.TriggerNow(5)
+	if enqueued != 0 {
+		t.Fatalf("expected skip on overlap, enqueued=%d", enqueued)
+	}
+	store.runs[1].Status = "success"
+	cs.TriggerNow(5)
+	if enqueued != 1 {
+		t.Fatalf("expected enqueue after terminal, enqueued=%d", enqueued)
+	}
+}
+
+func TestCronTimezoneValidation(t *testing.T) {
+	t.Parallel()
+	cs := NewCronScheduler(&memJobStore{}, newMemRunStore(), &stubEnqueuer{}, nil, zap.NewNop())
+	err := cs.Add(model.BuildJob{
+		ID: 1, Enabled: true, TriggerCron: true,
+		CronExpression: "0 * * * *", CronTimezone: "Not/AZone",
+	})
+	if err == nil {
+		t.Fatal("expected invalid timezone error")
+	}
+	err = cs.Add(model.BuildJob{
+		ID: 2, Enabled: true, TriggerCron: true,
+		CronExpression: "0 * * * *", CronTimezone: "Asia/Shanghai",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+type stubEnqueuer struct {
+	fn func(jobID, triggeredBy uint, in EnqueueParams) (*model.BuildRun, error)
+}
+
+func (s *stubEnqueuer) EnqueueInternal(jobID, triggeredBy uint, in EnqueueParams) (*model.BuildRun, error) {
+	if s.fn != nil {
+		return s.fn(jobID, triggeredBy, in)
+	}
+	return &model.BuildRun{ID: 1, BuildJobID: jobID, Status: "queued"}, nil
+}
+
+func TestNewScheduler_MinConcurrent(t *testing.T) {
+	t.Parallel()
+	s := NewScheduler(0, &Pipeline{}, newMemRunStore(), zap.NewNop())
+	if s.maxConcurrent != 1 {
+		t.Fatalf("maxConcurrent: got %d want 1", s.maxConcurrent)
+	}
+}
+
+func TestFailRunDoesNotOverwriteSuccess(t *testing.T) {
+	t.Parallel()
+	run := &model.BuildRun{ID: 1, Status: "success", Stage: "idle"}
+	store := newMemRunStore(run)
+	p := NewPipeline(store, &memJobStore{}, &memRepoStore{}, &memServerStore{}, nopSecrets{}, nil, zap.NewNop(), t.TempDir(), t.TempDir(), t.TempDir(), t.TempDir())
+	p.failRun(run, "should ignore")
+	got, _ := store.FindByID(1)
+	if got.Status != "success" {
+		t.Fatalf("status overwritten to %s", got.Status)
+	}
 }

@@ -2,138 +2,176 @@ package engine
 
 import (
 	"fmt"
+	"strings"
 	"sync"
+	"time"
 
 	"github.com/robfig/cron/v3"
 	"go.uber.org/zap"
 
-	"bedrock/internal/model"
-	"bedrock/internal/repository"
+	"bedrock/internal/cicd/model"
 )
 
-// CronScheduler manages cron-based timed builds for environments.
-type CronScheduler struct {
-	cron      *cron.Cron
-	entries   map[uint]cron.EntryID // envID -> cron entry ID
-	mu        sync.Mutex
-	envRepo   *repository.EnvironmentRepository
-	buildRepo *repository.BuildRepository
-	scheduler *Scheduler
-	logger    *zap.Logger
+// Clock abstracts time for cron overlap tests.
+type Clock interface {
+	Now() time.Time
 }
 
-// NewCronScheduler creates a new CronScheduler.
+type realClock struct{}
+
+func (realClock) Now() time.Time { return time.Now() }
+
+// CronScheduler schedules per-BuildJob cron with IANA timezone.
+// Overlapping non-terminal runs are skipped; missed triggers during downtime are NOT catch-up
+// (robfig/cron does not backfill missed ticks after Start).
+type CronScheduler struct {
+	cron      *cron.Cron
+	entries   map[uint]cron.EntryID
+	mu        sync.Mutex
+	jobs      JobStore
+	runs      RunStore
+	enqueuer  RunEnqueuer
+	scheduler RunScheduler
+	logger    *zap.Logger
+	clock     Clock
+}
+
 func NewCronScheduler(
-	envRepo *repository.EnvironmentRepository,
-	buildRepo *repository.BuildRepository,
-	scheduler *Scheduler,
+	jobs JobStore,
+	runs RunStore,
+	enqueuer RunEnqueuer,
+	scheduler RunScheduler,
 	logger *zap.Logger,
 ) *CronScheduler {
 	return &CronScheduler{
 		cron:      cron.New(),
 		entries:   make(map[uint]cron.EntryID),
-		envRepo:   envRepo,
-		buildRepo: buildRepo,
+		jobs:      jobs,
+		runs:      runs,
+		enqueuer:  enqueuer,
 		scheduler: scheduler,
 		logger:    logger,
+		clock:     realClock{},
 	}
 }
 
-// Start loads all enabled cron environments and starts the cron scheduler.
-func (cs *CronScheduler) Start() error {
-	envs, err := cs.envRepo.ListCronEnabled()
-	if err != nil {
-		return fmt.Errorf("load cron environments: %w", err)
+// SetClock injects a clock (tests).
+func (cs *CronScheduler) SetClock(c Clock) {
+	if c != nil {
+		cs.clock = c
 	}
-	for _, env := range envs {
-		if err := cs.addEntry(env); err != nil {
-			cs.logger.Warn("skip cron entry", zap.Uint("env_id", env.ID), zap.Error(err))
+}
+
+func (cs *CronScheduler) Start() error {
+	list, err := cs.jobs.ListCronEnabled()
+	if err != nil {
+		return fmt.Errorf("load cron jobs: %w", err)
+	}
+	for _, job := range list {
+		if err := cs.addEntry(job); err != nil {
+			if cs.logger != nil {
+				cs.logger.Warn("skip cron entry", zap.Uint("job_id", job.ID), zap.Error(err))
+			}
 		}
 	}
 	cs.cron.Start()
 	return nil
 }
 
-// Stop stops the cron scheduler.
 func (cs *CronScheduler) Stop() {
 	cs.cron.Stop()
 }
 
-// Add registers a cron entry for the given environment.
-func (cs *CronScheduler) Add(env model.Environment) error {
+func (cs *CronScheduler) Add(job model.BuildJob) error {
 	cs.mu.Lock()
 	defer cs.mu.Unlock()
-	// Remove existing entry if any
-	if entryID, ok := cs.entries[env.ID]; ok {
+	if entryID, ok := cs.entries[job.ID]; ok {
 		cs.cron.Remove(entryID)
-		delete(cs.entries, env.ID)
+		delete(cs.entries, job.ID)
 	}
-	if !env.CronEnabled || env.CronExpression == "" {
+	if !job.TriggerCron || job.CronExpression == "" || !job.Enabled {
 		return nil
 	}
-	return cs.addEntry(env)
+	return cs.addEntryLocked(job)
 }
 
-// Remove removes the cron entry for the given environment ID.
-func (cs *CronScheduler) Remove(envID uint) {
+func (cs *CronScheduler) Remove(jobID uint) {
 	cs.mu.Lock()
 	defer cs.mu.Unlock()
-	if entryID, ok := cs.entries[envID]; ok {
+	if entryID, ok := cs.entries[jobID]; ok {
 		cs.cron.Remove(entryID)
-		delete(cs.entries, envID)
+		delete(cs.entries, jobID)
 	}
 }
 
-// Update updates the cron entry for the given environment.
-func (cs *CronScheduler) Update(env model.Environment) error {
-	return cs.Add(env)
+func (cs *CronScheduler) Update(job model.BuildJob) error {
+	return cs.Add(job)
 }
 
-func (cs *CronScheduler) addEntry(env model.Environment) error {
-	envID := env.ID
-	projectID := env.ProjectID
-	expression := env.CronExpression
+func (cs *CronScheduler) addEntry(job model.BuildJob) error {
+	cs.mu.Lock()
+	defer cs.mu.Unlock()
+	return cs.addEntryLocked(job)
+}
 
-	entryID, err := cs.cron.AddFunc(expression, func() {
+func (cs *CronScheduler) addEntryLocked(job model.BuildJob) error {
+	jobID := job.ID
+	tzName := strings.TrimSpace(job.CronTimezone)
+	if tzName == "" {
+		tzName = "UTC"
+	}
+	if _, err := time.LoadLocation(tzName); err != nil {
+		return fmt.Errorf("invalid timezone %q: %w", tzName, err)
+	}
+
+	// CRON_TZ=IANA embeds per-job timezone; no catch-up of missed ticks.
+	spec := "CRON_TZ=" + tzName + " " + job.CronExpression
+	entryID, err := cs.cron.AddFunc(spec, func() {
 		defer func() {
-			if r := recover(); r != nil {
-				cs.logger.Error("cron callback panic recovered",
-					zap.Uint("env_id", envID),
-					zap.Any("panic", r),
-				)
+			if r := recover(); r != nil && cs.logger != nil {
+				cs.logger.Error("cron callback panic", zap.Uint("job_id", jobID), zap.Any("panic", r))
 			}
 		}()
-
-		cs.logger.Info("cron triggered build",
-			zap.Uint("env_id", envID),
-			zap.Uint("project_id", projectID),
-		)
-		num, err := cs.buildRepo.GetNextBuildNumber(projectID)
-		if err != nil {
-			cs.logger.Error("cron: get next build number", zap.Error(err))
-			return
-		}
-		build := &model.Build{
-			ProjectID:     projectID,
-			EnvironmentID: envID,
-			BuildNumber:   num,
-			Status:        "pending",
-			TriggerType:   "cron",
-			TriggeredBy:   0, // system trigger
-		}
-		if err := cs.buildRepo.Create(build); err != nil {
-			cs.logger.Error("cron: create build", zap.Error(err))
-			return
-		}
-		cs.scheduler.Submit(build.ID)
+		cs.trigger(jobID)
 	})
 	if err != nil {
-		return fmt.Errorf("invalid cron expression %q: %w", expression, err)
+		return fmt.Errorf("invalid cron expression %q (tz=%s): %w", job.CronExpression, tzName, err)
 	}
 
-	cs.mu.Lock()
-	cs.entries[envID] = entryID
-	cs.mu.Unlock()
-
+	cs.entries[jobID] = entryID
 	return nil
+}
+
+func (cs *CronScheduler) trigger(jobID uint) {
+	if cs.logger != nil {
+		cs.logger.Info("cron triggered", zap.Uint("job_id", jobID), zap.Time("now", cs.clock.Now()))
+	}
+	active, err := cs.runs.HasNonTerminal(jobID)
+	if err != nil {
+		if cs.logger != nil {
+			cs.logger.Error("cron overlap check failed", zap.Error(err))
+		}
+		return
+	}
+	if active {
+		if cs.logger != nil {
+			cs.logger.Info("cron skipped: non-terminal run exists", zap.Uint("job_id", jobID))
+		}
+		return
+	}
+	run, err := cs.enqueuer.EnqueueInternal(jobID, 0, EnqueueParams{TriggerType: "cron"})
+	if err != nil {
+		if cs.logger != nil {
+			cs.logger.Error("cron enqueue failed", zap.Uint("job_id", jobID), zap.Error(err))
+		}
+		return
+	}
+	if cs.scheduler != nil {
+		_ = cs.scheduler.Submit(run.ID)
+	}
+}
+
+// TriggerNow is for tests: run the overlap/enqueue path immediately.
+func (cs *CronScheduler) TriggerNow(jobID uint) {
+	cs.trigger(jobID)
 }

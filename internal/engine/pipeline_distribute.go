@@ -9,185 +9,86 @@ import (
 	"strings"
 	"time"
 
+	"bedrock/internal/cicd/model"
 	"bedrock/internal/deployer"
-	"bedrock/internal/model"
 )
 
-func (p *Pipeline) updateStageKeepSuccess(build *model.Build, stage string) {
-	build.CurrentStage = stage
-	p.buildRepo.UpdateStatus(build.ID, "success", map[string]interface{}{"current_stage": stage})
-}
-
-func (p *Pipeline) deployOneDistribution(ctx context.Context, build *model.Build, project *model.Project, d *model.Distribution, sourceDir string, writeLine func(string)) error {
-	method := strings.TrimSpace(strings.ToLower(d.Method))
-	if method == "" {
-		method = "rsync"
-	}
-	isLocal := method == "local"
-	deployPath := strings.TrimSpace(d.RemotePath)
-
-	if isLocal {
-		if deployPath == "" {
-			return fmt.Errorf("分发未配置路径")
-		}
-		if !filepath.IsAbs(deployPath) {
-			return fmt.Errorf("本机分发路径须为绝对路径")
-		}
-	} else {
-		if d.ServerID == nil || deployPath == "" {
-			return fmt.Errorf("分发未配置服务器或路径")
-		}
-	}
-	if ctx.Err() != nil {
-		return ctx.Err()
-	}
-
-	deployOpts := deployer.DeployOptions{
-		SourceDir:     sourceDir,
-		ArchiveFormat: normalizeArtifactFormat(project.ArtifactFormat),
-		RemotePath:    deployPath,
-		Logger:        writeLine,
-	}
-	if !isLocal {
-		server, err := p.serverRepo.FindByID(*d.ServerID)
-		if err != nil {
-			return fmt.Errorf("服务器不存在")
-		}
-		password, privateKey, agentToken, decErr := decryptServerSecrets(server)
-		if decErr != nil {
-			return decErr
-		}
-		deployOpts.Server = deployer.ServerInfo{
-			Host:       server.Host,
-			Port:       server.Port,
-			OSType:     server.OSType,
-			Username:   server.Username,
-			AuthType:   server.AuthType,
-			Password:   password,
-			PrivateKey: privateKey,
-			AgentURL:   server.AgentURL,
-			AgentToken: agentToken,
-		}
-	}
-
-	dpl := deployer.NewDeployer(method)
-	if err := dpl.Deploy(ctx, deployOpts); err != nil {
-		return fmt.Errorf("分发失败: %w", err)
-	}
-	writeLine("Distribution completed successfully")
-
-	if strings.TrimSpace(d.PostDeployScript) != "" {
-		writeLine("=== Executing post-deploy script ===")
-		var err error
-		if isLocal {
-			err = deployer.ExecuteLocalScriptInDir(ctx, deployOpts.RemotePath, d.PostDeployScript, writeLine)
-		} else {
-			err = deployer.ExecuteRemoteScriptInDir(ctx, deployOpts.Server, deployOpts.RemotePath, d.PostDeployScript, writeLine)
-		}
-		if err != nil {
-			return fmt.Errorf("部署后脚本失败: %w", err)
-		}
-		writeLine("Post-deploy script completed")
-	}
-	return nil
-}
-
-func parseRedistributeFilterJSON(s string) []uint {
-	s = strings.TrimSpace(s)
-	if s == "" || s == "[]" || s == "null" {
-		return nil
-	}
-	var ids []uint
-	if err := json.Unmarshal([]byte(s), &ids); err != nil {
-		return nil
-	}
-	return ids
-}
-
-func filterDistributions(all []model.Distribution, ids []uint) []model.Distribution {
-	if len(ids) == 0 {
-		return all
-	}
-	want := make(map[uint]struct{}, len(ids))
-	for _, id := range ids {
-		want[id] = struct{}{}
-	}
-	out := make([]model.Distribution, 0, len(all))
-	for _, d := range all {
-		if _, ok := want[d.ID]; ok {
-			out = append(out, d)
-		}
-	}
-	return out
-}
-
-// runDistributions executes each distribution; does not change Build.Status away from success.
-func (p *Pipeline) runDistributions(ctx context.Context, build *model.Build, project *model.Project, env *model.Environment, sourceDir string, writeLine func(string), filterIDs []uint) {
-	dists, err := p.distRepo.ListByEnvironmentID(env.ID)
+func (p *Pipeline) runDistributions(
+	ctx context.Context,
+	run *model.BuildRun,
+	job *model.BuildJob,
+	sourceDir string,
+	writeLine func(string),
+	filterIDs []uint,
+) {
+	targets, err := p.jobs.ListDeployTargets(job.ID)
 	if err != nil {
-		writeLine("ERROR: load distributions: " + err.Error())
-		p.buildRepo.UpdateStatus(build.ID, "success", map[string]interface{}{
-			"current_stage":            "success",
-			"distribution_summary":     "all_failed",
-			"redistribute_filter_json": "",
+		writeLine("ERROR: load deploy targets: " + err.Error())
+		_ = p.runs.UpdateFields(run.ID, map[string]interface{}{
+			"stage":                "idle",
+			"distribution_summary": "all_failed",
 		})
 		return
 	}
-	dists = filterDistributions(dists, filterIDs)
-	if len(dists) == 0 {
-		writeLine("=== No distribution targets (skipped) ===")
-		p.buildRepo.UpdateStatus(build.ID, "success", map[string]interface{}{
-			"current_stage":            "success",
-			"distribution_summary":     "skipped",
-			"redistribute_filter_json": "",
+	targets = filterDeployTargets(targets, filterIDs)
+	if len(targets) == 0 {
+		writeLine("=== No deploy targets ===")
+		_ = p.runs.UpdateFields(run.ID, map[string]interface{}{
+			"stage":                "idle",
+			"distribution_summary": "none",
 		})
 		return
 	}
 
-	p.updateStageKeepSuccess(build, "distributing")
-	p.buildRepo.UpdateStatus(build.ID, "success", map[string]interface{}{
-		"distribution_summary": "running",
-	})
+	batchNo, err := p.runs.NextBatchNo(run.ID)
+	if err != nil || batchNo < 1 {
+		batchNo = 1
+	}
 
-	writeLine("=== Stage: Distributing ===")
+	p.setStageKeepSuccess(run, "distributing")
+	_ = p.runs.UpdateFields(run.ID, map[string]interface{}{"distribution_summary": "running"})
+	writeLine(fmt.Sprintf("=== Stage: Distributing (batch %d) ===", batchNo))
+
 	var nOK, nFail int
-	for i := range dists {
+	for i := range targets {
 		if ctx.Err() != nil {
-			for j := i; j < len(dists); j++ {
-				p.recordDistributionCancelled(build, dists[j].ID)
+			for j := i; j < len(targets); j++ {
+				p.recordAttemptCancelled(run, batchNo, &targets[j])
 			}
 			writeLine("ERROR: cancelled")
 			break
 		}
-		d := dists[i]
-		row := &model.BuildDistribution{
-			BuildID:        build.ID,
-			DistributionID: d.ID,
-			Status:         "running",
-			StartedAt:      ptrTime(time.Now()),
+		t := targets[i]
+		snap, _ := json.Marshal(t)
+		attempt := &model.BuildDeployAttempt{
+			BuildRunID:         run.ID,
+			BatchNo:            batchNo,
+			DeployTargetID:     &t.ID,
+			TargetSnapshotJSON: string(snap),
+			Status:             "running",
+			StartedAt:          ptrTime(time.Now()),
 		}
-		_ = p.buildDistRepo.Upsert(row)
-		writeLine(fmt.Sprintf("--- Distribution #%d (%s → %s) ---", d.ID, d.Method, d.RemotePath))
-		err := p.deployOneDistribution(ctx, build, project, &d, sourceDir, writeLine)
+		_ = p.runs.CreateAttempt(attempt)
+		writeLine(fmt.Sprintf("--- Target #%d (%s → %s) ---", t.ID, t.Method, t.RemotePath))
+		err := p.deployOneTarget(ctx, &t, sourceDir, normalizeArtifactFormat(job.ArtifactFormat), writeLine)
 		fin := time.Now()
+		attempt.FinishedAt = &fin
 		if err != nil {
 			if ctx.Err() != nil {
-				row.Status = "cancelled"
-				row.ErrorMessage = "cancelled"
+				attempt.Status = "cancelled"
+				attempt.ErrorMessage = "cancelled"
 			} else {
-				row.Status = "failed"
-				row.ErrorMessage = err.Error()
+				attempt.Status = "failed"
+				attempt.ErrorMessage = err.Error()
 			}
-			row.FinishedAt = &fin
-			_ = p.buildDistRepo.Upsert(row)
+			_ = p.runs.UpdateAttempt(attempt)
 			writeLine("ERROR: " + err.Error())
 			nFail++
 			continue
 		}
-		row.Status = "success"
-		row.ErrorMessage = ""
-		row.FinishedAt = &fin
-		_ = p.buildDistRepo.Upsert(row)
+		attempt.Status = "success"
+		attempt.ErrorMessage = ""
+		_ = p.runs.UpdateAttempt(attempt)
 		nOK++
 	}
 
@@ -200,106 +101,221 @@ func (p *Pipeline) runDistributions(ctx context.Context, build *model.Build, pro
 		summary = "all_failed"
 	}
 
-	p.buildRepo.UpdateStatus(build.ID, "success", map[string]interface{}{
-		"current_stage":            "success",
-		"distribution_summary":     summary,
-		"redistribute_filter_json": "",
+	// Never change status away from success due to distribution outcome.
+	_ = p.runs.UpdateFields(run.ID, map[string]interface{}{
+		"status":               "success",
+		"stage":                "idle",
+		"distribution_summary": summary,
 	})
 	writeLine(fmt.Sprintf("=== Distribution phase finished (%s) ===", summary))
 }
 
-func (p *Pipeline) recordDistributionCancelled(build *model.Build, distID uint) {
-	row := &model.BuildDistribution{
-		BuildID:        build.ID,
-		DistributionID: distID,
-		Status:         "cancelled",
-		ErrorMessage:   "cancelled",
-		FinishedAt:     ptrTime(time.Now()),
+func (p *Pipeline) recordAttemptCancelled(run *model.BuildRun, batchNo int, t *model.DeployTarget) {
+	snap, _ := json.Marshal(t)
+	id := t.ID
+	_ = p.runs.CreateAttempt(&model.BuildDeployAttempt{
+		BuildRunID:         run.ID,
+		BatchNo:            batchNo,
+		DeployTargetID:     &id,
+		TargetSnapshotJSON: string(snap),
+		Status:             "cancelled",
+		ErrorMessage:       "cancelled",
+		FinishedAt:         ptrTime(time.Now()),
+	})
+}
+
+func filterDeployTargets(all []model.DeployTarget, ids []uint) []model.DeployTarget {
+	if len(ids) == 0 {
+		return all
 	}
-	_ = p.buildDistRepo.Upsert(row)
+	want := make(map[uint]struct{}, len(ids))
+	for _, id := range ids {
+		want[id] = struct{}{}
+	}
+	out := make([]model.DeployTarget, 0, len(ids))
+	for _, t := range all {
+		if _, ok := want[t.ID]; ok {
+			out = append(out, t)
+		}
+	}
+	return out
 }
 
-func ptrTime(t time.Time) *time.Time {
-	return &t
+func (p *Pipeline) deployOneTarget(
+	ctx context.Context,
+	t *model.DeployTarget,
+	sourceDir, artifactFormat string,
+	writeLine func(string),
+) error {
+	method := strings.TrimSpace(strings.ToLower(t.Method))
+	if method == "" {
+		method = "rsync"
+	}
+	isLocal := method == "local"
+	deployPath := strings.TrimSpace(t.RemotePath)
+
+	if isLocal {
+		if deployPath == "" {
+			return fmt.Errorf("分发未配置路径")
+		}
+		if !filepath.IsAbs(deployPath) {
+			return fmt.Errorf("本机分发路径须为绝对路径")
+		}
+	} else {
+		if t.ServerID == nil || deployPath == "" {
+			return fmt.Errorf("分发未配置服务器或路径")
+		}
+	}
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+
+	opts := deployer.DeployOptions{
+		SourceDir:     sourceDir,
+		ArchiveFormat: artifactFormat,
+		RemotePath:    deployPath,
+		Logger:        writeLine,
+	}
+	if !isLocal {
+		server, err := p.servers.FindByID(*t.ServerID)
+		if err != nil {
+			return fmt.Errorf("服务器不存在")
+		}
+		password, privateKey, agentToken, err := p.resolveServerSecrets(server)
+		if err != nil {
+			return err
+		}
+		username := server.Username
+		if username == "" {
+			// Prefer credential username when server username empty
+			if server.CredentialID != nil {
+				_, u, _, _, _ := p.secrets.Resolve(*server.CredentialID)
+				username = u
+			}
+		}
+		opts.Server = deployer.ServerInfo{
+			Host:       server.Host,
+			Port:       server.Port,
+			OSType:     server.OSType,
+			Username:   username,
+			AuthType:   server.AuthType,
+			Password:   password,
+			PrivateKey: privateKey,
+			AgentURL:   server.AgentURL,
+			AgentToken: agentToken,
+		}
+	}
+
+	dpl := deployer.NewDeployer(method)
+	if err := dpl.Deploy(ctx, opts); err != nil {
+		return fmt.Errorf("分发失败: %w", err)
+	}
+	writeLine("Distribution completed successfully")
+
+	if strings.TrimSpace(t.PostDeployScript) != "" {
+		writeLine("=== Executing post-deploy script ===")
+		var err error
+		if isLocal {
+			err = deployer.ExecuteLocalScriptInDir(ctx, opts.RemotePath, t.PostDeployScript, writeLine)
+		} else {
+			err = deployer.ExecuteRemoteScriptInDir(ctx, opts.Server, opts.RemotePath, t.PostDeployScript, writeLine)
+		}
+		if err != nil {
+			return fmt.Errorf("部署后脚本失败: %w", err)
+		}
+		writeLine("Post-deploy script completed")
+	}
+	return nil
 }
 
-func (p *Pipeline) executeRedistributeOnly(ctx context.Context, build *model.Build, project *model.Project, env *model.Environment, writeLine func(string)) {
-	artifactPath := strings.TrimSpace(build.ArtifactPath)
+func (p *Pipeline) resolveServerSecrets(server *model.Server) (password, privateKey, agentToken string, err error) {
+	if server.CredentialID != nil && *server.CredentialID > 0 {
+		typ, _, secret, passphrase, rerr := p.secrets.Resolve(*server.CredentialID)
+		if rerr != nil {
+			return "", "", "", rerr
+		}
+		switch strings.ToLower(typ) {
+		case "ssh_key":
+			privateKey = secret
+			_ = passphrase // passphrase not threaded into deployer.ServerInfo in current API
+		default:
+			password = secret
+		}
+	}
+	if server.AgentCredentialID != nil && *server.AgentCredentialID > 0 {
+		_, _, token, _, rerr := p.secrets.Resolve(*server.AgentCredentialID)
+		if rerr != nil {
+			return "", "", "", rerr
+		}
+		agentToken = token
+	}
+	return password, privateKey, agentToken, nil
+}
+
+func (p *Pipeline) executeRedeployOnly(ctx context.Context, run *model.BuildRun, job *model.BuildJob, writeLine func(string)) {
+	artifactPath := strings.TrimSpace(run.ArtifactPath)
 	if artifactPath == "" {
 		writeLine("ERROR: no artifact_path")
-		p.buildRepo.UpdateStatus(build.ID, "success", map[string]interface{}{
-			"distribution_summary":     "all_failed",
-			"redistribute_filter_json": "",
-		})
+		_ = p.runs.UpdateFields(run.ID, map[string]interface{}{"distribution_summary": "all_failed", "stage": "idle"})
 		return
 	}
 	if !filepath.IsAbs(artifactPath) {
-		artifactPath = filepath.Join(p.artifactDir, artifactPath)
+		artifactPath = filepath.Join(p.artifact, artifactPath)
 	}
 	if _, err := os.Stat(artifactPath); err != nil {
 		writeLine("ERROR: " + err.Error())
-		p.buildRepo.UpdateStatus(build.ID, "success", map[string]interface{}{
-			"distribution_summary":     "all_failed",
-			"redistribute_filter_json": "",
-		})
+		_ = p.runs.UpdateFields(run.ID, map[string]interface{}{"distribution_summary": "all_failed", "stage": "idle"})
 		return
 	}
-	writeLine("=== 重新分发：使用已有产物 ===")
+	writeLine("=== Redeploy: using existing artifact ===")
 	writeLine("Artifact: " + artifactPath)
 
-	tmpDir, err := os.MkdirTemp("", "bedrock-deploy-*")
+	tmpDir, err := os.MkdirTemp("", "bedrock-redeploy-*")
 	if err != nil {
 		writeLine("ERROR: mkdir temp: " + err.Error())
-		p.buildRepo.UpdateStatus(build.ID, "success", map[string]interface{}{
-			"distribution_summary":     "all_failed",
-			"redistribute_filter_json": "",
-		})
+		_ = p.runs.UpdateFields(run.ID, map[string]interface{}{"distribution_summary": "all_failed", "stage": "idle"})
 		return
 	}
 	defer os.RemoveAll(tmpDir)
 
-	artifactFormat := normalizeArtifactFormat(project.ArtifactFormat)
-	if err := extractArtifactArchive(artifactPath, tmpDir, artifactFormat); err != nil {
+	format := normalizeArtifactFormat(job.ArtifactFormat)
+	if err := extractArtifactArchive(artifactPath, tmpDir, format); err != nil {
 		writeLine("ERROR: " + err.Error())
-		p.buildRepo.UpdateStatus(build.ID, "success", map[string]interface{}{
-			"distribution_summary":     "all_failed",
-			"redistribute_filter_json": "",
-		})
+		_ = p.runs.UpdateFields(run.ID, map[string]interface{}{"distribution_summary": "all_failed", "stage": "idle"})
 		return
 	}
 
-	filter := parseRedistributeFilterJSON(build.RedistributeFilterJSON)
+	filter := parseTargetFilterFromSnapshot(run.SnapshotJSON)
 	if ctx.Err() != nil {
-		p.cancelBuild(build)
+		p.cancelRun(run)
 		return
 	}
-	p.runDistributions(ctx, build, project, env, tmpDir, writeLine, filter)
+	p.runDistributions(ctx, run, job, tmpDir, writeLine, filter)
 }
 
-func (p *Pipeline) markBuildArtifactSuccess(build *model.Build, writeLine func(string), hasDistributions bool) {
-	finished := time.Now()
-	build.FinishedAt = &finished
-	if build.StartedAt != nil {
-		build.DurationMs = finished.Sub(*build.StartedAt).Milliseconds()
+// parseTargetFilterFromSnapshot reads optional redeploy_target_ids from snapshot_json.
+func parseTargetFilterFromSnapshot(snapshotJSON string) []uint {
+	if strings.TrimSpace(snapshotJSON) == "" {
+		return nil
 	}
-	build.Status = "success"
-	build.ErrorMessage = ""
-	if hasDistributions {
-		build.CurrentStage = "distributing"
-		build.DistributionSummary = "running"
-	} else {
-		build.CurrentStage = "success"
-		build.DistributionSummary = "none"
+	var snap map[string]interface{}
+	if err := json.Unmarshal([]byte(snapshotJSON), &snap); err != nil {
+		return nil
 	}
-	fields := map[string]interface{}{
-		"finished_at":          build.FinishedAt,
-		"duration_ms":          build.DurationMs,
-		"current_stage":        build.CurrentStage,
-		"status":               "success",
-		"error_message":        "",
-		"distribution_summary": build.DistributionSummary,
+	raw, ok := snap["redeploy_target_ids"]
+	if !ok {
+		return nil
 	}
-	_ = p.buildRepo.UpdateStatus(build.ID, "success", fields)
-	writeLine(fmt.Sprintf("=== Build phase succeeded in %dms (artifact ready) ===", build.DurationMs))
-	p.notify(build, "success")
+	arr, ok := raw.([]interface{})
+	if !ok {
+		return nil
+	}
+	var ids []uint
+	for _, v := range arr {
+		switch n := v.(type) {
+		case float64:
+			ids = append(ids, uint(n))
+		}
+	}
+	return ids
 }
