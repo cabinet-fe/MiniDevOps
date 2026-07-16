@@ -114,6 +114,16 @@ export async function getDictionary(id: number): Promise<Dictionary> {
   return body;
 }
 
+/** Load a dictionary and its items even when it is not on the first list page. */
+export async function getDictionaryByCode(code: string): Promise<Dictionary | null> {
+  for (let page = 1; ; page += 1) {
+    const result = await listDictionaries({ page, page_size: 100 });
+    const summary = result.items.find((item) => item.code === code);
+    if (summary) return getDictionary(summary.id);
+    if (page >= result.total_pages) return null;
+  }
+}
+
 export async function createDictionary(body: Record<string, unknown>): Promise<Dictionary> {
   const { body: data } = await http.post<Dictionary>("/dictionaries", body);
   return data;

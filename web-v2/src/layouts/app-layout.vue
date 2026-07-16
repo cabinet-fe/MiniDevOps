@@ -2,7 +2,7 @@
 import { computed, onMounted, onUnmounted } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import type { NavItem } from "@veltra/desktop";
-import { HouseFilled, Layers, Monitor, Setting, Tools } from "@veltra/icons/normal";
+import { Books, HouseFilled, Layers, Monitor, Setting, Tools } from "@veltra/icons/normal";
 import type { DefineComponent } from "vue";
 
 import { menuNodesToNavItems } from "@/lib/menu-nav";
@@ -18,6 +18,7 @@ const ROOT_ICONS: Record<string, DefineComponent> = {
   dashboard: HouseFilled as DefineComponent,
   ops: Tools as DefineComponent,
   cicd: Layers as DefineComponent,
+  project: Books as DefineComponent,
   system: Setting as DefineComponent,
 };
 

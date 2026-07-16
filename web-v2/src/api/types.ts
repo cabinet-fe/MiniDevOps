@@ -113,7 +113,7 @@ export interface OperationLog {
 export interface Credential {
   id: number;
   name: string;
-  type: "password" | "token" | "ssh_key" | "api_key" | string;
+  type: string;
   username: string;
   description: string;
   has_secret: boolean;
@@ -224,4 +224,208 @@ export interface BuildRun {
   error_message?: string;
   created_at: string;
   deploy_attempts?: BuildDeployAttempt[];
+}
+
+export type DashboardCardID = "build_summary" | "system_info" | "system_status";
+
+export interface DashboardCardLayout {
+  id: DashboardCardID;
+  visible: boolean;
+  order: number;
+}
+
+export interface DashboardLayout {
+  cards: DashboardCardLayout[];
+}
+
+export interface DashboardRecentBuildRun {
+  id: number;
+  build_job_id: number;
+  build_number: number;
+  status: string;
+  branch: string;
+  created_at: string;
+}
+
+export interface BuildSummary {
+  running: number;
+  queued: number;
+  success_rate: number;
+  recent: DashboardRecentBuildRun[];
+}
+
+export interface SystemInfo {
+  version: string;
+  os: string;
+  arch: string;
+  runtime: string;
+  hostname: string;
+  start_time: string;
+}
+
+export interface DiskStatus {
+  path: string;
+  total_bytes: number;
+  free_bytes: number;
+  used_percent: number;
+}
+
+export interface SystemStatus {
+  cpu_usage_percent: number;
+  memory_used_bytes: number;
+  memory_total_bytes: number;
+  memory_usage_percent: number;
+  health: string;
+  directories: DiskStatus[];
+  collected_at: string;
+}
+
+export interface ProcessInfo {
+  pid: number;
+  name: string;
+  cpu_percent: number;
+  memory_bytes: number;
+  username: string;
+  start_time: number;
+  ports: number[];
+}
+
+export interface ToolchainDefinition {
+  id: number;
+  name: string;
+  kind: "builtin" | "custom";
+  executable: string;
+  description: string;
+  detect_command: string;
+  install_template: string;
+  upgrade_template: string;
+  uninstall_template: string;
+  versions_command: string;
+  switch_template: string;
+  default_version: string;
+}
+
+export interface InstallSource {
+  id: number;
+  name: string;
+  base_url: string;
+  priority: number;
+  enabled: boolean;
+}
+
+export interface ToolchainInstallJob {
+  id: number;
+  toolchain_id: number;
+  operation: "install" | "upgrade" | "uninstall" | "switch";
+  requested_version: string;
+  status: string;
+  source_id?: number | null;
+  command_snapshot: string;
+  error_message: string;
+  created_at: string;
+  toolchain?: ToolchainDefinition;
+  source?: InstallSource;
+}
+
+export type ProjectRole = "owner" | "admin" | "member" | "readonly";
+
+export interface ProjectCapabilities {
+  update: boolean;
+  archive: boolean;
+  delete: boolean;
+  manage_members: boolean;
+  transfer_owner: boolean;
+}
+
+export interface ProductProject {
+  id: number;
+  name: string;
+  slug: string;
+  description: string;
+  status: "active" | "archived";
+  owner_id: number;
+  repository_id?: number | null;
+  tags: string;
+  created_by: number;
+  created_at: string;
+  updated_at: string;
+  my_role?: ProjectRole;
+  permissions?: ProjectCapabilities;
+}
+
+export interface ProjectMember {
+  id: number;
+  project_id: number;
+  user_id: number;
+  role: ProjectRole;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Requirement {
+  id: number;
+  project_id: number;
+  title: string;
+  description: string;
+  status: string;
+  priority: "low" | "normal" | "high" | "urgent";
+  assignee_id?: number | null;
+  repository_id?: number | null;
+  tags: string;
+  created_by: number;
+  updated_by: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface RequirementStatusOption {
+  label: string;
+  value: string;
+  sort_order: number;
+  enabled: boolean;
+}
+
+export interface RequirementComment {
+  id: number;
+  requirement_id: number;
+  content: string;
+  created_by: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface RequirementAttachment {
+  id: number;
+  requirement_id: number;
+  storage_object_id: number;
+  filename: string;
+  created_by: number;
+  created_at: string;
+}
+
+export interface ApiDocNode {
+  id: number;
+  project_id: number;
+  parent_id?: number | null;
+  kind: "dir" | "doc";
+  name: string;
+  sort_order: number;
+  repository_id?: number | null;
+  published_content: string;
+  draft_content: string;
+  content_version: number;
+  draft_base_version: number;
+  draft_updated_at?: string | null;
+  draft_source_run_id?: number | null;
+  children?: ApiDocNode[];
+}
+
+export interface ApiDocDiff {
+  node_id: number;
+  content_version: number;
+  has_draft: boolean;
+  published_lines: number;
+  draft_lines: number;
+  added_lines: number;
+  removed_lines: number;
 }

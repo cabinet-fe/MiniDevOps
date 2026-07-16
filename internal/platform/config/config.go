@@ -44,6 +44,13 @@ type BuildConfig struct {
 	CacheDir      string `mapstructure:"cache_dir"`
 }
 
+// StorageConfig controls the content-addressed upload store. Limits are bytes.
+type StorageConfig struct {
+	Root               string `mapstructure:"root"`
+	AttachmentMaxBytes int64  `mapstructure:"attachment_max_bytes"`
+	DocImportMaxBytes  int64  `mapstructure:"doc_import_max_bytes"`
+}
+
 type EncryptionConfig struct {
 	Key string `mapstructure:"key"`
 }
@@ -59,6 +66,7 @@ type Config struct {
 	Database   DatabaseConfig   `mapstructure:"database"`
 	JWT        JWTConfig        `mapstructure:"jwt"`
 	Build      BuildConfig      `mapstructure:"build"`
+	Storage    StorageConfig    `mapstructure:"storage"`
 	Encryption EncryptionConfig `mapstructure:"encryption"`
 	Admin      AdminConfig      `mapstructure:"admin"`
 }
@@ -91,6 +99,9 @@ func Load(configPath string) (*Config, error) {
 	v.SetDefault("jwt.access_ttl", "2h")
 	v.SetDefault("jwt.refresh_ttl", "168h")
 	v.SetDefault("build.max_concurrent", 3)
+	v.SetDefault("storage.root", "./data/storage")
+	v.SetDefault("storage.attachment_max_bytes", 20*1024*1024)
+	v.SetDefault("storage.doc_import_max_bytes", 100*1024*1024)
 
 	if err := v.ReadInConfig(); err != nil {
 		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
@@ -123,6 +134,7 @@ func Load(configPath string) (*Config, error) {
 	cfg.Build.ArtifactDir = resolvePath(configDir, cfg.Build.ArtifactDir)
 	cfg.Build.LogDir = resolvePath(configDir, cfg.Build.LogDir)
 	cfg.Build.CacheDir = resolvePath(configDir, cfg.Build.CacheDir)
+	cfg.Storage.Root = resolvePath(configDir, cfg.Storage.Root)
 
 	if err := cfg.Validate(); err != nil {
 		return nil, err
@@ -174,6 +186,15 @@ func (c *Config) Validate() error {
 		if _, err := time.ParseDuration(c.Database.ConnMaxLifetime); err != nil {
 			return fmt.Errorf("invalid database.conn_max_lifetime: %w", err)
 		}
+	}
+	if c.Storage.Root == "" {
+		return fmt.Errorf("storage.root is required")
+	}
+	if c.Storage.AttachmentMaxBytes <= 0 {
+		return fmt.Errorf("storage.attachment_max_bytes must be greater than zero")
+	}
+	if c.Storage.DocImportMaxBytes <= 0 {
+		return fmt.Errorf("storage.doc_import_max_bytes must be greater than zero")
 	}
 	return nil
 }

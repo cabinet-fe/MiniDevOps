@@ -27,6 +27,9 @@ tags:
   - name: Servers
   - name: Credentials
   - name: Webhook
+  - name: Dashboard
+  - name: Ops
+  - name: Projects
 paths:
   /auth/login:
     post:
@@ -1384,6 +1387,940 @@ paths:
                 $ref: "#/components/schemas/SuccessEnvelope"
         "401":
           $ref: "#/components/responses/Error"
+  /dashboard/layout:
+    get:
+      tags: [Dashboard]
+      summary: Get the current user's permitted dashboard layout
+      operationId: dashboardLayoutGet
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data: {$ref: "#/components/schemas/DashboardLayout"}
+        "403": {$ref: "#/components/responses/Error"}
+    put:
+      tags: [Dashboard]
+      summary: Persist the current user's dashboard card order and visibility
+      operationId: dashboardLayoutPut
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/DashboardLayout"}
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data: {$ref: "#/components/schemas/DashboardLayout"}
+        "403": {$ref: "#/components/responses/Error"}
+  /dashboard/build-summary:
+    get:
+      tags: [Dashboard]
+      summary: Get build-run dashboard card summary
+      operationId: dashboardBuildSummary
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data: {$ref: "#/components/schemas/BuildSummary"}
+        "403": {$ref: "#/components/responses/Error"}
+  /dashboard/system-info:
+    get:
+      tags: [Dashboard]
+      summary: Get complete read-only system information
+      description: Visible to permitted non-super-admin users; it does not grant ops write access.
+      operationId: dashboardSystemInfo
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data: {$ref: "#/components/schemas/SystemInfo"}
+        "403": {$ref: "#/components/responses/Error"}
+  /dashboard/system-status:
+    get:
+      tags: [Dashboard]
+      summary: Get throttled system resource status
+      operationId: dashboardSystemStatus
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data: {$ref: "#/components/schemas/SystemStatus"}
+        "403": {$ref: "#/components/responses/Error"}
+  /ops/processes:
+    get:
+      tags: [Ops]
+      summary: List local processes (super-admin only)
+      description: Returns the full filtered process list without pagination.
+      operationId: opsProcessesList
+      parameters:
+        - {name: keyword, in: query, schema: {type: string}}
+        - {name: pid, in: query, schema: {type: integer}}
+        - {name: port, in: query, schema: {type: integer}}
+        - {name: sort, in: query, schema: {type: string, enum: [cpu, memory, name]}}
+        - {name: order, in: query, schema: {type: string, enum: [asc, desc]}}
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          items:
+                            type: array
+                            items: {$ref: "#/components/schemas/ProcessInfo"}
+        "403": {$ref: "#/components/responses/Error"}
+  /ops/processes/{pid}/kill:
+    post:
+      tags: [Ops]
+      summary: Terminate a local process (super-admin only)
+      operationId: opsProcessesKill
+      parameters:
+        - name: pid
+          in: path
+          required: true
+          schema: {type: integer}
+      responses:
+        "200":
+          description: Terminated
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/SuccessEnvelope"}
+        "403": {$ref: "#/components/responses/Error"}
+  /ops/toolchains:
+    get:
+      tags: [Ops]
+      summary: List toolchain definitions
+      operationId: opsToolchainsList
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          items:
+                            type: array
+                            items: {$ref: "#/components/schemas/ToolchainDefinition"}
+        "403": {$ref: "#/components/responses/Error"}
+    post:
+      tags: [Ops]
+      summary: Create a custom toolchain definition
+      description: Custom commands run under the Bedrock process UID and are not sandboxed.
+      operationId: opsToolchainsCreate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/ToolchainInput"}
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/SuccessEnvelope"}
+        "403": {$ref: "#/components/responses/Error"}
+  /ops/toolchains/{id}:
+    parameters:
+      - $ref: "#/components/parameters/ID"
+    put:
+      tags: [Ops]
+      summary: Update a custom toolchain definition
+      operationId: opsToolchainsUpdate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/ToolchainInput"}
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data: {$ref: "#/components/schemas/ToolchainDefinition"}
+        "403": {$ref: "#/components/responses/Error"}
+    delete:
+      tags: [Ops]
+      summary: Delete a custom toolchain definition
+      operationId: opsToolchainsDelete
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/SuccessEnvelope"}
+        "403": {$ref: "#/components/responses/Error"}
+  /ops/toolchains/{id}/detect:
+    parameters: [{$ref: "#/components/parameters/ID"}]
+    post:
+      tags: [Ops]
+      summary: Detect a toolchain executable
+      operationId: opsToolchainsDetect
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data: {$ref: "#/components/schemas/ToolchainDetectResult"}
+        "403": {$ref: "#/components/responses/Error"}
+  /ops/toolchains/{id}/install:
+    parameters: [{$ref: "#/components/parameters/ID"}]
+    post:
+      tags: [Ops]
+      summary: Queue a toolchain installation
+      operationId: opsToolchainsInstall
+      requestBody:
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/ToolchainJobInput"}
+      responses:
+        "202":
+          description: Accepted
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data: {$ref: "#/components/schemas/ToolchainInstallJob"}
+        "403": {$ref: "#/components/responses/Error"}
+  /ops/toolchains/{id}/upgrade:
+    parameters: [{$ref: "#/components/parameters/ID"}]
+    post:
+      tags: [Ops]
+      summary: Queue a toolchain upgrade
+      operationId: opsToolchainsUpgrade
+      requestBody:
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/ToolchainJobInput"}
+      responses:
+        "202":
+          description: Accepted
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data: {$ref: "#/components/schemas/ToolchainInstallJob"}
+        "403": {$ref: "#/components/responses/Error"}
+  /ops/toolchains/{id}/uninstall:
+    parameters: [{$ref: "#/components/parameters/ID"}]
+    post:
+      tags: [Ops]
+      summary: Queue a toolchain uninstall
+      operationId: opsToolchainsUninstall
+      requestBody:
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/ToolchainJobInput"}
+      responses:
+        "202":
+          description: Accepted
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data: {$ref: "#/components/schemas/ToolchainInstallJob"}
+        "403": {$ref: "#/components/responses/Error"}
+  /ops/toolchains/{id}/switch:
+    parameters: [{$ref: "#/components/parameters/ID"}]
+    post:
+      tags: [Ops]
+      summary: Queue a default toolchain version switch
+      operationId: opsToolchainsSwitch
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/ToolchainJobInput"}
+      responses:
+        "202":
+          description: Accepted
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data: {$ref: "#/components/schemas/ToolchainInstallJob"}
+        "403": {$ref: "#/components/responses/Error"}
+  /ops/install-sources:
+    get:
+      tags: [Ops]
+      summary: List installation sources ordered by priority
+      operationId: opsInstallSourcesList
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data: {$ref: "#/components/schemas/InstallSourceList"}
+        "403": {$ref: "#/components/responses/Error"}
+    post:
+      tags: [Ops]
+      summary: Create an installation source
+      operationId: opsInstallSourcesCreate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/InstallSourceInput"}
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data: {$ref: "#/components/schemas/InstallSource"}
+        "403": {$ref: "#/components/responses/Error"}
+  /ops/install-sources/{id}:
+    parameters: [{$ref: "#/components/parameters/ID"}]
+    put:
+      tags: [Ops]
+      summary: Update an installation source
+      operationId: opsInstallSourcesUpdate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/InstallSourceInput"}
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data: {$ref: "#/components/schemas/InstallSource"}
+        "403": {$ref: "#/components/responses/Error"}
+    delete:
+      tags: [Ops]
+      summary: Delete an installation source
+      operationId: opsInstallSourcesDelete
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/SuccessEnvelope"}
+        "403": {$ref: "#/components/responses/Error"}
+  /ops/install-sources/{id}/ping:
+    parameters: [{$ref: "#/components/parameters/ID"}]
+    post:
+      tags: [Ops]
+      summary: Check installation source connectivity
+      operationId: opsInstallSourcesPing
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data: {$ref: "#/components/schemas/InstallSourcePingResult"}
+        "403": {$ref: "#/components/responses/Error"}
+  /ops/install-jobs:
+    get:
+      tags: [Ops]
+      summary: List persisted toolchain install jobs
+      operationId: opsInstallJobsList
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+        - {name: status, in: query, schema: {type: string}}
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data: {$ref: "#/components/schemas/ToolchainInstallJobPage"}
+        "403": {$ref: "#/components/responses/Error"}
+  /ops/install-jobs/{id}:
+    parameters: [{$ref: "#/components/parameters/ID"}]
+    get:
+      tags: [Ops]
+      summary: Get a toolchain install job
+      operationId: opsInstallJobsGet
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data: {$ref: "#/components/schemas/ToolchainInstallJob"}
+        "403": {$ref: "#/components/responses/Error"}
+  /ops/install-jobs/{id}/logs:
+    parameters: [{$ref: "#/components/parameters/ID"}]
+    get:
+      tags: [Ops]
+      summary: Fetch toolchain install job logs
+      operationId: opsInstallJobsLogs
+      responses:
+        "200":
+          description: Log text
+          content:
+            text/plain:
+              schema: {type: string}
+        "403": {$ref: "#/components/responses/Error"}
+  /ops/install-jobs/{id}/retry:
+    parameters: [{$ref: "#/components/parameters/ID"}]
+    post:
+      tags: [Ops]
+      summary: Retry a terminal install job by creating a new job
+      operationId: opsInstallJobsRetry
+      responses:
+        "202":
+          description: Accepted
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data: {$ref: "#/components/schemas/ToolchainInstallJob"}
+        "403": {$ref: "#/components/responses/Error"}
+  /projects:
+    get:
+      tags: [Projects]
+      summary: List projects visible through project ACL
+      operationId: projectsList
+      parameters:
+        - {$ref: "#/components/parameters/Page"}
+        - {$ref: "#/components/parameters/PageSize"}
+        - {name: keyword, in: query, schema: {type: string}}
+        - {name: status, in: query, schema: {type: string, enum: [active, archived]}}
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties: {data: {$ref: "#/components/schemas/ProductProjectPage"}}
+        "403": {$ref: "#/components/responses/Error"}
+    post:
+      tags: [Projects]
+      summary: Create a project; creator becomes Owner
+      operationId: projectsCreate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/ProductProjectCreateRequest"}
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/SuccessEnvelope"}
+  /projects/meta/requirement-statuses:
+    get:
+      tags: [Projects]
+      summary: List enabled requirement status options visible to project requirement readers
+      operationId: projectRequirementStatusesList
+      responses:
+        "200":
+          description: Enabled requirement_status dictionary items
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data: {$ref: "#/components/schemas/RequirementStatusOptions"}
+        "403": {$ref: "#/components/responses/Error"}
+  /projects/{id}:
+    parameters: [{$ref: "#/components/parameters/ID"}]
+    get:
+      tags: [Projects]
+      summary: Get a project visible through project ACL
+      operationId: projectsGet
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data: {$ref: "#/components/schemas/ProductProjectView"}
+        "404": {$ref: "#/components/responses/Error"}
+    put:
+      tags: [Projects]
+      summary: Update project metadata or active/archive state
+      operationId: projectsUpdate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/ProductProjectUpdateRequest"}
+      responses:
+        "200": {description: OK}
+        "403": {$ref: "#/components/responses/Error"}
+    delete:
+      tags: [Projects]
+      summary: Dissolve a project (Owner or manage_all)
+      operationId: projectsDelete
+      responses:
+        "200": {description: Deleted}
+        "403": {$ref: "#/components/responses/Error"}
+  /projects/{id}/archive:
+    parameters: [{$ref: "#/components/parameters/ID"}]
+    post:
+      tags: [Projects]
+      summary: Archive a project (Owner or manage_all)
+      operationId: projectsArchive
+      responses:
+        "200": {description: Archived}
+        "403": {$ref: "#/components/responses/Error"}
+  /projects/{id}/members:
+    parameters: [{$ref: "#/components/parameters/ID"}]
+    get:
+      tags: [Projects]
+      summary: List project members
+      operationId: projectMembersList
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/SuccessEnvelope"}
+    post:
+      tags: [Projects]
+      summary: Add a non-Owner project member
+      operationId: projectMembersCreate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/ProjectMemberRequest"}
+      responses:
+        "201": {description: Created}
+        "403": {$ref: "#/components/responses/Error"}
+  /projects/{id}/members/{userID}:
+    parameters:
+      - $ref: "#/components/parameters/ID"
+      - name: userID
+        in: path
+        required: true
+        schema: {type: integer}
+    put:
+      tags: [Projects]
+      summary: Change a non-Owner member role
+      operationId: projectMembersUpdate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/ProjectMemberRoleRequest"}
+      responses:
+        "200": {description: OK}
+        "403": {$ref: "#/components/responses/Error"}
+    delete:
+      tags: [Projects]
+      summary: Remove a non-Owner project member
+      operationId: projectMembersDelete
+      responses:
+        "200": {description: Deleted}
+        "409": {$ref: "#/components/responses/Error"}
+  /projects/{id}/members/transfer-owner:
+    parameters: [{$ref: "#/components/parameters/ID"}]
+    post:
+      tags: [Projects]
+      summary: Transfer Owner to an existing member
+      operationId: projectMembersTransferOwner
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [user_id]
+              properties: {user_id: {type: integer}}
+      responses:
+        "200": {description: OK}
+        "403": {$ref: "#/components/responses/Error"}
+  /projects/{id}/requirements:
+    parameters: [{$ref: "#/components/parameters/ID"}]
+    get:
+      tags: [Projects]
+      summary: List project requirements
+      operationId: projectRequirementsList
+      parameters:
+        - {$ref: "#/components/parameters/Page"}
+        - {$ref: "#/components/parameters/PageSize"}
+        - {name: keyword, in: query, schema: {type: string}}
+        - {name: status, in: query, schema: {type: string}}
+        - {name: priority, in: query, schema: {type: string, enum: [low, normal, high, urgent]}}
+        - {name: assignee_id, in: query, schema: {type: integer}}
+        - {name: sort, in: query, schema: {type: string, example: "updated_at@desc"}}
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/SuccessEnvelope"}
+    post:
+      tags: [Projects]
+      summary: Create a requirement
+      operationId: projectRequirementsCreate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/RequirementRequest"}
+      responses:
+        "201": {description: Created}
+        "403": {$ref: "#/components/responses/Error"}
+  /projects/{id}/requirements/{requirementID}:
+    parameters:
+      - $ref: "#/components/parameters/ID"
+      - name: requirementID
+        in: path
+        required: true
+        schema: {type: integer}
+    get:
+      tags: [Projects]
+      summary: Get a requirement
+      operationId: projectRequirementsGet
+      responses: {"200": {description: OK}, "404": {$ref: "#/components/responses/Error"}}
+    put:
+      tags: [Projects]
+      summary: Update a requirement
+      operationId: projectRequirementsUpdate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/RequirementRequest"}
+      responses: {"200": {description: OK}, "403": {$ref: "#/components/responses/Error"}}
+    delete:
+      tags: [Projects]
+      summary: Delete a requirement
+      operationId: projectRequirementsDelete
+      responses: {"200": {description: Deleted}, "403": {$ref: "#/components/responses/Error"}}
+  /projects/{id}/requirements/{requirementID}/comments:
+    parameters:
+      - $ref: "#/components/parameters/ID"
+      - name: requirementID
+        in: path
+        required: true
+        schema: {type: integer}
+    get:
+      tags: [Projects]
+      summary: List requirement comments
+      operationId: projectCommentsList
+      responses: {"200": {description: OK}}
+    post:
+      tags: [Projects]
+      summary: Add a requirement comment
+      operationId: projectCommentsCreate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/RequirementCommentRequest"}
+      responses: {"201": {description: Created}}
+  /projects/{id}/requirements/{requirementID}/comments/{commentID}:
+    parameters:
+      - $ref: "#/components/parameters/ID"
+      - {name: requirementID, in: path, required: true, schema: {type: integer}}
+      - {name: commentID, in: path, required: true, schema: {type: integer}}
+    put:
+      tags: [Projects]
+      summary: Edit a requirement comment
+      operationId: projectCommentsUpdate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/RequirementCommentRequest"}
+      responses: {"200": {description: OK}}
+    delete:
+      tags: [Projects]
+      summary: Delete a requirement comment
+      operationId: projectCommentsDelete
+      responses: {"200": {description: Deleted}}
+  /projects/{id}/requirements/{requirementID}/attachments:
+    parameters:
+      - $ref: "#/components/parameters/ID"
+      - {name: requirementID, in: path, required: true, schema: {type: integer}}
+    get:
+      tags: [Projects]
+      summary: List requirement attachments
+      operationId: projectAttachmentsList
+      responses: {"200": {description: OK}}
+    post:
+      tags: [Projects]
+      summary: Upload an attachment (20MB default)
+      operationId: projectAttachmentsUpload
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties: {file: {type: string, format: binary}}
+      responses: {"201": {description: Created}, "413": {$ref: "#/components/responses/Error"}}
+  /projects/{id}/requirements/{requirementID}/attachments/{attachmentID}:
+    parameters:
+      - $ref: "#/components/parameters/ID"
+      - {name: requirementID, in: path, required: true, schema: {type: integer}}
+      - {name: attachmentID, in: path, required: true, schema: {type: integer}}
+    delete:
+      tags: [Projects]
+      summary: Delete a requirement attachment
+      operationId: projectAttachmentsDelete
+      responses: {"200": {description: Deleted}}
+  /projects/{id}/requirements/{requirementID}/attachments/{attachmentID}/download:
+    parameters:
+      - $ref: "#/components/parameters/ID"
+      - {name: requirementID, in: path, required: true, schema: {type: integer}}
+      - {name: attachmentID, in: path, required: true, schema: {type: integer}}
+    get:
+      tags: [Projects]
+      summary: Download a requirement attachment
+      operationId: projectAttachmentsDownload
+      responses:
+        "200":
+          description: Binary attachment
+          content: {application/octet-stream: {schema: {type: string, format: binary}}}
+  /projects/{id}/docs:
+    parameters: [{$ref: "#/components/parameters/ID"}]
+    get:
+      tags: [Projects]
+      summary: Get the project API documentation tree
+      operationId: projectDocsTree
+      responses:
+        "200":
+          description: Tree with published and draft content; Markdown must be sanitized at render time
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/SuccessEnvelope"}
+    post:
+      tags: [Projects]
+      summary: Create a directory or document node
+      operationId: projectDocsCreateNode
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/ApiDocNodeRequest"}
+      responses: {"201": {description: Created}}
+  /projects/{id}/docs/upload:
+    parameters: [{$ref: "#/components/parameters/ID"}]
+    post:
+      tags: [Projects]
+      summary: Upload one Markdown file as a draft document
+      operationId: projectDocsUploadMarkdown
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                parent_id: {type: integer, nullable: true}
+                file: {type: string, format: binary}
+      responses: {"201": {description: Created}, "413": {$ref: "#/components/responses/Error"}}
+  /projects/{id}/docs/import-zip:
+    parameters: [{$ref: "#/components/parameters/ID"}]
+    post:
+      tags: [Projects]
+      summary: Import Markdown tree from ZIP into drafts only
+      description: ZIP entries are protected against Zip Slip, entry-count, size, and compression-ratio attacks. Default package limit is 100MB.
+      operationId: projectDocsImportZIP
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                parent_id: {type: integer, nullable: true}
+                file: {type: string, format: binary}
+      responses: {"201": {description: Imported}, "400": {$ref: "#/components/responses/Error"}, "413": {$ref: "#/components/responses/Error"}}
+  /projects/{id}/docs/generate:
+    parameters: [{$ref: "#/components/parameters/ID"}]
+    post:
+      tags: [Projects]
+      summary: Generate API documentation draft
+      description: Contract hook for P4 AI domain. P3 responds with a clear unavailable error and never publishes content.
+      operationId: projectDocsGenerate
+      responses:
+        "501":
+          description: AI domain not enabled
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+  /projects/{id}/docs/{nodeID}:
+    parameters:
+      - $ref: "#/components/parameters/ID"
+      - {name: nodeID, in: path, required: true, schema: {type: integer}}
+    get:
+      tags: [Projects]
+      summary: Get a document node
+      operationId: projectDocsGetNode
+      responses: {"200": {description: OK}, "404": {$ref: "#/components/responses/Error"}}
+    put:
+      tags: [Projects]
+      summary: Rename a node or write a document draft
+      operationId: projectDocsUpdateNode
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/ApiDocNodeUpdateRequest"}
+      responses: {"200": {description: OK}}
+    delete:
+      tags: [Projects]
+      summary: Delete a document node and descendants
+      operationId: projectDocsDeleteNode
+      responses: {"200": {description: Deleted}}
+  /projects/{id}/docs/{nodeID}/move:
+    parameters:
+      - $ref: "#/components/parameters/ID"
+      - {name: nodeID, in: path, required: true, schema: {type: integer}}
+    post:
+      tags: [Projects]
+      summary: Move a document node in its project tree
+      operationId: projectDocsMoveNode
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/ApiDocNodeMoveRequest"}
+      responses: {"200": {description: OK}}
+  /projects/{id}/docs/{nodeID}/publish:
+    parameters:
+      - $ref: "#/components/parameters/ID"
+      - {name: nodeID, in: path, required: true, schema: {type: integer}}
+    post:
+      tags: [Projects]
+      summary: Publish a draft using optimistic version matching
+      operationId: projectDocsPublish
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [expected_version]
+              properties: {expected_version: {type: integer, minimum: 0}}
+      responses:
+        "200": {description: Published}
+        "409": {$ref: "#/components/responses/Error"}
+  /projects/{id}/docs/{nodeID}/diff:
+    parameters:
+      - $ref: "#/components/parameters/ID"
+      - {name: nodeID, in: path, required: true, schema: {type: integer}}
+    get:
+      tags: [Projects]
+      summary: Get published-versus-draft diff summary
+      operationId: projectDocsDiff
+      responses:
+        "200":
+          description: Diff summary
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties: {data: {$ref: "#/components/schemas/ApiDocDiff"}}
 components:
   securitySchemes:
     bearerAuth:
@@ -2155,3 +3092,387 @@ components:
               type: array
               items:
                 $ref: "#/components/schemas/Credential"
+    DashboardCardLayout:
+      type: object
+      required: [id, visible, order]
+      properties:
+        id: {type: string, enum: [build_summary, system_info, system_status]}
+        visible: {type: boolean}
+        order: {type: integer, minimum: 0}
+    DashboardLayout:
+      type: object
+      required: [cards]
+      properties:
+        cards:
+          type: array
+          items: {$ref: "#/components/schemas/DashboardCardLayout"}
+    BuildSummary:
+      type: object
+      properties:
+        running: {type: integer, format: int64}
+        queued: {type: integer, format: int64}
+        success_rate: {type: number, format: double}
+        recent:
+          type: array
+          items: {$ref: "#/components/schemas/DashboardRecentBuildRun"}
+    DashboardRecentBuildRun:
+      type: object
+      properties:
+        id: {type: integer}
+        build_job_id: {type: integer}
+        build_number: {type: integer}
+        status: {type: string}
+        branch: {type: string}
+        created_at: {type: string, format: date-time}
+    SystemInfo:
+      type: object
+      description: Complete read-only system information; this does not grant operations write access.
+      properties:
+        version: {type: string}
+        os: {type: string}
+        arch: {type: string}
+        runtime: {type: string}
+        hostname: {type: string}
+        start_time: {type: string, format: date-time}
+    DiskStatus:
+      type: object
+      properties:
+        path: {type: string}
+        total_bytes: {type: integer, format: int64}
+        free_bytes: {type: integer, format: int64}
+        used_percent: {type: number, format: double}
+    SystemStatus:
+      type: object
+      properties:
+        cpu_usage_percent: {type: number, format: double}
+        memory_used_bytes: {type: integer, format: int64}
+        memory_total_bytes: {type: integer, format: int64}
+        memory_usage_percent: {type: number, format: double}
+        health: {type: string, enum: [ok, degraded]}
+        directories:
+          type: array
+          items: {$ref: "#/components/schemas/DiskStatus"}
+        collected_at: {type: string, format: date-time}
+    ProcessInfo:
+      type: object
+      properties:
+        pid: {type: integer}
+        name: {type: string}
+        cpu_percent: {type: number, format: double}
+        memory_bytes: {type: integer, format: int64}
+        username: {type: string}
+        start_time: {type: integer, format: int64}
+        ports:
+          type: array
+          items: {type: integer}
+    ToolchainDefinition:
+      type: object
+      properties:
+        id: {type: integer}
+        name: {type: string}
+        kind: {type: string, enum: [builtin, custom]}
+        executable: {type: string}
+        description: {type: string}
+        detect_command: {type: string}
+        install_template: {type: string}
+        upgrade_template: {type: string}
+        uninstall_template: {type: string}
+        versions_command: {type: string}
+        switch_template: {type: string}
+        default_version: {type: string}
+        created_by: {type: integer}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    ToolchainInput:
+      type: object
+      required: [name, executable]
+      properties:
+        name: {type: string}
+        executable: {type: string}
+        description: {type: string}
+        detect_command: {type: string}
+        install_template: {type: string}
+        upgrade_template: {type: string}
+        uninstall_template: {type: string}
+        versions_command: {type: string}
+        switch_template: {type: string}
+        default_version: {type: string}
+    InstallSource:
+      type: object
+      properties:
+        id: {type: integer}
+        name: {type: string}
+        base_url: {type: string}
+        priority: {type: integer}
+        enabled: {type: boolean}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    InstallSourceInput:
+      type: object
+      required: [name, base_url, priority, enabled]
+      properties:
+        name: {type: string}
+        base_url: {type: string}
+        priority: {type: integer}
+        enabled: {type: boolean}
+    InstallSourceList:
+      type: object
+      properties:
+        items:
+          type: array
+          items: {$ref: "#/components/schemas/InstallSource"}
+    InstallSourcePingResult:
+      type: object
+      properties:
+        ok: {type: boolean}
+        detail: {type: string}
+    ToolchainDetectResult:
+      type: object
+      properties:
+        detected: {type: boolean}
+        output: {type: string}
+    ToolchainJobInput:
+      type: object
+      properties:
+        version: {type: string}
+    ToolchainInstallJob:
+      type: object
+      properties:
+        id: {type: integer}
+        toolchain_id: {type: integer}
+        operation: {type: string, enum: [install, upgrade, uninstall, switch]}
+        requested_version: {type: string}
+        status: {type: string, enum: [queued, running, success, failed, interrupted]}
+        source_id: {type: integer, nullable: true}
+        command_snapshot: {type: string}
+        error_message: {type: string}
+        created_by: {type: integer}
+        started_at: {type: string, format: date-time, nullable: true}
+        finished_at: {type: string, format: date-time, nullable: true}
+        created_at: {type: string, format: date-time}
+        toolchain: {$ref: "#/components/schemas/ToolchainDefinition"}
+        source: {$ref: "#/components/schemas/InstallSource"}
+    ToolchainInstallJobPage:
+      allOf:
+        - $ref: "#/components/schemas/Page"
+        - type: object
+          properties:
+            items:
+              type: array
+              items: {$ref: "#/components/schemas/ToolchainInstallJob"}
+    StorageObject:
+      type: object
+      properties:
+        id: {type: integer}
+        kind: {type: string, enum: [attachment, doc_import, skill_zip, artifact, other]}
+        sha256: {type: string}
+        size: {type: integer, format: int64}
+        content_type: {type: string}
+        ref_count: {type: integer}
+        created_by: {type: integer}
+        created_at: {type: string, format: date-time}
+    ProductProject:
+      type: object
+      properties:
+        id: {type: integer}
+        name: {type: string}
+        slug: {type: string}
+        description: {type: string}
+        status: {type: string, enum: [active, archived]}
+        owner_id: {type: integer}
+        repository_id: {type: integer, nullable: true}
+        tags: {type: string}
+        created_by: {type: integer}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    ProjectCapabilities:
+      type: object
+      required: [update, archive, delete, manage_members, transfer_owner]
+      properties:
+        update: {type: boolean}
+        archive: {type: boolean}
+        delete: {type: boolean}
+        manage_members: {type: boolean}
+        transfer_owner: {type: boolean}
+    ProductProjectView:
+      allOf:
+        - $ref: "#/components/schemas/ProductProject"
+        - type: object
+          required: [permissions]
+          properties:
+            my_role: {type: string, enum: [owner, admin, member, readonly], nullable: true}
+            permissions: {$ref: "#/components/schemas/ProjectCapabilities"}
+    ProductProjectCreateRequest:
+      type: object
+      required: [name, slug]
+      properties:
+        name: {type: string}
+        slug: {type: string, pattern: "^[a-z0-9]+(?:-[a-z0-9]+)*$"}
+        description: {type: string}
+        repository_id: {type: integer, nullable: true}
+        tags: {type: string}
+    ProductProjectUpdateRequest:
+      type: object
+      properties:
+        name: {type: string}
+        slug: {type: string}
+        description: {type: string}
+        status: {type: string, enum: [active, archived]}
+        repository_id: {type: integer, nullable: true}
+        clear_repository: {type: boolean}
+        tags: {type: string}
+    ProductProjectPage:
+      allOf:
+        - $ref: "#/components/schemas/Page"
+        - type: object
+          properties:
+            items:
+              type: array
+              items: {$ref: "#/components/schemas/ProductProjectView"}
+    ProjectMember:
+      type: object
+      properties:
+        id: {type: integer}
+        project_id: {type: integer}
+        user_id: {type: integer}
+        role: {type: string, enum: [owner, admin, member, readonly]}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    ProjectMemberRequest:
+      type: object
+      required: [user_id, role]
+      properties:
+        user_id: {type: integer}
+        role: {type: string, enum: [admin, member, readonly]}
+    ProjectMemberRoleRequest:
+      type: object
+      required: [role]
+      properties:
+        role: {type: string, enum: [admin, member, readonly]}
+    Requirement:
+      type: object
+      properties:
+        id: {type: integer}
+        project_id: {type: integer}
+        title: {type: string}
+        description: {type: string}
+        status:
+          type: string
+          description: Enabled value from the requirement_status dictionary.
+        priority: {type: string, enum: [low, normal, high, urgent]}
+        assignee_id: {type: integer, nullable: true}
+        repository_id: {type: integer, nullable: true}
+        tags: {type: string}
+        created_by: {type: integer}
+        updated_by: {type: integer}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    RequirementStatusOption:
+      type: object
+      required: [label, value, sort_order, enabled]
+      properties:
+        label: {type: string}
+        value: {type: string}
+        sort_order: {type: integer}
+        enabled: {type: boolean}
+    RequirementStatusOptions:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: {$ref: "#/components/schemas/RequirementStatusOption"}
+    RequirementRequest:
+      type: object
+      required: [title]
+      properties:
+        title: {type: string}
+        description: {type: string}
+        status:
+          type: string
+          description: Enabled value from the requirement_status dictionary.
+        priority: {type: string, enum: [low, normal, high, urgent]}
+        assignee_id: {type: integer, nullable: true}
+        repository_id: {type: integer, nullable: true}
+        tags: {type: string}
+    RequirementPage:
+      allOf:
+        - $ref: "#/components/schemas/Page"
+        - type: object
+          properties:
+            items:
+              type: array
+              items: {$ref: "#/components/schemas/Requirement"}
+    RequirementComment:
+      type: object
+      properties:
+        id: {type: integer}
+        requirement_id: {type: integer}
+        content: {type: string}
+        created_by: {type: integer}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    RequirementCommentRequest:
+      type: object
+      required: [content]
+      properties: {content: {type: string}}
+    RequirementAttachment:
+      type: object
+      properties:
+        id: {type: integer}
+        requirement_id: {type: integer}
+        storage_object_id: {type: integer}
+        filename: {type: string}
+        created_by: {type: integer}
+        created_at: {type: string, format: date-time}
+    ApiDocNode:
+      type: object
+      description: Published Markdown and draft Markdown are stored independently. Clients must sanitize content before rendering.
+      properties:
+        id: {type: integer}
+        project_id: {type: integer}
+        parent_id: {type: integer, nullable: true}
+        kind: {type: string, enum: [dir, doc]}
+        name: {type: string}
+        sort_order: {type: integer}
+        repository_id: {type: integer, nullable: true}
+        published_content: {type: string}
+        draft_content: {type: string}
+        content_version: {type: integer}
+        draft_base_version: {type: integer}
+        draft_updated_at: {type: string, format: date-time, nullable: true}
+        draft_source_run_id: {type: integer, nullable: true}
+        children:
+          type: array
+          items: {$ref: "#/components/schemas/ApiDocNode"}
+    ApiDocNodeRequest:
+      type: object
+      required: [kind, name]
+      properties:
+        parent_id: {type: integer, nullable: true}
+        kind: {type: string, enum: [dir, doc]}
+        name: {type: string}
+        sort_order: {type: integer}
+        repository_id: {type: integer, nullable: true}
+        draft_content: {type: string}
+    ApiDocNodeUpdateRequest:
+      type: object
+      properties:
+        name: {type: string}
+        repository_id: {type: integer, nullable: true}
+        draft_content: {type: string}
+    ApiDocNodeMoveRequest:
+      type: object
+      properties:
+        parent_id: {type: integer, nullable: true}
+        sort_order: {type: integer}
+    ApiDocDiff:
+      type: object
+      properties:
+        node_id: {type: integer}
+        content_version: {type: integer}
+        has_draft: {type: boolean}
+        published_lines: {type: integer}
+        draft_lines: {type: integer}
+        added_lines: {type: integer}
+        removed_lines: {type: integer}

@@ -91,6 +91,63 @@ func TestPermissionUnion(t *testing.T) {
 	}
 }
 
+func TestProjectScopeActionsAreSeededAndResolvable(t *testing.T) {
+	perm, roles, resources, users := setupRBAC(t)
+
+	tree, err := resources.ListTree()
+	if err != nil {
+		t.Fatal(err)
+	}
+	actions := map[string]model.RbacResource{}
+	var collect func([]model.RbacResource)
+	collect = func(nodes []model.RbacResource) {
+		for _, node := range nodes {
+			actions[node.Path] = node
+			collect(node.Children)
+		}
+	}
+	collect(tree)
+	for _, permission := range []string{
+		"project.projects:view_all",
+		"project.projects:manage_all",
+	} {
+		action, ok := actions[permission]
+		if !ok || action.Type != model.ResourceTypeAction {
+			t.Fatalf("seeded scope action %q = %#v", permission, action)
+		}
+	}
+
+	user := &authmodel.User{Username: "project_scope", PasswordHash: "hash", IsActive: true}
+	if err := users.Create(user); err != nil {
+		t.Fatal(err)
+	}
+	role, err := roles.Create("项目范围管理员", "project_scope_admin", "", []string{
+		"project.projects:view",
+		"project.projects:view_all",
+		"project.projects:update",
+		"project.projects:manage_all",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := roles.SetUserRoles(user.ID, []uint{role.ID}); err != nil {
+		t.Fatal(err)
+	}
+
+	resolved, err := perm.ResolvePermissions(user.ID, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, permission := range []string{
+		"project.projects:view_all",
+		"project.projects:manage_all",
+	} {
+		if !rbac.HasPermission(rbac.ToSet(resolved), permission) {
+			t.Fatalf("resolved permissions missing %s: %v", permission, resolved)
+		}
+	}
+}
+
 func TestOpsHardGate(t *testing.T) {
 	perm, roles, _, users := setupRBAC(t)
 

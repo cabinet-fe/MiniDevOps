@@ -194,6 +194,7 @@ RbacResource (type=menu|page|action|card, path, parent, enabled, sort_key)
 - 无 `view_all`：列表仅返回自己加入的项目。
 - `manage_all`：可管理全部项目成员与内容，**无需**加入项目。
 - Owner 转让：仅当前 Owner 或 `manage_all`。
+- **唯一对象级 ACL**：仅产品项目（`ProductProject` / 成员）使用对象级成员 ACL；CI/CD、运维、凭证、AI 等域仍为全局 RBAC only。
 
 ### 4.5 凭证
 
@@ -288,6 +289,7 @@ ApiDocNode:
 - 生成/导入更新草稿：只写 `draft_content`。
 - `POST .../docs/{id}/publish`：body 含 `expected_version`；匹配则 draft→published，`content_version++`，清空 draft；冲突 409。
 - 提供 diff 摘要 API（published vs draft）。
+- `POST .../docs/generate` 契约归属项目管理域；接通 `AgentRun` 见 **P4**。P3 可返回明确的「依赖 AI 域」错误/501，**不得**绕过草稿模型直接写 published。
 
 ### 5.5 Skill 可见性
 

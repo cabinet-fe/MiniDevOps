@@ -7,15 +7,24 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"bedrock/internal/cicd/model"
 	"bedrock/internal/cicd/repository"
+	dashboardmodel "bedrock/internal/dashboard/model"
+	dashboardrepo "bedrock/internal/dashboard/repository"
+	opsmodel "bedrock/internal/ops/model"
+	opsrepo "bedrock/internal/ops/repository"
 	"bedrock/internal/platform/config"
 	"bedrock/internal/platform/db"
 	"bedrock/internal/platform/migration"
 	_ "bedrock/internal/platform/migration/migrations"
+	projectmodel "bedrock/internal/project/model"
+	projectrepo "bedrock/internal/project/repository"
+	storagemodel "bedrock/internal/storage/model"
+	storagerepo "bedrock/internal/storage/repository"
 
 	"gorm.io/driver/mysql"
 	"gorm.io/driver/postgres"
@@ -41,7 +50,10 @@ func TestContract_MigrationsAndCICDTables(t *testing.T) {
 			}
 			for _, table := range []string{
 				"repositories", "build_jobs", "build_runs", "credentials",
-				"deploy_targets", "build_deploy_attempts", "schema_migrations",
+				"deploy_targets", "build_deploy_attempts", "dashboard_layouts",
+				"toolchain_definitions", "install_sources", "toolchain_install_jobs", "schema_migrations",
+				"storage_objects", "product_projects", "project_members", "requirements",
+				"requirement_comments", "requirement_attachments", "api_doc_nodes",
 			} {
 				if !gdb.Migrator().HasTable(table) {
 					t.Fatalf("missing table %s on %s", table, driver)
@@ -51,6 +63,10 @@ func TestContract_MigrationsAndCICDTables(t *testing.T) {
 			suffix := fmt.Sprintf("%s-%d", driver, time.Now().UnixNano())
 			credRepo := repository.NewCredentialRepository(gdb)
 			repoRepo := repository.NewRepositoryRepository(gdb)
+			dashboardRepo := dashboardrepo.NewDashboardRepository(gdb)
+			opsRepo := opsrepo.NewOpsRepository(gdb)
+			projectRepo := projectrepo.NewProjectRepository(gdb)
+			storageRepo := storagerepo.NewStorageRepository(gdb)
 			cred := &model.Credential{Name: "db-contract-" + suffix, Type: "token", SecretCipher: "x", CreatedBy: 99}
 			if err := credRepo.Create(cred); err != nil {
 				t.Fatalf("create credential: %v", err)
@@ -61,6 +77,52 @@ func TestContract_MigrationsAndCICDTables(t *testing.T) {
 			}
 			if err := repoRepo.Create(repo); err != nil {
 				t.Fatalf("create repository: %v", err)
+			}
+			layout := &dashboardmodel.Layout{UserID: uint(time.Now().UnixNano() & 0x7fffffff), CardsJSON: `[]`}
+			if err := dashboardRepo.CreateLayout(layout); err != nil {
+				t.Fatalf("create dashboard layout: %v", err)
+			}
+			source := &opsmodel.InstallSource{
+				Name: "db-contract-source-" + suffix, BaseURL: "https://example.com", Priority: 999, Enabled: true,
+			}
+			if err := opsRepo.CreateSource(source); err != nil {
+				t.Fatalf("create install source: %v", err)
+			}
+			toolchain := &opsmodel.ToolchainDefinition{
+				Name: "db-contract-toolchain-" + suffix, Kind: "custom", Executable: "true", CreatedBy: 99,
+			}
+			if err := opsRepo.CreateToolchain(toolchain); err != nil {
+				t.Fatalf("create toolchain: %v", err)
+			}
+			job := &opsmodel.ToolchainInstallJob{
+				ToolchainID: toolchain.ID, Operation: "install", Status: "queued", CreatedBy: 99,
+			}
+			if err := opsRepo.CreateJob(job); err != nil {
+				t.Fatalf("create install job: %v", err)
+			}
+			object := &storagemodel.StorageObject{
+				Kind: "attachment", SHA256: fmt.Sprintf("%064x", time.Now().UnixNano()),
+				Size: 1, ContentType: "text/plain", Path: "objects/aa/contract", RefCount: 1, CreatedBy: 99,
+			}
+			if err := storageRepo.Create(object); err != nil {
+				t.Fatalf("create storage object: %v", err)
+			}
+			project := &projectmodel.ProductProject{
+				Name: "db-contract-project-" + suffix, Slug: "db-contract-" + strings.ReplaceAll(suffix, "-", ""),
+				Status: "active", OwnerID: 99, CreatedBy: 99,
+			}
+			if err := projectRepo.CreateProjectWithOwner(project); err != nil {
+				t.Fatalf("create product project: %v", err)
+			}
+			requirement := &projectmodel.Requirement{
+				ProjectID: project.ID, Title: "contract", Status: "backlog", Priority: "normal", CreatedBy: 99, UpdatedBy: 99,
+			}
+			if err := projectRepo.CreateRequirement(requirement); err != nil {
+				t.Fatalf("create requirement: %v", err)
+			}
+			doc := &projectmodel.ApiDocNode{ProjectID: project.ID, Kind: "doc", Name: "contract.md", CreatedBy: 99, UpdatedBy: 99}
+			if err := projectRepo.CreateDocNode(doc); err != nil {
+				t.Fatalf("create api doc node: %v", err)
 			}
 			_ = repoRepo.Delete(repo.ID)
 			_ = credRepo.Delete(cred.ID)

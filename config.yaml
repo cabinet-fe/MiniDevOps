@@ -29,6 +29,11 @@ build:
   log_dir: "./data/logs"
   cache_dir: "./data/caches"
 
+storage:
+  root: "./data/storage"
+  attachment_max_bytes: 20971520 # 20MB
+  doc_import_max_bytes: 104857600 # 100MB
+
 encryption:
   key: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 

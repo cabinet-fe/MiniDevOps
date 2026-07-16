@@ -10,6 +10,7 @@ import { usePermission } from "@/composables/use-permission";
 import { useAuthStore } from "@/stores/auth";
 
 const ACTIONS = ["view", "create", "update", "delete", "execute", "use", "test"] as const;
+const PROJECT_SCOPE_ACTIONS = ["view_all", "manage_all"] as const;
 
 const { hasPermission } = usePermission();
 const auth = useAuthStore();
@@ -74,6 +75,10 @@ function toggle(code: string, on: boolean) {
 
 function isChecked(code: string) {
   return checked.value.has(code);
+}
+
+function actionsForResource(resource: RbacResource) {
+  return resource.path === "project.projects" ? [...ACTIONS, ...PROJECT_SCOPE_ACTIONS] : ACTIONS;
 }
 
 async function save() {
@@ -168,7 +173,7 @@ async function remove(row: Role) {
             <code>{{ menu.path }}</code>
           </div>
           <div class="perm-actions">
-            <label v-for="action in ACTIONS" :key="action" class="perm-check">
+            <label v-for="action in actionsForResource(menu)" :key="action" class="perm-check">
               <input
                 type="checkbox"
                 :checked="isChecked(`${menu.path}:${action}`)"

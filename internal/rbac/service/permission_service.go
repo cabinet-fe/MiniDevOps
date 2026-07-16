@@ -98,6 +98,12 @@ func (s *PermissionService) allPermissions() ([]string, error) {
 	}
 	set := map[string]struct{}{}
 	for _, res := range resources {
+		if res.Type == model.ResourceTypeAction {
+			if _, _, ok := rbac.SplitPermission(res.Path); ok {
+				set[res.Path] = struct{}{}
+			}
+			continue
+		}
 		for _, action := range commonActions {
 			set[rbac.PermissionCode(res.Path, action)] = struct{}{}
 		}

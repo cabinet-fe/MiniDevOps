@@ -28,13 +28,21 @@ func AuditWrite(audit *service.AuditService) gin.HandlerFunc {
 		if strings.HasPrefix(path, "/api/v1/auth/") {
 			return
 		}
+		resourceID := c.Param("id")
+		if resourceID == "" {
+			resourceID = c.Param("pid")
+		}
+		details := method + " " + path
+		if resourceID != "" {
+			details += " resource_id=" + resourceID
+		}
 		_ = audit.Write(
 			authmiddleware.GetUserID(c),
 			authmiddleware.GetUsername(c),
 			method,
 			path,
-			c.Param("id"),
-			"",
+			resourceID,
+			details,
 			c.ClientIP(),
 		)
 	}

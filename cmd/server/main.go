@@ -21,17 +21,28 @@ import (
 	cicdhandler "bedrock/internal/cicd/handler"
 	cicdrepo "bedrock/internal/cicd/repository"
 	cicdservice "bedrock/internal/cicd/service"
+	dashboardhandler "bedrock/internal/dashboard/handler"
+	dashboardrepo "bedrock/internal/dashboard/repository"
+	dashboardservice "bedrock/internal/dashboard/service"
 	"bedrock/internal/engine"
 	"bedrock/internal/middleware"
+	opshandler "bedrock/internal/ops/handler"
+	opsrepo "bedrock/internal/ops/repository"
+	opsservice "bedrock/internal/ops/service"
 	"bedrock/internal/pkg"
 	"bedrock/internal/platform/config"
 	"bedrock/internal/platform/db"
 	"bedrock/internal/platform/migration"
 	_ "bedrock/internal/platform/migration/migrations"
 	"bedrock/internal/platform/seed"
+	projecthandler "bedrock/internal/project/handler"
+	projectrepo "bedrock/internal/project/repository"
+	projectservice "bedrock/internal/project/service"
 	rbachandler "bedrock/internal/rbac/handler"
 	rbacrepo "bedrock/internal/rbac/repository"
 	rbacservice "bedrock/internal/rbac/service"
+	storagerepo "bedrock/internal/storage/repository"
+	storageservice "bedrock/internal/storage/service"
 	systemhandler "bedrock/internal/system/handler"
 	systemmw "bedrock/internal/system/middleware"
 	systemrepo "bedrock/internal/system/repository"
@@ -42,6 +53,7 @@ import (
 var version = "dev"
 
 func main() {
+	startedAt := time.Now().UTC()
 	configPath := flag.String("config", "config.yaml", "path to config file")
 	showVersion := flag.Bool("version", false, "print version and exit")
 	flag.Parse()
@@ -128,6 +140,30 @@ func main() {
 	runSvc := cicdservice.NewBuildRunService(runRepo, jobRepo)
 	webhookSvc := cicdservice.NewWebhookService(repoRepo, jobRepo, deliveryRepo, runSvc)
 
+	dashboardRepo := dashboardrepo.NewDashboardRepository(gdb)
+	dashboardSvc := dashboardservice.NewDashboardService(
+		dashboardRepo, version, startedAt,
+		[]string{cfg.Build.WorkspaceDir, cfg.Build.ArtifactDir, cfg.Build.LogDir, cfg.Build.CacheDir},
+	)
+	dashboardHandler := dashboardhandler.NewDashboardHandler(dashboardSvc, permSvc)
+
+	opsRepo := opsrepo.NewOpsRepository(gdb)
+	processSvc := opsservice.NewProcessService()
+	toolchainSvc := opsservice.NewToolchainService(opsRepo, auditSvc)
+	opsHandler := opshandler.NewOpsHandler(processSvc, toolchainSvc, permSvc)
+
+	storageRepo := storagerepo.NewStorageRepository(gdb)
+	storageSvc, err := storageservice.NewStorageService(storageRepo, cfg.Storage.Root, storageservice.Limits{
+		AttachmentMaxBytes: cfg.Storage.AttachmentMaxBytes,
+		DocImportMaxBytes:  cfg.Storage.DocImportMaxBytes,
+	})
+	if err != nil {
+		logger.Fatal("Failed to init storage service", zap.Error(err))
+	}
+	projectRepo := projectrepo.NewProjectRepository(gdb)
+	projectSvc := projectservice.NewProjectService(projectRepo, storageSvc)
+	projectHandler := projecthandler.NewProjectHandler(projectSvc, permSvc)
+
 	hub := ws.NewHub()
 	pipeline := engine.NewPipeline(
 		runRepo, jobRepo, repoRepo, serverRepo,
@@ -167,6 +203,9 @@ func main() {
 	jobHandler.RegisterRoutes(api, authMW)
 	runHandler.RegisterRoutes(api, authMW)
 	webhookHandler.RegisterRoutes(api)
+	dashboardHandler.RegisterRoutes(api, authMW)
+	opsHandler.RegisterRoutes(api, authMW)
+	projectHandler.RegisterRoutes(api, authMW)
 
 	api.GET("/health", func(c *gin.Context) {
 		pkg.Success(c, gin.H{
@@ -188,8 +227,12 @@ func main() {
 	}
 
 	sched.Start()
+	toolchainSvc.Start()
 	if err := sched.RecoverOnStartup(); err != nil {
 		logger.Error("scheduler recovery failed", zap.Error(err))
+	}
+	if err := toolchainSvc.RecoverOnStartup(); err != nil {
+		logger.Error("toolchain scheduler recovery failed", zap.Error(err))
 	}
 	if err := cronSched.Start(); err != nil {
 		logger.Error("cron start failed", zap.Error(err))
@@ -212,6 +255,7 @@ func main() {
 
 	cronSched.Stop()
 	sched.Shutdown()
+	toolchainSvc.Shutdown()
 	hub.Shutdown()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
