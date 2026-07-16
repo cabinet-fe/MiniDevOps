@@ -1,23 +1,8 @@
-import { AES, CBC, Hex, Pkcs7, Utf8, WordArray } from "crypto-es";
+import { cbc } from "@noble/ciphers/aes.js";
+import { bytesToHex, hexToBytes, utf8ToBytes } from "@noble/ciphers/utils.js";
 
 function isValidHexKey64(s: string): boolean {
   return /^[0-9a-fA-F]{64}$/.test(s);
-}
-
-function hexToBytes(hex: string): Uint8Array {
-  const out = new Uint8Array(hex.length / 2);
-  for (let i = 0; i < out.length; i++) {
-    out[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
-  }
-  return out;
-}
-
-function bytesToHex(bytes: Uint8Array): string {
-  let s = "";
-  for (let i = 0; i < bytes.length; i++) {
-    s += bytes[i]!.toString(16).padStart(2, "0");
-  }
-  return s;
 }
 
 function randomIV(): Uint8Array {
@@ -26,7 +11,7 @@ function randomIV(): Uint8Array {
   return iv;
 }
 
-/** Secure context (HTTPS, localhost) → Web Crypto; otherwise crypto-es. */
+/** Secure context (HTTPS, localhost) → Web Crypto; otherwise @noble/ciphers. */
 function useSubtleForLoginEncryption(): boolean {
   return typeof crypto !== "undefined" && typeof crypto.subtle !== "undefined";
 }
@@ -76,17 +61,13 @@ async function encryptSubtle(plain: string, keyBytes: Uint8Array): Promise<strin
   return bytesToHex(combined);
 }
 
-function encryptCryptoEs(plain: string, keyBytes: Uint8Array): string {
+function encryptNoble(plain: string, keyBytes: Uint8Array): string {
   const iv = randomIV();
-  const keyWA = new WordArray(keyBytes);
-  const ivWA = new WordArray(iv);
-  const encrypted = AES.encrypt(Utf8.parse(plain), keyWA, {
-    iv: ivWA,
-    mode: CBC,
-    padding: Pkcs7,
-  });
-  const ctHex = encrypted.ciphertext!.toString(Hex);
-  return bytesToHex(iv) + ctHex;
+  const ciphertext = cbc(keyBytes, iv).encrypt(utf8ToBytes(plain));
+  const combined = new Uint8Array(iv.length + ciphertext.length);
+  combined.set(iv, 0);
+  combined.set(ciphertext, iv.length);
+  return bytesToHex(combined);
 }
 
 /**
@@ -97,5 +78,5 @@ export async function encryptLoginPassword(plain: string): Promise<string> {
   if (useSubtleForLoginEncryption()) {
     return encryptSubtle(plain, keyBytes);
   }
-  return encryptCryptoEs(plain, keyBytes);
+  return encryptNoble(plain, keyBytes);
 }

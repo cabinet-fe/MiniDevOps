@@ -1,9 +1,9 @@
 import { createApp } from "vue";
 import { createPinia } from "pinia";
-import UltraUI from "@veltra/desktop/install";
 import { loadTheme, heroLightTheme } from "@veltra/styles/theme";
 import "@veltra/styles/normalize";
 import "@veltra/styles/transitions";
+import "@veltra/desktop/components/message/style.js";
 
 import App from "./App.vue";
 import router from "./router";
@@ -18,7 +18,6 @@ const pinia = createPinia();
 
 app.use(pinia);
 app.use(router);
-app.use(UltraUI);
 
 setOnAuthExpired(() => {
   const auth = useAuthStore();
