@@ -54,7 +54,7 @@
 | D25 | DB 切换 | 改 driver 只连接目标库，**不搬迁数据** |
 | D26 | API | OpenAPI **3.2** 唯一源；自动生成不可手改的 **3.1 兼容投影** |
 | D27 | 存储 | `StorageObject` 注册表 + `StorageService`；日志独立分段；保守默认限额 |
-| D28 | 前端迁移 | 旁路 `web-v2/`；达标后一次切换 embed |
+| D28 | 前端迁移 | 原 React `web/` 已移除；Vue 3 `web/` 为唯一 embed 源 |
 | D29 | Run 快照 | 创建运行时强制写入最小配置快照（只读复现） |
 | D30 | 状态字段 | `status`（结果）与 `stage`（活动阶段）分离；流水线**无**内嵌 agent 阶段 |
 
@@ -73,7 +73,7 @@
 ┌─────────────────────────────────────────────┐
 │  Bedrock Server（单体二进制）                 │
 │  - Go API / WS / Scheduler / Cron             │
-│  - web-v2 产物 embed                          │
+│  - web 产物 embed                          │
 │  - 本机构建 + 本机 AI CLI                     │
 │  - 本地工作区 / 制品 / 日志 / 缓存 / 对象存储目录 │
 └──────────────────────┬──────────────────────┘
@@ -120,7 +120,7 @@ internal/
 api/
   openapi.yaml            # OpenAPI 3.2 源（唯一手改契约）
   openapi.3.1.projection.yaml  # 生成物，禁止手改
-web-v2/                   # Vue 3 前端
+web/                      # Vue 3 前端
 docs/
   PRD.md / DESIGN.md / ROADMAP.md
 ```
@@ -139,7 +139,7 @@ docs/
 
 | 复用（适配） | 重写 / 新建 |
 | --- | --- |
-| Pipeline 阶段语义、Deployer 五法、Git、Webhook 解析器、WS 日志模式、AES-GCM、Deploy Agent | 动态 RBAC、多库工厂、版本化 migration、Repository/BuildJob 拆分、AgentRun 异步、PM 域、Skills/PAT、StorageObject、web-v2 |
+| Pipeline 阶段语义、Deployer 五法、Git、Webhook 解析器、WS 日志模式、AES-GCM、Deploy Agent | 动态 RBAC、多库工厂、版本化 migration、Repository/BuildJob 拆分、AgentRun 异步、PM 域、Skills/PAT、StorageObject、web |
 
 ---
 
@@ -208,7 +208,7 @@ RbacResource (type=menu|page|action|card, path, parent, enabled, sort_key)
 | 机制 | 规则 |
 | --- | --- |
 | Web JWT | access 短 TTL（Web Storage + Bearer）；refresh 长 TTL（HttpOnly Cookie，不设 Secure）；401 → `/auth/refresh` → 重试 |
-| 登录 | 仅接受 `password_cipher`（前端）；服务端亦可兼容明文 `password` 供调试，但 web-v2 **禁止**提交明文 |
+| 登录 | 仅接受 `password_cipher`（前端）；服务端亦可兼容明文 `password` 供调试，但 web **禁止**提交明文 |
 | Refresh | `/auth/refresh` 读 Cookie（可选 body 兜底）；失败清会话并跳转登录 |
 | PAT | `Authorization: Bearer <pat>`；与 JWT 分流校验；按 scope 映射端点 |
 | Webhook | 无 Bearer；见 §8 |
@@ -463,7 +463,7 @@ API/Cron/Webhook/Event
 
 ---
 
-## 11. 前端设计（web-v2）
+## 11. 前端设计（web）
 
 ### 11.1 技术栈
 
@@ -481,7 +481,7 @@ API/Cron/Webhook/Event
 ### 11.2 目录
 
 ```text
-web-v2/src/
+web/src/
   main.ts
   App.vue
   router/
@@ -505,10 +505,10 @@ web-v2/src/
 
 ### 11.4 切换
 
-- Makefile `FRONTEND_DIR ?= web-v2`（CI/Release 默认相同）。
+- Makefile `FRONTEND_DIR ?= web`（CI/Release 默认相同）。
 - Go embed **只认** `cmd/server/dist`，不关心来源。
-- Release：构建 `web-v2/dist` → 拷贝至 `cmd/server/dist` → `go build` embed。
-- 旧 `web/`（或上一版产物）保留**至少一个发布周期**；回滚改 `FRONTEND_DIR` 或替换 `cmd/server/dist` 后重打包。
+- Release：构建 `web/dist` → 拷贝至 `cmd/server/dist` → `go build` embed。
+- 回滚：替换 `cmd/server/dist` 或检出上一发布 tag 产物后重打包。见 [release-checklist.md](./release-checklist.md)。
 - 切换 Gate 证据：[roadmap/P5-switch-gate.md](./roadmap/P5-switch-gate.md)；Gate 条文见 ROADMAP P5。
 
 ---
@@ -542,7 +542,7 @@ web-v2/src/
 1. **发布物**：`bedrock` Server 单二进制（embed 前端）+ `bedrock-agent`；Linux amd64/arm64 命名 `bedrock-linux-amd64` / `bedrock-linux-arm64` 与对应 `bedrock-agent-*`；附带 SHA256。
 2. **全新安装**：空数据目录 + 配置 + 启动（migration + 种子超管）。见 [ops-handbook.md](./ops-handbook.md)。
 3. **备份**：SQLite 可用文件复制/专用备份命令；Postgres/MySQL 使用各自工具——平台可提供「备份指引」，**不假装统一物理备份**。
-4. **前端回滚**：保留上一版 `web/` 或旧 `web-v2` 产物 tag；改 `FRONTEND_DIR` / CI 拷贝源重新打包。见 [release-checklist.md](./release-checklist.md)。
+4. **前端回滚**：保留上一版 `web` 产物 tag；替换 `cmd/server/dist` 后重打包。见 [release-checklist.md](./release-checklist.md)。
 5. **无** 1.x 升级通道；文档与登录页显著位置声明。
 6. **检查单**：[release-checklist.md](./release-checklist.md)；冒烟：`make smoke*`。
 
@@ -559,7 +559,7 @@ web-v2/src/
 | 固定 admin/ops/dev | Super Admin + 自定义 Role |
 | 内嵌 pipeline agent | 异步 AgentRun + 构建事件 |
 | AgentProxy | CliRuntime |
-| React web/ | Vue web-v2/ |
+| React web/（已移除） | Vue web/ |
 
 ---
 

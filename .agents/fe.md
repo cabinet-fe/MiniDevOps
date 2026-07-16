@@ -1,6 +1,6 @@
-# 前端约定（web-v2）
+# 前端约定（web）
 
-改 `web-v2/`、Vue / UI / HTTP 客户端时阅读本文。领域产品规则见 [docs/DESIGN.md](../docs/DESIGN.md)；仓库入口与命令见 [AGENTS.md](../AGENTS.md)。
+改 `web/`、Vue / UI / HTTP 客户端时阅读本文。领域产品规则见 [docs/DESIGN.md](../docs/DESIGN.md)；仓库入口与命令见 [AGENTS.md](../AGENTS.md)。
 
 ## 技术栈
 
@@ -11,7 +11,7 @@
 | UI | `@veltra/desktop` + styles / icons / utils / directives / compositions |
 | 工具库 | `@cat-kit/core`、`@cat-kit/fe`、`@cat-kit/http`、`@cat-kit/tsconfig` |
 | 包管理 | bun（可由 `vp install` 包装） |
-| 目录 | `web-v2/` |
+| 目录 | `web/` |
 
 ## 必读技能（渐进）
 
@@ -26,9 +26,9 @@
 
 ## 规范
 
-- 路径别名 `@` → `web-v2/src/`。
+- 路径别名 `@` → `web/src/`。
 - **组件与工具必须优先 `@veltra/*` 与 `@cat-kit/*`**。仅确认库内无合适能力后才自研或引入第三方。
-- 本地组件目录：`web-v2/src/components/<name>/`，必须含 `index.ts` + `<name>.vue`；类型 / `defineXxx` 等放可选 `helper.ts`。调用方从 `@/components/<name>` 导入（勿写 `.vue` 路径）。
+- 本地组件目录：`web/src/components/<name>/`，必须含 `index.ts` + `<name>.vue`；类型 / `defineXxx` 等放可选 `helper.ts`。调用方从 `@/components/<name>` 导入（勿写 `.vue` 路径）。
 - 字段与交互形态对齐 `@veltra/desktop` 契约（查 `components/<name>/types.d.ts` 与 `api.md`）。例如：
   - 侧栏：`UNav` / `UDualNav` 的 `NavItem`（`title` / `path` / `icon` / `children` 等）
   - 表格列：裸 `UTable` 用 `defineTableColumns`；`ProTable` 用 `defineProTableColumns`；分页：`UPaginator`；表单：`UForm` / `UFormItem`
@@ -47,7 +47,7 @@
 
 ## 列表与分页（ProTable）
 
-封装：`web-v2/src/components/pro-table/`（`index.ts` + `pro-table.vue` + `helper.ts`）。页面勿各自复制请求 + 表格 + 分页样板。
+封装：`web/src/components/pro-table/`（`index.ts` + `pro-table.vue` + `helper.ts`）。页面勿各自复制请求 + 表格 + 分页样板。
 
 ```ts
 import ProTable, { defineProTableColumns } from "@/components/pro-table";
@@ -73,7 +73,7 @@ import ProTable, { defineProTableColumns } from "@/components/pro-table";
 
 ## 测试
 
-- 关键路径优先 Playwright 冒烟（登录、菜单、构建日志等）：`web-v2/e2e/`，`bunx playwright test`
+- 关键路径优先 Playwright 冒烟（登录、菜单、构建日志等）：`web/e2e/`，`bunx playwright test`
 - API 级冒烟：`make smoke-api-e2e`
 - 不做容量/延迟 SLO 验收（见 ROADMAP）
 

@@ -15,7 +15,7 @@
 
 1. **交付方式**：分阶段完成七大域后发布 2.0 GA；阶段顺序固定为 P0→P1→P2→P3→P4→P5。
 2. **升级**：2.0 **只支持全新安装**，不迁移 1.x 数据。
-3. **前端**：旁路新建 `web-v2/`（Vue 3 + Veltra + CatKit + Vite+）；达标后一次切换 embed，旧 `web/` 保留回滚窗口。
+3. **前端**：旁路新建 `web/`（Vue 3 + Veltra + CatKit + Vite+）；达标后一次切换 embed，旧 `web/` 保留回滚窗口。
 4. **安全边界（已接受风险）**：允许 HTTP；`access_token` Web Storage + Bearer，`refresh_token` HttpOnly Cookie（不设 Secure）；构建/AI CLI **同 Bedrock UID** 直接执行。
 5. **CI/CD 状态**：归档成功后 BuildRun 保持 `success`；`distribution_summary` 反映最新分发；重新分发**追加** `BuildDeployAttempt`，不新建 BuildRun。
 6. **ACL**：仅**产品项目**使用对象级成员 ACL；CI/CD / AI / 凭证等依赖全局 RBAC；显式 `view_all` / `manage_all` 绕过成员范围。
@@ -61,14 +61,14 @@ flowchart LR
 | --- | --- |
 | 后端 | `internal/platform`（config、db 工厂、连通性检查）；`schema_migrations` + 版本化 Go migration 注册表；User/超管种子；JWT login/refresh/me（权限与菜单可先空树）；StorageService 骨架；长任务队列接口骨架 |
 | API | `openapi/openapi.yaml`（3.2 源）+ 自动生成 `openapi/openapi.3.1.projection.yaml`（禁止手改）；合同测试脚手架 |
-| 前端 | `web-v2/`：Vite+、`@veltra/*`、`@cat-kit/*`、Pinia auth、Vue Router 守卫、登录页（`password_cipher`）、AppLayout 空壳 |
+| 前端 | `web/`：Vite+、`@veltra/*`、`@cat-kit/*`、Pinia auth、Vue Router 守卫、登录页（`password_cipher`）、AppLayout 空壳 |
 | 构建 | Makefile：`FRONTEND_DIR` 可切换；`make dev` 支持 web-v2；Linux amd64/arm64 交叉编译目标声明 |
 | 测试 | 三驱动启动连通性；migration 幂等；登录加密字节兼容 golden test |
 
 ### 2.3 明确不做
 
 - 动态 RBAC 资源树完整 CRUD、CI/CD 实体拆分、运维开发环境、产品项目、AI
-- 将 `web-v2` 设为默认 embed 源（仍可用旧 `web/` 或空壳并行）
+- 将 `web` 设为默认 embed 源
 - 容量/延迟压测
 
 ### 2.4 退出 Gate
@@ -240,7 +240,7 @@ flowchart LR
 
 | 类别 | 内容 |
 | --- | --- |
-| 前端切换 | 通过 web-v2 切换 Gate 后，默认 `FRONTEND_DIR=web-v2`；CI/Release 拷贝 `web-v2/dist` → `cmd/server/dist`；旧 `web/` 保留一个发布周期作回滚 |
+| 前端切换 | 通过 web 切换 Gate 后，默认 `FRONTEND_DIR=web`；CI/Release 拷贝 `web/dist` → `cmd/server/dist` |
 | 集成测试 | 登录→RBAC 菜单→构建→分发→通知→（可选）Agent→文档草稿发布；三数据库矩阵；Linux amd64/arm64 冒烟 |
 | 文档 | PRD / DESIGN / ROADMAP / AGENTS 一致；操作手册与风险说明（HTTP、同 UID） |
 | 发布 | 单二进制 Server + 独立 Deploy Agent；默认 SQLite 全新安装路径 |
@@ -265,7 +265,7 @@ flowchart LR
 ### 7.5 退出 Gate（2.0 GA）
 
 1. P0–P4 各 Gate 全部通过且无未关闭的落地阻塞项。
-2. web-v2 为默认嵌入前端；回滚说明已文档化。
+2. web 为默认嵌入前端；回滚说明已文档化。
 3. 模块验收清单（PRD §20 语义，按 DESIGN 固化后的行为）全部勾选。
 4. 已知风险（HTTP、同 UID、自定义超管命令）在产品内可见且写入 AGENTS/DESIGN。
 

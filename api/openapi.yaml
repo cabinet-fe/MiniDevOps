@@ -2909,10 +2909,10 @@ components:
           type: string
         password_cipher:
           type: string
-          description: hex(IV || AES-256-CBC PKCS#7 ciphertext); preferred for web-v2
+          description: hex(IV || AES-256-CBC PKCS#7 ciphertext); preferred for web
         password:
           type: string
-          description: Plaintext password for debug only; web-v2 must not send this
+          description: Plaintext password for debug only; web must not send this
     User:
       type: object
       properties:

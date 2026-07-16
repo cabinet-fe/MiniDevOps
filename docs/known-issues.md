@@ -21,6 +21,5 @@
 | 三库进程冒烟 | CI 默认跑 SQLite；Postgres/MySQL 需本地/CI 服务 + `BEDROCK_SMOKE_*` / contract DSN |
 | Linux 包启动冒烟 | 交叉编译在 macOS/CI 均可产出 amd64/arm64；**本机执行**启动冒烟仅在 Linux amd64 主机自动跑 |
 | Playwright | 需已启动后端或 `E2E_BASE_URL`；CI 以 API smoke 为主路径证据 |
-| 旧 `web/` | 保留一个发布周期后可移除；不以旧前端为默认 embed |
 
 无未关闭落地阻塞项时，本文件应保持「仅非阻塞」状态。

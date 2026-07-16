@@ -1,12 +1,10 @@
-# Bedrock Web
+# web
 
-前端基于 React + TypeScript + Vite 8，使用 bun 作为包管理器，使用 oxlint 进行代码检查。
-
-## 常用命令
+Bedrock 2.0 Vue 3 前端（Vite+ / Veltra / CatKit）。
 
 ```bash
-bun install
-bun run dev
-bun run lint
-bun run build
+vp install
+vp dev
+vp check
+vp build
 ```

@@ -9,12 +9,12 @@
 - [ ] Server 二进制：`bedrock-linux-amd64`、`bedrock-linux-arm64`（及需要的 Windows 包）
 - [ ] Deploy Agent：`bedrock-agent-<os>-<arch>` 与 Server **同版本**
 - [ ] 每个产物附带 SHA256（CI 生成 `*.sha256` / `SHA256SUMS`）
-- [ ] 嵌入前端为 **web-v2**（`FRONTEND_DIR=web-v2`）
+- [ ] 嵌入前端为 **web**（`FRONTEND_DIR=web`）
 
 本地交叉编译：
 
 ```bash
-make build-linux          # bedrock-linux-amd64（含 web-v2 embed）
+make build-linux          # bedrock-linux-amd64（含 web embed）
 make build-linux-arm64    # bedrock-linux-arm64
 make build-agent-linux    # bedrock-agent-linux-amd64
 make build-agent-linux-arm64
@@ -24,14 +24,14 @@ make smoke-linux-package  # 产出校验和；Linux amd64 主机可启动冒烟
 ## 质量门禁
 
 - [ ] `make openapi-check`（投影未手改且与源一致）
-- [ ] `cd web-v2 && vp check && vp build`
+- [ ] `cd web && vp check && vp build`
 - [ ] `go test ./...`（或 CI 等价）
 - [ ] `make smoke-fresh-install`
 - [ ] `make smoke-api-e2e`
 - [ ] `make smoke-restart-recovery`
 - [ ] `bash scripts/check-ga-guardrails.sh`
 - [ ] P0–P4 Gate 无未关闭落地阻塞项（见 [known-issues.md](./known-issues.md)）
-- [ ] web-v2 切换 Gate 证据见 [roadmap/P5-switch-gate.md](./roadmap/P5-switch-gate.md)
+- [ ] web 切换 Gate 证据见 [roadmap/P5-switch-gate.md](./roadmap/P5-switch-gate.md)
 
 ## 文档
 
@@ -41,12 +41,9 @@ make smoke-linux-package  # 产出校验和；Linux amd64 主机可启动冒烟
 
 ## 前端 embed 回滚
 
-旧 `web/` 或上一版 `web-v2` 产物保留 **至少一个发布周期**。
+上一版 `web` 产物可保留 **至少一个发布周期**。
 
 ```bash
-# 开发/临时回滚到旧前端目录（若仍保留 web/）
-make build FRONTEND_DIR=web
-
 # 或：检出上一发布 tag 的前端 dist，拷入 cmd/server/dist 后重新 go build
 rm -rf cmd/server/dist && cp -r /path/to/previous/dist cmd/server/dist
 make build-backend

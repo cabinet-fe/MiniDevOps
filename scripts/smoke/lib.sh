@@ -109,9 +109,9 @@ EOF
 ensure_embed_dist() {
   mkdir -p "$ROOT/cmd/server/dist"
   if [[ ! -f "$ROOT/cmd/server/dist/index.html" ]]; then
-    if [[ -f "$ROOT/web-v2/dist/index.html" ]]; then
+    if [[ -f "$ROOT/web/dist/index.html" ]]; then
       rm -rf "$ROOT/cmd/server/dist"
-      cp -R "$ROOT/web-v2/dist" "$ROOT/cmd/server/dist"
+      cp -R "$ROOT/web/dist" "$ROOT/cmd/server/dist"
     else
       printf '%s\n' '<!doctype html><html><head></head><body>smoke placeholder</body></html>' \
         >"$ROOT/cmd/server/dist/index.html"

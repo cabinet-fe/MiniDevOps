@@ -6,9 +6,9 @@
 	ga-guardrails checksums
 
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
-FRONTEND_DIR ?= web-v2
+FRONTEND_DIR ?= web
 export VITE_APP_VERSION := $(VERSION)
-# Dev encryption key for web-v2 password_cipher (must match config.yaml encryption.key)
+# Dev encryption key for web password_cipher (must match config.yaml encryption.key)
 export VITE_BEDROCK_ENCRYPTION_KEY ?= 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
 LDFLAGS := -s -w -X main.version=$(VERSION)
 
@@ -88,4 +88,4 @@ smoke-restart-recovery:
 smoke: ga-guardrails smoke-fresh-install smoke-api-e2e smoke-restart-recovery smoke-three-db smoke-linux-package
 
 clean:
-	rm -rf bedrock* cmd/server/dist $(FRONTEND_DIR)/dist web/dist data/ .tmp/smoke
+	rm -rf bedrock* cmd/server/dist $(FRONTEND_DIR)/dist data/ .tmp/smoke

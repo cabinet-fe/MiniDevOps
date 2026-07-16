@@ -26,23 +26,19 @@ function randomIV(): Uint8Array {
   return iv;
 }
 
-/** 安全上下文（HTTPS、localhost 等）下可用 Web Crypto；纯 HTTP 内网等非安全上下文用 crypto-es。 */
+/** Secure context (HTTPS, localhost) → Web Crypto; otherwise crypto-es. */
 function useSubtleForLoginEncryption(): boolean {
   return typeof crypto !== "undefined" && typeof crypto.subtle !== "undefined";
 }
 
 function getEncryptionKeyHex(): string {
-  // 1) 嵌入二进制：Go 在返回的 index.html 中注入，与运行时 config encryption.key 一致
   if (typeof window !== "undefined") {
-    const w = window as Window & { __BEDROCK_ENCRYPTION_KEY__?: string };
-    const injected = typeof w.__BEDROCK_ENCRYPTION_KEY__ === "string" ? w.__BEDROCK_ENCRYPTION_KEY__.trim() : "";
+    const injected = window.__BEDROCK_ENCRYPTION_KEY__?.trim() ?? "";
     if (isValidHexKey64(injected)) {
       return injected;
     }
   }
-  // 2) Vite 编译时注入（dev、vite preview、非 Go 托管的静态资源等）
-  const vite = import.meta.env.VITE_BEDROCK_ENCRYPTION_KEY;
-  const fromEnv = typeof vite === "string" ? vite.trim() : "";
+  const fromEnv = import.meta.env.VITE_BEDROCK_ENCRYPTION_KEY?.trim() ?? "";
   if (isValidHexKey64(fromEnv)) {
     return fromEnv;
   }
@@ -52,8 +48,7 @@ function getEncryptionKeyHex(): string {
 }
 
 function getEncryptionKeyBytes(): Uint8Array {
-  const trimmed = getEncryptionKeyHex();
-  const keyBytes = hexToBytes(trimmed);
+  const keyBytes = hexToBytes(getEncryptionKeyHex());
   if (keyBytes.length !== 32) {
     throw new Error("加密密钥长度应为 32 字节（64 hex 字符）");
   }
@@ -62,7 +57,13 @@ function getEncryptionKeyBytes(): Uint8Array {
 
 async function encryptSubtle(plain: string, keyBytes: Uint8Array): Promise<string> {
   const iv = randomIV();
-  const key = await crypto.subtle.importKey("raw", keyBytes.buffer as ArrayBuffer, "AES-CBC", false, ["encrypt"]);
+  const key = await crypto.subtle.importKey(
+    "raw",
+    keyBytes.buffer as ArrayBuffer,
+    "AES-CBC",
+    false,
+    ["encrypt"],
+  );
   const ciphertext = await crypto.subtle.encrypt(
     { name: "AES-CBC", iv: iv.buffer as ArrayBuffer },
     key,
@@ -89,8 +90,7 @@ function encryptCryptoEs(plain: string, keyBytes: Uint8Array): string {
 }
 
 /**
- * AES-256-CBC，输出 `hex(IV(16 字节) || PKCS#7 密文)`，与后端 `DecryptLoginPasswordCipher` 一致。
- * 无有效密钥或加密失败时抛错，不再回退为明文 `password`。
+ * AES-256-CBC → hex(IV(16) || PKCS#7 ciphertext). Never falls back to plaintext password.
  */
 export async function encryptLoginPassword(plain: string): Promise<string> {
   const keyBytes = getEncryptionKeyBytes();

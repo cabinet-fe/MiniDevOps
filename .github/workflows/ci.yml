@@ -33,8 +33,8 @@ jobs:
       - uses: oven-sh/setup-bun@v2.2.0
       - name: Install vp
         run: bun add -g vite-plus
-      - name: web-v2 check + build
-        working-directory: web-v2
+      - name: web check + build
+        working-directory: web
         run: |
           vp install
           vp check

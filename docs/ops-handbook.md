@@ -81,8 +81,7 @@ make smoke-three-db
 
 ## 5. 前端 embed 与回滚
 
-- 默认 `FRONTEND_DIR=web-v2`；Release 将 `web-v2/dist` 拷入 `cmd/server/dist` 后 `go build` embed。
-- 旧 `web/`（或上一版前端产物）**保留至少一个发布周期**便于回滚。
+- 默认 `FRONTEND_DIR=web`；Release 将 `web/dist` 拷入 `cmd/server/dist` 后 `go build` embed。
 - 回滚步骤见 [release-checklist.md](./release-checklist.md#前端-embed-回滚)。
 
 ---
