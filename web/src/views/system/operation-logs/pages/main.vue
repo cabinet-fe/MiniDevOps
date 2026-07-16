@@ -1,4 +1,6 @@
 <script setup lang="ts">
+defineOptions({ name: "SystemOperationLogs" });
+
 import { reactive } from "vue";
 
 import type { OperationLog } from "@/api/types";
@@ -32,10 +34,6 @@ const columns = defineProTableColumns([
 
 <template>
   <div class="page">
-    <div class="page-head">
-      <h2>操作日志</h2>
-    </div>
-
     <ProTable url="/operation-logs" v-model:query="query" :columns="columns" pagination>
       <template #filters="{ search }">
         <u-input v-model="query.action" placeholder="动作 (POST/PUT…)" style="width: 160px" />
@@ -50,16 +48,3 @@ const columns = defineProTableColumns([
     </ProTable>
   </div>
 </template>
-
-<style scoped>
-.page-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 16px;
-}
-.page-head h2 {
-  margin: 0;
-  font-size: 20px;
-}
-</style>

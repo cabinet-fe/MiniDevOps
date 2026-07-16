@@ -1,4 +1,6 @@
 <script setup lang="ts">
+defineOptions({ name: "PlaceholderPage" });
+
 import { useRoute } from "vue-router";
 
 const route = useRoute();

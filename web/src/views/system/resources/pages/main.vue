@@ -1,4 +1,6 @@
 <script setup lang="ts">
+defineOptions({ name: "SystemResources" });
+
 import { computed, onMounted, reactive, ref } from "vue";
 import { o } from "@cat-kit/core";
 import { defineTableColumns, message } from "@veltra/desktop";
@@ -50,13 +52,13 @@ const form = reactive({
 });
 
 const columns = defineTableColumns([
+  { key: "title", name: "菜单标题", minWidth: 140 },
   { key: "path", name: "Path", minWidth: 220 },
   { key: "type", name: "类型", width: 100, minWidth: 80 },
-  { key: "title", name: "菜单标题", minWidth: 140 },
   { key: "route", name: "路由", minWidth: 160 },
   { key: "sort_key", name: "排序", width: 80, minWidth: 60 },
   { key: "enabled", name: "状态", width: 90, minWidth: 70 },
-  { key: "action", name: "操作", width: 220, minWidth: 180 },
+  { key: "action", name: "操作", width: 220, minWidth: 180, fixed: "right" },
 ]);
 
 const parentOptions = computed(() =>
@@ -205,18 +207,15 @@ async function remove(row: RbacResource) {
 
 <template>
   <div class="page">
-    <div class="page-head">
-      <h2>权限资源</h2>
-      <div class="actions">
-        <u-button @click="load">刷新</u-button>
-        <u-button
-          v-if="hasPermission('system.resources:create')"
-          type="primary"
-          @click="openCreate()"
-        >
-          新建资源
-        </u-button>
-      </div>
+    <div class="page-toolbar">
+      <u-button @click="load">刷新</u-button>
+      <u-button
+        v-if="hasPermission('system.resources:create')"
+        type="primary"
+        @click="openCreate()"
+      >
+        新建资源
+      </u-button>
     </div>
 
     <div class="table-wrap" :class="{ 'is-loading': loading }">
@@ -319,19 +318,19 @@ async function remove(row: RbacResource) {
 <style scoped lang="scss">
 @use "pkg:@veltra/styles/functions" as fn;
 
-.page-head {
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-height: 100%;
+  min-width: 0;
+}
+.page-toolbar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  flex-shrink: 0;
-}
-.page-head h2 {
-  margin: 0;
-  font-size: 20px;
-}
-.actions {
-  display: flex;
+  justify-content: flex-end;
   gap: 8px;
+  flex-shrink: 0;
 }
 .table-wrap {
   flex: 1;

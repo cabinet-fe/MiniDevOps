@@ -1,4 +1,6 @@
 <script setup lang="ts">
+defineOptions({ name: "CicdRepositories" });
+
 import { onMounted, reactive, ref, useTemplateRef } from "vue";
 import { o } from "@cat-kit/core";
 import { message } from "@veltra/desktop";
@@ -118,17 +120,18 @@ async function onTest(row: Repository) {
 
 <template>
   <div class="page">
-    <div class="page-head">
-      <h2>代码仓库</h2>
-      <u-button v-if="hasPermission('cicd.repositories:create')" type="primary" @click="openCreate">
-        新建仓库
-      </u-button>
-    </div>
-
     <ProTable ref="list" url="/repositories" v-model:query="query" :columns="columns" pagination>
       <template #filters="{ search }">
         <u-input v-model="query.keyword" placeholder="名称/URL" style="width: 200px" />
         <u-button type="primary" @click="search">查询</u-button>
+        <u-button
+          v-if="hasPermission('cicd.repositories:create')"
+          type="primary"
+          style="margin-left: auto"
+          @click.prevent="openCreate"
+        >
+          新建仓库
+        </u-button>
       </template>
       <template #column:auth_type="{ rowData }">
         <u-tag size="small" :type="tagType((rowData as Repository).auth_type, AUTH_TYPE_TAG)">
@@ -194,14 +197,5 @@ async function onTest(row: Repository) {
   display: flex;
   flex-direction: column;
   gap: 16px;
-}
-.page-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-.page-head h2 {
-  margin: 0;
-  font-size: 18px;
 }
 </style>

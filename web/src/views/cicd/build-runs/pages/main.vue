@@ -1,4 +1,6 @@
 <script setup lang="ts">
+defineOptions({ name: "CicdBuildRuns" });
+
 import { computed, onMounted, reactive, ref } from "vue";
 import { useRouter } from "vue-router";
 
@@ -73,10 +75,6 @@ onMounted(async () => {
 
 <template>
   <div class="page">
-    <div class="page-head">
-      <h2>构建记录</h2>
-    </div>
-
     <ProTable
       url="/build-runs"
       v-model:query="query"
@@ -146,9 +144,5 @@ onMounted(async () => {
   display: flex;
   flex-direction: column;
   gap: 16px;
-}
-.page-head h2 {
-  margin: 0;
-  font-size: 18px;
 }
 </style>

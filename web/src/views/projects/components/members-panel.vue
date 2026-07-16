@@ -74,7 +74,7 @@ const columns = defineTableColumns([
     minWidth: 180,
     render: ({ val }) => formatDateTime(val),
   },
-  { key: "action", name: "操作", width: 220, minWidth: 180 },
+  { key: "action", name: "操作", width: 220, minWidth: 180, fixed: "right" },
 ]);
 
 async function load() {

@@ -15,19 +15,7 @@ const projectTab = computed(() => {
   return tab === "docs" ? "docs" : "requirements";
 });
 
-const pageCopy = computed(() =>
-  projectTab.value === "docs"
-    ? {
-        title: "接口文档",
-        description: "选择一个产品项目，进入其接口文档。",
-        action: "进入文档",
-      }
-    : {
-        title: "需求管理",
-        description: "选择一个产品项目，进入其需求列表。",
-        action: "进入需求",
-      },
-);
+const actionLabel = computed(() => (projectTab.value === "docs" ? "进入文档" : "进入需求"));
 
 const columns = defineProTableColumns([
   { key: "name", name: "项目", sortable: true },
@@ -48,13 +36,6 @@ function openProject(project: ProductProject) {
 
 <template>
   <div class="page">
-    <div class="page-head">
-      <div>
-        <h2>{{ pageCopy.title }}</h2>
-        <p>{{ pageCopy.description }}</p>
-      </div>
-    </div>
-
     <ProTable
       url="/projects"
       v-model:query="query"
@@ -90,7 +71,7 @@ function openProject(project: ProductProject) {
         </u-tag>
       </template>
       <template #column:action="{ rowData }">
-        <u-action @run="openProject(rowData as ProductProject)">{{ pageCopy.action }}</u-action>
+        <u-action @run="openProject(rowData as ProductProject)">{{ actionLabel }}</u-action>
       </template>
     </ProTable>
   </div>
@@ -101,14 +82,5 @@ function openProject(project: ProductProject) {
   display: flex;
   flex-direction: column;
   gap: 16px;
-}
-.page-head h2,
-.page-head p {
-  margin: 0;
-}
-.page-head p {
-  margin-top: 6px;
-  color: var(--u-text-color-assist, #7c8494);
-  font-size: 13px;
 }
 </style>

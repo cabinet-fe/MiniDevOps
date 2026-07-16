@@ -1,4 +1,6 @@
 <script setup lang="ts">
+defineOptions({ name: "SystemUsers" });
+
 import { computed, onMounted, reactive, ref, useTemplateRef } from "vue";
 import { o } from "@cat-kit/core";
 import { message } from "@veltra/desktop";
@@ -114,17 +116,18 @@ async function remove(row: User) {
 
 <template>
   <div class="page">
-    <div class="page-head">
-      <h2>用户</h2>
-      <u-button v-if="hasPermission('system.users:create')" type="primary" @click="openCreate">
-        新建用户
-      </u-button>
-    </div>
-
     <ProTable ref="list" url="/users" v-model:query="query" :columns="columns" pagination>
       <template #filters="{ search }">
         <u-input v-model="query.keyword" placeholder="用户名关键词" style="width: 200px" />
         <u-button type="primary" @click="search">查询</u-button>
+        <u-button
+          v-if="hasPermission('system.users:create')"
+          type="primary"
+          style="margin-left: auto"
+          @click.prevent="openCreate"
+        >
+          新建用户
+        </u-button>
       </template>
       <template #column:role_ids="{ rowData }">
         <span class="tag-cell">
@@ -192,15 +195,10 @@ async function remove(row: User) {
 </template>
 
 <style scoped>
-.page-head {
+.page {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-shrink: 0;
-}
-.page-head h2 {
-  margin: 0;
-  font-size: 20px;
+  flex-direction: column;
+  gap: 16px;
 }
 .tag-cell {
   display: inline-flex;

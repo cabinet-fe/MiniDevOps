@@ -1,4 +1,6 @@
 <script setup lang="ts">
+defineOptions({ name: "CicdServers" });
+
 import { onMounted, reactive, ref, useTemplateRef } from "vue";
 import { o } from "@cat-kit/core";
 import { message } from "@veltra/desktop";
@@ -124,17 +126,18 @@ async function onTest(row: Server) {
 
 <template>
   <div class="page">
-    <div class="page-head">
-      <h2>服务器</h2>
-      <u-button v-if="hasPermission('cicd.servers:create')" type="primary" @click="openCreate">
-        新建服务器
-      </u-button>
-    </div>
-
     <ProTable ref="list" url="/servers" v-model:query="query" :columns="columns" pagination>
       <template #filters="{ search }">
         <u-input v-model="query.keyword" placeholder="名称/主机" style="width: 200px" />
         <u-button type="primary" @click="search">查询</u-button>
+        <u-button
+          v-if="hasPermission('cicd.servers:create')"
+          type="primary"
+          style="margin-left: auto"
+          @click.prevent="openCreate"
+        >
+          新建服务器
+        </u-button>
       </template>
       <template #column:auth_type="{ rowData }">
         <u-tag size="small" :type="tagType((rowData as Server).auth_type, AUTH_TYPE_TAG)">
@@ -210,14 +213,5 @@ async function onTest(row: Server) {
   display: flex;
   flex-direction: column;
   gap: 16px;
-}
-.page-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-.page-head h2 {
-  margin: 0;
-  font-size: 18px;
 }
 </style>

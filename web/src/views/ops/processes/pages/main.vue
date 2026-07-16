@@ -1,4 +1,6 @@
 <script setup lang="ts">
+defineOptions({ name: "OpsProcesses" });
+
 import { reactive, useTemplateRef } from "vue";
 import { message } from "@veltra/desktop";
 
@@ -67,13 +69,6 @@ async function terminate(row: ProcessInfo) {
 
 <template>
   <div class="page">
-    <div class="page-head">
-      <div>
-        <h2>进程管理</h2>
-        <p>仅超级管理员可操作。系统关键进程及 Bedrock 自身受保护。</p>
-      </div>
-    </div>
-
     <ProTable
       ref="list"
       url="/ops/processes"
@@ -126,14 +121,6 @@ async function terminate(row: ProcessInfo) {
   display: flex;
   flex-direction: column;
   gap: 16px;
-}
-.page-head h2 {
-  margin: 0;
-  font-size: 18px;
-}
-.page-head p {
-  margin: 6px 0 0;
-  color: #6b7280;
 }
 .cmdline {
   display: block;

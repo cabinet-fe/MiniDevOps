@@ -1,4 +1,6 @@
 <script setup lang="ts">
+defineOptions({ name: "Projects" });
+
 import { reactive, ref, useTemplateRef } from "vue";
 import { o } from "@cat-kit/core";
 import { message } from "@veltra/desktop";
@@ -103,16 +105,6 @@ function splitTags(raw?: string | null): string[] {
 
 <template>
   <div class="page">
-    <div class="page-head">
-      <div>
-        <h2>产品项目</h2>
-        <p>项目列表受成员 ACL 与全局 view_all 约束。</p>
-      </div>
-      <u-button v-if="hasPermission('project.projects:create')" type="primary" @click="openCreate">
-        新建项目
-      </u-button>
-    </div>
-
     <ProTable
       ref="table"
       url="/projects"
@@ -134,6 +126,14 @@ function splitTags(raw?: string | null): string[] {
           style="width: 130px"
         />
         <u-button type="primary" @click="search">查询</u-button>
+        <u-button
+          v-if="hasPermission('project.projects:create')"
+          type="primary"
+          style="margin-left: auto"
+          @click.prevent="openCreate"
+        >
+          新建项目
+        </u-button>
       </template>
       <template #column:name="{ rowData }">
         <u-action @run="openProject(rowData as ProductProject)">
@@ -206,21 +206,6 @@ function splitTags(raw?: string | null): string[] {
   display: flex;
   flex-direction: column;
   gap: 16px;
-}
-.page-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-}
-.page-head h2,
-.page-head p {
-  margin: 0;
-}
-.page-head p {
-  margin-top: 6px;
-  color: var(--u-text-color-assist, #7c8494);
-  font-size: 13px;
 }
 .tag-cell {
   display: inline-flex;

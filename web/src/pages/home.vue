@@ -1,6 +1,9 @@
 <script setup lang="ts">
+defineOptions({ name: "HomePage" });
+
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import { message } from "@veltra/desktop";
+import { Edit, Save } from "@veltra/icons/normal";
 import { useRouter } from "vue-router";
 
 import {
@@ -17,7 +20,9 @@ import type {
   SystemInfo,
   SystemStatus,
 } from "@/api/types";
-import { formatDateTime } from "@/lib/datetime";
+import DashboardBuildCard from "@/components/dashboard-build-card";
+import DashboardSystemInfoCard from "@/components/dashboard-system-info-card";
+import DashboardSystemStatusCard from "@/components/dashboard-system-status-card";
 
 const STATUS_REFRESH_MS = 30_000;
 
@@ -39,10 +44,6 @@ const cardTitles: Record<DashboardCardID, string> = {
   system_info: "系统信息",
   system_status: "系统状态",
 };
-
-function hasCard(id: DashboardCardID): boolean {
-  return layout.value.some((card) => card.id === id);
-}
 
 function isVisible(id: DashboardCardID): boolean {
   return layout.value.some((card) => card.id === id && card.visible);
@@ -136,210 +137,138 @@ onUnmounted(() => {
 
 <template>
   <div class="dashboard">
-    <header class="dashboard__head">
-      <div>
-        <h2>仪表盘</h2>
-        <p>系统信息为完整只读信息；它不会授予运维写操作权限。</p>
-      </div>
-      <div class="dashboard__actions">
-        <u-button v-if="editing" @click="editing = false">取消</u-button>
-        <u-button v-if="editing" type="primary" @click="persistLayout">保存布局</u-button>
-        <u-button v-else @click="editing = true">编辑卡片</u-button>
-      </div>
-    </header>
+    <div class="dashboard__toolbar">
+      <template v-if="editing">
+        <u-button @click="editing = false">取消</u-button>
+        <u-button type="primary" @click="persistLayout">
+          <u-icon :size="14"><Save /></u-icon>
+          保存布局
+        </u-button>
+      </template>
+      <u-button v-else text type="primary" @click="editing = true">
+        <u-icon :size="14"><Edit /></u-icon>
+        编辑卡片
+      </u-button>
+    </div>
 
-    <section v-if="editing" class="dashboard__editor">
-      <h3>卡片布局</h3>
-      <p>仅列出当前账号可用的卡片；关闭卡片后可在此重新启用。</p>
-      <div v-for="(card, index) in layout" :key="card.id" class="dashboard__editor-row">
-        <label>
-          <input v-model="card.visible" type="checkbox" />
-          {{ cardTitles[card.id] }}
-        </label>
-        <span class="dashboard__editor-actions">
-          <u-button text :disabled="index === 0" @click="moveCard(index, -1)">上移</u-button>
-          <u-button text :disabled="index === layout.length - 1" @click="moveCard(index, 1)"
-            >下移</u-button
-          >
-        </span>
-      </div>
-    </section>
+    <u-card v-if="editing" class="dashboard__editor" integrate>
+      <u-card-header>
+        <h3 class="dashboard__editor-title">卡片布局</h3>
+      </u-card-header>
+      <u-card-content>
+        <p class="dashboard__editor-hint">仅列出当前账号可用的卡片；关闭后可在此重新启用。</p>
+        <div v-for="(card, index) in layout" :key="card.id" class="dashboard__editor-row">
+          <label class="dashboard__editor-label">
+            <u-switch v-model="card.visible" />
+            <span>{{ cardTitles[card.id] }}</span>
+          </label>
+          <span class="dashboard__editor-actions">
+            <u-button text :disabled="index === 0" @click="moveCard(index, -1)">上移</u-button>
+            <u-button text :disabled="index === layout.length - 1" @click="moveCard(index, 1)">
+              下移
+            </u-button>
+          </span>
+        </div>
+      </u-card-content>
+    </u-card>
 
-    <p v-if="loading" class="dashboard__loading">正在加载仪表盘…</p>
+    <div v-if="loading" v-loading="true" class="dashboard__loading" />
     <section v-else class="dashboard__cards">
-      <article v-for="card in visibleCards" :key="card.id" class="dashboard-card">
-        <template v-if="card.id === 'build_summary' && hasCard('build_summary')">
-          <h3>构建摘要</h3>
-          <div class="dashboard-card__metrics">
-            <span
-              >运行中 <strong>{{ buildSummary?.running ?? "—" }}</strong></span
-            >
-            <span
-              >排队 <strong>{{ buildSummary?.queued ?? "—" }}</strong></span
-            >
-            <span
-              >成功率
-              <strong>{{
-                buildSummary ? `${buildSummary.success_rate.toFixed(1)}%` : "—"
-              }}</strong></span
-            >
-          </div>
-          <div v-if="buildSummary?.recent?.length" class="dashboard-card__recent">
-            <button
-              v-for="run in buildSummary.recent"
-              :key="run.id"
-              type="button"
-              @click="openBuildRun(run.id)"
-            >
-              #{{ run.build_number }} · {{ run.status }} · {{ run.branch || "默认分支" }}
-            </button>
-          </div>
-        </template>
-
-        <template v-else-if="card.id === 'system_info' && hasCard('system_info')">
-          <h3>系统信息</h3>
-          <dl class="dashboard-card__details">
-            <dt>版本</dt>
-            <dd>{{ systemInfo?.version ?? "—" }}</dd>
-            <dt>主机名</dt>
-            <dd>{{ systemInfo?.hostname ?? "—" }}</dd>
-            <dt>平台</dt>
-            <dd>{{ systemInfo ? `${systemInfo.os}/${systemInfo.arch}` : "—" }}</dd>
-            <dt>运行时</dt>
-            <dd>{{ systemInfo?.runtime ?? "—" }}</dd>
-            <dt>启动时间</dt>
-            <dd>{{ formatDateTime(systemInfo?.start_time) || "—" }}</dd>
-          </dl>
-        </template>
-
-        <template v-else-if="card.id === 'system_status' && hasCard('system_status')">
-          <h3>系统状态</h3>
-          <div class="dashboard-card__metrics">
-            <span
-              >健康 <strong>{{ systemStatus?.health ?? "—" }}</strong></span
-            >
-            <span
-              >CPU
-              <strong>{{ systemStatus ? `${systemStatus.cpu_usage_percent}%` : "—" }}</strong></span
-            >
-            <span
-              >内存
-              <strong>{{
-                systemStatus ? `${systemStatus.memory_usage_percent}%` : "—"
-              }}</strong></span
-            >
-          </div>
-          <ul class="dashboard-card__disk">
-            <li v-for="directory in systemStatus?.directories ?? []" :key="directory.path">
-              {{ directory.path }}：{{ directory.used_percent }}% 已用
-            </li>
-          </ul>
-        </template>
-      </article>
-      <p v-if="!visibleCards.length" class="dashboard__empty">
-        当前没有可见卡片。请在编辑模式中启用卡片。
-      </p>
+      <template v-for="card in visibleCards" :key="card.id">
+        <DashboardBuildCard
+          v-if="card.id === 'build_summary'"
+          :data="buildSummary"
+          @open-run="openBuildRun"
+        />
+        <DashboardSystemInfoCard v-else-if="card.id === 'system_info'" :data="systemInfo" />
+        <DashboardSystemStatusCard v-else-if="card.id === 'system_status'" :data="systemStatus" />
+      </template>
+      <u-empty
+        v-if="!visibleCards.length"
+        class="dashboard__empty"
+        text="当前没有可见卡片。请编辑并启用卡片。"
+      />
     </section>
   </div>
 </template>
 
 <style scoped lang="scss">
+@use "pkg:@veltra/styles/functions" as fn;
+
 .dashboard {
+  box-sizing: border-box;
   display: flex;
   flex-direction: column;
   gap: 16px;
+  min-height: 100%;
+  padding: fn.use-var(gap, large);
 }
-.dashboard__head,
-.dashboard__actions,
-.dashboard__editor-row,
-.dashboard-card__metrics {
+
+.dashboard__toolbar {
   display: flex;
   align-items: center;
-  gap: 12px;
+  justify-content: flex-end;
+  gap: 8px;
+  min-height: 32px;
 }
-.dashboard__head {
-  justify-content: space-between;
+
+.dashboard__editor {
+  background: color-mix(in srgb, fn.use-var(bg-color, top) 92%, transparent);
 }
-.dashboard__head h2,
-.dashboard__editor h3,
-.dashboard-card h3 {
+
+.dashboard__editor-title {
   margin: 0;
+  color: fn.use-var(text-color, title);
+  font-size: 15px;
+  font-weight: 600;
 }
-.dashboard__head p,
-.dashboard__editor p {
-  margin: 6px 0 0;
-  color: #6b7280;
+
+.dashboard__editor-hint {
+  margin: 0 0 12px;
+  color: fn.use-var(text-color, second);
+  font-size: 13px;
 }
-.dashboard__editor,
-.dashboard-card {
-  border: 1px solid var(--u-border-color, #e5e7eb);
-  border-radius: 8px;
-  padding: 16px;
-  background: var(--u-bg-color, #fff);
-}
+
 .dashboard__editor-row {
+  display: flex;
+  align-items: center;
   justify-content: space-between;
-  padding: 8px 0;
-  border-top: 1px solid #f0f0f0;
+  gap: 12px;
+  padding: 10px 0;
+
+  & + & {
+    border-top: fn.use-var(border, muted);
+  }
 }
-.dashboard__editor-row:first-of-type {
-  border-top: 0;
+
+.dashboard__editor-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: fn.use-var(text-color, main);
+  cursor: pointer;
 }
+
+.dashboard__editor-actions {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.dashboard__loading {
+  flex: 1;
+  min-height: 240px;
+}
+
 .dashboard__cards {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  gap: 20px;
+  align-content: start;
+  flex: 1;
 }
-.dashboard-card {
-  min-height: 160px;
-}
-.dashboard-card__metrics {
-  margin: 18px 0;
-  justify-content: space-between;
-}
-.dashboard-card__metrics span {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  color: #6b7280;
-}
-.dashboard-card__metrics strong {
-  color: #111827;
-  font-size: 20px;
-}
-.dashboard-card__recent {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.dashboard-card__recent button {
-  border: 0;
-  background: transparent;
-  padding: 0;
-  color: #2563eb;
-  cursor: pointer;
-  text-align: left;
-}
-.dashboard-card__details {
-  display: grid;
-  grid-template-columns: 88px 1fr;
-  gap: 8px 12px;
-  margin: 16px 0 0;
-}
-.dashboard-card__details dt {
-  color: #6b7280;
-}
-.dashboard-card__details dd {
-  margin: 0;
-  overflow-wrap: anywhere;
-}
-.dashboard-card__disk {
-  margin: 0;
-  padding-left: 20px;
-  color: #4b5563;
-}
-.dashboard__loading,
+
 .dashboard__empty {
-  color: #6b7280;
+  grid-column: 1 / -1;
+  padding: 48px 0;
 }
 </style>

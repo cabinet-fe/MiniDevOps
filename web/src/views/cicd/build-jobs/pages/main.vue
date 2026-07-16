@@ -1,4 +1,6 @@
 <script setup lang="ts">
+defineOptions({ name: "CicdBuildJobs" });
+
 import { computed, onMounted, reactive, ref, useTemplateRef, watch } from "vue";
 import { useRouter } from "vue-router";
 import { o } from "@cat-kit/core";
@@ -342,13 +344,6 @@ async function rotateWebhookSecret() {
 
 <template>
   <div class="page">
-    <div class="page-head">
-      <h2>构建任务</h2>
-      <u-button v-if="hasPermission('cicd.build_jobs:create')" type="primary" @click="openCreate">
-        新建任务
-      </u-button>
-    </div>
-
     <ProTable
       ref="list"
       url="/build-jobs"
@@ -367,6 +362,14 @@ async function rotateWebhookSecret() {
         />
         <u-input v-model="query.keyword" placeholder="名称" style="width: 160px" />
         <u-button type="primary" @click="search">查询</u-button>
+        <u-button
+          v-if="hasPermission('cicd.build_jobs:create')"
+          type="primary"
+          style="margin-left: auto"
+          @click.prevent="openCreate"
+        >
+          新建任务
+        </u-button>
       </template>
       <template #column:repository="{ rowData }">
         {{ repoName((rowData as BuildJob).repository_id) }}
@@ -588,15 +591,6 @@ async function rotateWebhookSecret() {
   display: flex;
   flex-direction: column;
   gap: 16px;
-}
-.page-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-.page-head h2 {
-  margin: 0;
-  font-size: 18px;
 }
 .mono {
   font-family: ui-monospace, monospace;

@@ -1,8 +1,9 @@
 <script setup lang="ts">
+defineOptions({ name: "AiClis" });
+
 import { onMounted, reactive, ref } from "vue";
 import { o } from "@cat-kit/core";
 import { message } from "@veltra/desktop";
-import { Setting } from "@veltra/icons/normal";
 
 import {
   createCLISource,
@@ -233,70 +234,72 @@ onMounted(() => {
 
 <template>
   <div v-loading="loading" class="page">
-    <div class="page-head">
-      <div>
-        <h2>AI CLI</h2>
-        <p class="risk">
-          {{ riskNotice || "AI CLI 以 Bedrock 同 UID 执行，无 OS/容器沙箱。" }}
-        </p>
-        <p class="hint">进入页面时自动检测版本；安装源通过各 CLI 的设置管理。</p>
-      </div>
+    <div class="page-notice">
+      <p class="risk">
+        {{ riskNotice || "AI CLI 以 Bedrock 同 UID 执行，无 OS/容器沙箱。" }}
+      </p>
+      <p class="hint">进入页面时自动检测版本；安装源通过各 CLI 的设置管理。</p>
     </div>
 
     <div class="cards">
-      <article v-for="item in items" :key="item.key" class="card">
-        <header class="card-head">
-          <div class="card-title">
-            <div class="title-row">
-              <h3>{{ item.name }}</h3>
-              <u-tag size="small" :type="versionTagType(detectStates[item.key])">
-                {{ versionTagLabel(detectStates[item.key]) }}
-              </u-tag>
+      <u-card v-for="item in items" :key="item.key" class="cli-card">
+        <u-card-content>
+          <header class="card-head">
+            <div class="card-title">
+              <div class="title-row">
+                <h3>{{ item.name }}</h3>
+                <u-tag size="small" :type="versionTagType(detectStates[item.key])">
+                  {{ versionTagLabel(detectStates[item.key]) }}
+                </u-tag>
+              </div>
+              <p class="meta">
+                <span>{{ item.key }}</span>
+                <span>{{ item.binary_name }}</span>
+              </p>
+              <p v-if="item.description" class="desc">{{ item.description }}</p>
             </div>
-            <p class="meta">
-              <span>{{ item.key }}</span>
-              <span>{{ item.binary_name }}</span>
-            </p>
-            <p v-if="item.description" class="desc">{{ item.description }}</p>
-          </div>
-          <div class="actions">
-            <u-button
-              v-if="hasPermission('ai.clis:view')"
-              size="small"
-              text
-              :icon="Setting"
-              @click="openSourcesManager(item)"
-            >
-              设置
-            </u-button>
-            <u-action-group v-if="hasPermission('ai.clis:execute')" :max="4">
-              <u-action :disabled="!!pendingOps[item.key]" @run="runDetect(item)">检测</u-action>
-              <u-action
-                :disabled="!!pendingOps[item.key]"
-                :loading="isOpPending(item.key, 'install')"
-                @run="runOperation(item, 'install')"
-              >
-                安装
-              </u-action>
-              <u-action
-                :disabled="!!pendingOps[item.key]"
-                :loading="isOpPending(item.key, 'upgrade')"
-                @run="runOperation(item, 'upgrade')"
-              >
-                升级
-              </u-action>
-              <u-action
-                :disabled="!!pendingOps[item.key]"
-                :loading="isOpPending(item.key, 'uninstall')"
-                type="danger"
-                @run="runOperation(item, 'uninstall')"
-              >
-                卸载
-              </u-action>
-            </u-action-group>
-          </div>
-        </header>
-      </article>
+            <div class="actions">
+              <u-action-group :max="5">
+                <u-action v-if="hasPermission('ai.clis:view')" @run="openSourcesManager(item)">
+                  设置
+                </u-action>
+                <u-action
+                  v-if="hasPermission('ai.clis:execute')"
+                  :disabled="!!pendingOps[item.key]"
+                  @run="runDetect(item)"
+                >
+                  检测
+                </u-action>
+                <u-action
+                  v-if="hasPermission('ai.clis:execute')"
+                  :disabled="!!pendingOps[item.key]"
+                  :loading="isOpPending(item.key, 'install')"
+                  @run="runOperation(item, 'install')"
+                >
+                  安装
+                </u-action>
+                <u-action
+                  v-if="hasPermission('ai.clis:execute')"
+                  :disabled="!!pendingOps[item.key]"
+                  :loading="isOpPending(item.key, 'upgrade')"
+                  @run="runOperation(item, 'upgrade')"
+                >
+                  升级
+                </u-action>
+                <u-action
+                  v-if="hasPermission('ai.clis:execute')"
+                  :disabled="!!pendingOps[item.key]"
+                  :loading="isOpPending(item.key, 'uninstall')"
+                  type="danger"
+                  @run="runOperation(item, 'uninstall')"
+                >
+                  卸载
+                </u-action>
+              </u-action-group>
+            </div>
+          </header>
+        </u-card-content>
+      </u-card>
     </div>
 
     <u-dialog
@@ -380,24 +383,27 @@ onMounted(() => {
 </template>
 
 <style scoped lang="scss">
+@use "pkg:@veltra/styles/functions" as fn;
+
 .page {
   display: flex;
   flex-direction: column;
   gap: 16px;
 }
-.page-head h2 {
-  margin: 0;
-  font-size: 18px;
+.page-notice {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 .risk {
-  margin: 6px 0 0;
-  color: var(--u-color-warning, #b45309);
+  margin: 0;
+  color: fn.use-var(color, warning);
   font-size: 13px;
   line-height: 1.5;
 }
 .hint {
-  margin: 4px 0 0;
-  color: #6b7280;
+  margin: 0;
+  color: fn.use-var(text-color, second);
   font-size: 13px;
   line-height: 1.5;
 }
@@ -407,15 +413,8 @@ onMounted(() => {
   gap: 16px;
   align-items: start;
 }
-.card {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
+.cli-card {
   min-width: 0;
-  padding: 16px;
-  border: 1px solid #e5e7eb;
-  border-radius: 10px;
-  background: #fff;
 }
 .card-head {
   display: flex;
@@ -447,7 +446,7 @@ onMounted(() => {
 .source-url,
 .source-meta {
   margin: 4px 0 0;
-  color: #6b7280;
+  color: fn.use-var(text-color, second);
   font-size: 13px;
   line-height: 1.4;
 }
@@ -487,7 +486,7 @@ onMounted(() => {
   gap: 12px;
   min-width: 0;
   padding: 10px 0;
-  border-bottom: 1px solid #f3f4f6;
+  border-bottom: fn.use-var(border, muted);
 }
 .source-list li:last-child {
   border-bottom: none;
@@ -509,9 +508,9 @@ onMounted(() => {
   margin: 0;
   padding: 12px;
   overflow: auto;
-  border-radius: 6px;
-  color: #e5e7eb;
-  background: #111827;
+  border-radius: fn.use-var(radius, small);
+  color: fn.use-var(text-color, main);
+  background: fn.use-var(bg-color, bottom);
   white-space: pre-wrap;
 }
 </style>

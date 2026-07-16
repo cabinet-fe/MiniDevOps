@@ -1,4 +1,6 @@
 <script setup lang="ts">
+defineOptions({ name: "ProjectDetail" });
+
 import { computed, ref, watch } from "vue";
 import { message } from "@veltra/desktop";
 import { useRoute, useRouter } from "vue-router";
@@ -87,18 +89,8 @@ watch(tab, (next) => {
 
 <template>
   <div class="page">
-    <div class="page-head">
-      <div>
-        <u-button text @click="router.push({ name: 'projects' })">返回项目列表</u-button>
-        <h2 v-if="project">{{ project.name }}</h2>
-        <p v-if="project">
-          <span class="slug">{{ project.slug }}</span>
-          <u-tag size="small" :type="project.status === 'archived' ? 'warning' : 'success'">
-            {{ project.status === "archived" ? "已归档" : "活跃" }}
-          </u-tag>
-        </p>
-      </div>
-      <p v-if="project?.description" class="description">{{ project.description }}</p>
+    <div class="page-toolbar">
+      <u-button text @click="router.push({ name: 'projects' })">返回项目列表</u-button>
     </div>
 
     <template v-if="project">
@@ -132,28 +124,8 @@ watch(tab, (next) => {
   flex-direction: column;
   gap: 16px;
 }
-.page-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 24px;
-}
-.page-head h2 {
-  margin: 6px 0;
-}
-.page-head p {
+.page-toolbar {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin: 0;
-}
-.slug {
-  color: var(--u-text-color-assist, #7c8494);
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-}
-.description {
-  max-width: 48%;
-  color: var(--u-text-color-second, #626b7d);
-  line-height: 1.6;
 }
 </style>

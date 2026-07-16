@@ -1,19 +1,40 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import type { NavItem } from "@veltra/desktop";
-import { Books, HouseFilled, Layers, Monitor, Setting, Tools } from "@veltra/icons/normal";
+import {
+  Books,
+  DArrowLeft,
+  DArrowRight,
+  HouseFilled,
+  Layers,
+  Logout,
+  Monitor,
+  Setting,
+  Tools,
+} from "@veltra/icons/normal";
 import type { DefineComponent } from "vue";
 
+import AppBreadcrumb from "@/components/app-breadcrumb";
+import AppWorkspaceTabs from "@/components/app-workspace-tabs";
+import BrandLogo from "@/components/brand-logo";
+import NotificationBell from "@/components/notification-bell";
+import { resolveRouteTitle } from "@/composables/use-breadcrumb";
 import { menuNodesToNavItems } from "@/lib/menu-nav";
 import { useAuthStore } from "@/stores/auth";
-import NotificationBell from "@/components/notification-bell";
+import { useTabsStore } from "@/stores/tabs";
 
 const auth = useAuthStore();
+const tabsStore = useTabsStore();
 const router = useRouter();
 const route = useRoute();
 
+const navCollapsed = ref(false);
 const displayName = computed(() => auth.user?.display_name || auth.user?.username || "");
+const nameInitial = computed(() => {
+  const name = displayName.value.trim();
+  return name ? name.charAt(0).toUpperCase() : "?";
+});
 
 const ROOT_ICONS: Record<string, DefineComponent> = {
   dashboard: HouseFilled as DefineComponent,
@@ -32,6 +53,14 @@ const navMenus = computed(() =>
 
 const currentPath = computed(() => route.path);
 
+watch(
+  () => [route.fullPath, auth.menus] as const,
+  () => {
+    tabsStore.syncFromRoute(route, resolveRouteTitle(route, auth.menus));
+  },
+  { immediate: true },
+);
+
 function onVisibility() {
   if (document.visibilityState === "visible") {
     void auth.refreshMe();
@@ -48,6 +77,7 @@ onUnmounted(() => {
 
 async function handleLogout() {
   await auth.logout();
+  tabsStore.reset();
   await router.replace({ name: "login" });
 }
 
@@ -56,25 +86,71 @@ function onNavClick(item: NavItem) {
     void router.push(item.path);
   }
 }
+
+function toggleNav() {
+  navCollapsed.value = !navCollapsed.value;
+}
 </script>
 
 <template>
   <div class="app-shell">
-    <u-nav class="app-nav" :menus="navMenus" :current-path="currentPath" @item-click="onNavClick" />
+    <aside class="app-sidebar" :class="{ 'app-sidebar--collapsed': navCollapsed }">
+      <div class="app-sidebar__brand">
+        <BrandLogo :collapsed="navCollapsed" />
+      </div>
+      <u-nav
+        class="app-nav"
+        :menus="navMenus"
+        :current-path="currentPath"
+        :collapsed="navCollapsed"
+        @item-click="onNavClick"
+      />
+      <button
+        type="button"
+        class="app-sidebar__fold"
+        :title="navCollapsed ? '展开侧栏' : '折叠侧栏'"
+        @click="toggleNav"
+      >
+        <u-icon :size="16">
+          <DArrowRight v-if="navCollapsed" />
+          <DArrowLeft v-else />
+        </u-icon>
+      </button>
+    </aside>
+
     <div class="app-body">
-      <header class="app-header">
-        <div class="brand">Bedrock</div>
-        <div class="header-right">
-          <NotificationBell />
-          <span class="user-name">{{ displayName }}</span>
-          <u-button text type="primary" @click="handleLogout">退出</u-button>
+      <!-- Thin continuous rail: crumb + quiet utilities on one height; tabs as whisper ledge -->
+      <header class="app-rail">
+        <div class="app-rail__bar">
+          <AppBreadcrumb />
+          <div class="app-rail__utils" role="group" aria-label="操作区">
+            <NotificationBell />
+            <span class="app-rail__identity">
+              <span class="app-rail__avatar" aria-hidden="true">{{ nameInitial }}</span>
+              <span class="user-name">{{ displayName }}</span>
+            </span>
+            <u-button text type="primary" class="app-rail__logout" @click="handleLogout">
+              <u-icon :size="14">
+                <Logout />
+              </u-icon>
+              退出
+            </u-button>
+          </div>
+        </div>
+        <div class="app-rail__tabs">
+          <AppWorkspaceTabs />
         </div>
       </header>
-      <main class="app-main">
-        <u-scroll class="app-main__scroll" height="100%" content-class="app-main__scroll-content">
-          <router-view />
-        </u-scroll>
-      </main>
+
+      <u-scroll height="100%" class="app-main">
+        <router-view v-slot="{ Component, route: viewRoute }">
+          <Transition name="fade" mode="out-in">
+            <keep-alive :include="tabsStore.cachedNames">
+              <component :is="Component" :key="viewRoute.fullPath" />
+            </keep-alive>
+          </Transition>
+        </router-view>
+      </u-scroll>
     </div>
   </div>
 </template>
@@ -90,13 +166,75 @@ function onNavClick(item: NavItem) {
   color: fn.use-var(text-color, main);
 }
 
-.app-nav {
+.app-sidebar {
+  --sidebar-width: 240px;
+
   flex-shrink: 0;
-  width: 260px;
-  min-width: 260px;
-  max-width: 260px;
+  width: var(--sidebar-width);
+  min-width: var(--sidebar-width);
+  max-width: var(--sidebar-width);
   height: 100%;
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
+  border: none;
+  outline: none;
+  background: fn.use-var(bg-color, bottom);
+  box-shadow: 4px 0 24px rgb(0 0 0 / 28%);
+  transition:
+    width 0.2s ease,
+    min-width 0.2s ease,
+    max-width 0.2s ease;
+
+  &--collapsed {
+    --sidebar-width: 72px;
+  }
+}
+
+.app-sidebar__brand {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  min-height: 56px;
+  padding: 0 16px;
+  border: none;
+}
+
+.app-sidebar--collapsed .app-sidebar__brand {
+  justify-content: center;
+  padding: 0 8px;
+}
+
+.app-nav {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  overflow: hidden;
+  border: none;
+
+  :deep(*) {
+    border: none;
+  }
+}
+
+.app-sidebar__fold {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 40px;
+  margin: 0;
+  padding: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: fn.use-var(text-color, second);
+  cursor: pointer;
+
+  &:hover {
+    color: fn.use-var(color, primary);
+    background: fn.use-var(bg-color, hover);
+  }
 }
 
 .app-body {
@@ -109,64 +247,104 @@ function onNavClick(item: NavItem) {
   background: fn.use-var(bg-color, middle);
 }
 
-.app-header {
+/* ── Thin continuous rail ──
+   Single-height bar: breadcrumb left, quiet utils right; tabs whisper below */
+.app-rail {
+  --rail-pad-x: #{fn.use-var(gap, large)};
+
+  position: relative;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  background: fn.use-var(bg-color, top);
+  z-index: 2;
+}
+
+.app-rail__bar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-height: 44px;
+  padding: 0 var(--rail-pad-x);
+}
+
+.app-rail__utils {
   flex-shrink: 0;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  height: 56px;
-  padding: 0 fn.use-var(gap, large);
-  border-bottom: fn.use-var(border);
-  background: fn.use-var(bg-color, top);
-  box-shadow: fn.use-var(shadow);
+  gap: 4px;
+  margin-left: auto;
 }
 
-.brand {
-  font-size: fn.use-var(font-size-title, default);
-  font-weight: 600;
-  color: fn.use-var(text-color, title);
-  letter-spacing: 0.02em;
-}
-
-.header-right {
+.app-rail__identity {
   display: flex;
   align-items: center;
-  gap: fn.use-var(gap, default);
+  gap: 8px;
+  min-width: 0;
+  margin: 0 4px 0 2px;
+  padding: 0 4px;
+}
+
+.app-rail__avatar {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: color-mix(in srgb, fn.use-var(color, primary) 28%, fn.use-var(bg-color, bottom));
+  color: fn.use-var(text-color, title);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  line-height: 1;
 }
 
 .user-name {
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: fn.use-var(text-color, second);
   font-size: fn.use-var(font-size-main, default);
+  font-weight: 400;
+}
+
+.app-rail__logout {
+  gap: 4px;
+}
+
+.app-rail__tabs {
+  min-width: 0;
+  padding: 0 var(--rail-pad-x) 0;
 }
 
 .app-main {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
   padding: fn.use-var(gap, large);
-  overflow: hidden;
 }
 
-.app-main__scroll {
+.content-stage {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  overflow: hidden;
+  border-radius: fn.use-var(radius, large);
+  background: fn.use-var(bg-color, bottom);
+  box-shadow: fn.use-var(shadow);
+}
+
+.content-stage__scroll {
   flex: 1;
   min-height: 0;
   min-width: 0;
 }
 
-:deep(.app-main__scroll-content) {
+.content-stage__body {
   box-sizing: border-box;
-  height: 100%;
-  min-height: min-content;
-  display: flex;
-  flex-direction: column;
-}
-
-:deep(.app-main__scroll-content > .page) {
-  flex: 1 0 auto;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
+  min-height: 100%;
+  padding: fn.use-var(gap, large);
 }
 </style>

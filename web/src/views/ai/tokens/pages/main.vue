@@ -1,4 +1,6 @@
 <script setup lang="ts">
+defineOptions({ name: "AiTokens" });
+
 import { onMounted, reactive, ref } from "vue";
 import { defineTableColumns, message } from "@veltra/desktop";
 
@@ -29,7 +31,7 @@ const columns = defineTableColumns([
     minWidth: 160,
     render: ({ val }) => formatDateTime(val),
   },
-  { key: "action", name: "操作", width: 100 },
+  { key: "action", name: "操作", width: 100, fixed: "right" },
 ]);
 
 async function reload() {
@@ -86,14 +88,9 @@ onMounted(() => {
 
 <template>
   <div class="page">
-    <header class="page-head">
-      <h2>个人访问令牌</h2>
-      <p>
-        Scope 固定为 skills:read / agents:run；哈希存储，明文仅创建时回显一次。PAT 不替代
-        HTTPS/TLS。
-      </p>
+    <div class="page-toolbar">
       <u-button type="primary" @click="openCreate">创建令牌</u-button>
-    </header>
+    </div>
 
     <u-table :columns="columns" :data="items" v-loading="loading">
       <template #column:scopes="{ rowData }">
@@ -154,10 +151,9 @@ onMounted(() => {
   flex-direction: column;
   gap: 12px;
 }
-.page-head p {
-  margin: 4px 0 12px;
-  font-size: 13px;
-  color: var(--u-color-text-secondary, #666);
+.page-toolbar {
+  display: flex;
+  justify-content: flex-end;
 }
 .scope-row {
   display: flex;

@@ -1,4 +1,6 @@
 <script setup lang="ts">
+defineOptions({ name: "CicdCredentials" });
+
 import { reactive, ref, useTemplateRef } from "vue";
 import { o } from "@cat-kit/core";
 import { message } from "@veltra/desktop";
@@ -97,17 +99,18 @@ async function remove(row: Credential) {
 
 <template>
   <div class="page">
-    <div class="page-head">
-      <h2>凭证</h2>
-      <u-button v-if="hasPermission('cicd.credentials:create')" type="primary" @click="openCreate">
-        新建凭证
-      </u-button>
-    </div>
-
     <ProTable ref="list" url="/credentials" v-model:query="query" :columns="columns" pagination>
       <template #filters="{ search }">
         <u-input v-model="query.keyword" placeholder="名称关键词" style="width: 200px" />
         <u-button type="primary" @click="search">查询</u-button>
+        <u-button
+          v-if="hasPermission('cicd.credentials:create')"
+          type="primary"
+          style="margin-left: auto"
+          @click.prevent="openCreate"
+        >
+          新建凭证
+        </u-button>
       </template>
       <template #column:type="{ rowData }">
         <u-tag size="small" :type="tagType((rowData as Credential).type, CRED_TYPE_TAG)">
@@ -180,14 +183,5 @@ async function remove(row: Credential) {
   display: flex;
   flex-direction: column;
   gap: 16px;
-}
-.page-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-.page-head h2 {
-  margin: 0;
-  font-size: 18px;
 }
 </style>

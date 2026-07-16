@@ -1,4 +1,6 @@
 <script setup lang="ts">
+defineOptions({ name: "AiSkills" });
+
 import { reactive, ref, useTemplateRef } from "vue";
 import { o } from "@cat-kit/core";
 import { message } from "@veltra/desktop";
@@ -95,15 +97,17 @@ async function remove(row: SkillPackage) {
 
 <template>
   <div class="page">
-    <header class="page-head">
-      <h2>Skills</h2>
-      <p>ZIP 需包含 SKILL.md；覆盖更新不保留历史；private 仅创建者可见。</p>
-      <u-button v-if="hasPermission('ai.skills:create')" type="primary" @click="openUpload">
-        上传
-      </u-button>
-    </header>
-
     <ProTable ref="table" url="/skills" mode="pagination" :columns="columns">
+      <template #filters>
+        <u-button
+          v-if="hasPermission('ai.skills:create')"
+          type="primary"
+          style="margin-left: auto"
+          @click.prevent="openUpload"
+        >
+          上传
+        </u-button>
+      </template>
       <template #column:visibility="{ rowData }">
         <u-tag
           size="small"
@@ -173,11 +177,6 @@ async function remove(row: SkillPackage) {
   display: flex;
   flex-direction: column;
   gap: 12px;
-}
-.page-head p {
-  margin: 4px 0 12px;
-  font-size: 13px;
-  color: var(--u-color-text-secondary, #666);
 }
 .zip-field {
   display: flex;

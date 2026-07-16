@@ -1,8 +1,9 @@
 <script setup lang="ts">
+defineOptions({ name: "OpsDevEnvironments" });
+
 import { computed, onMounted, onUnmounted, reactive, ref } from "vue";
 import { o } from "@cat-kit/core";
 import { message } from "@veltra/desktop";
-import { Setting } from "@veltra/icons/normal";
 
 import {
   createDevEnvSource,
@@ -424,11 +425,7 @@ onUnmounted(stopJobPolling);
 
 <template>
   <div v-loading="loading" class="page">
-    <div class="page-head">
-      <div>
-        <h2>开发环境</h2>
-        <p>管理宿主机语言运行时：安装源通过设置管理；进入页面时自动检测版本。</p>
-      </div>
+    <div class="page-toolbar">
       <u-button
         v-if="hasPermission('ops.dev_environments:create')"
         type="primary"
@@ -439,65 +436,71 @@ onUnmounted(stopJobPolling);
     </div>
 
     <div class="cards">
-      <article v-for="item in environments" :key="item.id" class="card">
-        <header class="card-head">
-          <div class="card-title">
-            <div class="title-row">
-              <img class="lang-icon" :src="envIcon(item)" :alt="item.name" width="28" height="28" />
-              <h3>{{ item.name }}</h3>
-              <u-tag size="small" :type="versionTagType(detectStates[item.id])">
-                {{ versionTagLabel(detectStates[item.id]) }}
-              </u-tag>
+      <u-card v-for="item in environments" :key="item.id" class="env-card">
+        <u-card-content>
+          <header class="card-head">
+            <div class="card-title">
+              <div class="title-row">
+                <img
+                  class="lang-icon"
+                  :src="envIcon(item)"
+                  :alt="item.name"
+                  width="28"
+                  height="28"
+                />
+                <h3>{{ item.name }}</h3>
+                <u-tag size="small" :type="versionTagType(detectStates[item.id])">
+                  {{ versionTagLabel(detectStates[item.id]) }}
+                </u-tag>
+              </div>
+              <p class="meta">
+                <span>{{ item.kind === "builtin" ? "内置" : "自定义" }}</span>
+                <span>{{ item.executable }}</span>
+                <span v-if="item.default_version">默认 {{ item.default_version }}</span>
+              </p>
+              <p v-if="item.description" class="desc">{{ item.description }}</p>
             </div>
-            <p class="meta">
-              <span>{{ item.kind === "builtin" ? "内置" : "自定义" }}</span>
-              <span>{{ item.executable }}</span>
-              <span v-if="item.default_version">默认 {{ item.default_version }}</span>
-            </p>
-            <p v-if="item.description" class="desc">{{ item.description }}</p>
-          </div>
-          <div class="actions">
-            <u-button size="small" text :icon="Setting" @click="openSourcesManager(item)">
-              设置
-            </u-button>
-            <u-action-group :max="5">
-              <u-action @run="runDetect(item)">检测</u-action>
-              <u-action @run="runOperation(item, 'install')">安装</u-action>
-              <u-action @run="runOperation(item, 'upgrade')">升级</u-action>
-              <u-action @run="runOperation(item, 'uninstall')">卸载</u-action>
-              <u-action @run="runOperation(item, 'switch')">切版本</u-action>
-              <u-action @run="openScripts(item)">脚本</u-action>
-              <u-action v-if="item.kind === 'custom'" @run="openEditEnv(item)">编辑</u-action>
-              <u-action v-if="item.kind === 'custom'" type="danger" @run="removeEnv(item)"
-                >删除</u-action
-              >
-            </u-action-group>
-          </div>
-        </header>
-
-        <section v-if="latestJobs[item.id]" class="block">
-          <div class="block-head">
-            <h4>最近任务</h4>
             <div class="actions">
-              <span class="job-status">{{ jobStatusLabel(latestJobs[item.id]?.status) }}</span>
-              <u-action-group :max="2">
-                <u-action @run="showJobLog(item.id, latestJobs[item.id]!)">日志</u-action>
-                <u-action
-                  v-if="['failed', 'interrupted'].includes(latestJobs[item.id]?.status || '')"
-                  @run="retryJob(item.id, latestJobs[item.id]!)"
-                  >重试</u-action
+              <u-action-group :max="5">
+                <u-action @run="openSourcesManager(item)">设置</u-action>
+                <u-action @run="runDetect(item)">检测</u-action>
+                <u-action @run="runOperation(item, 'install')">安装</u-action>
+                <u-action @run="runOperation(item, 'upgrade')">升级</u-action>
+                <u-action @run="runOperation(item, 'uninstall')">卸载</u-action>
+                <u-action @run="runOperation(item, 'switch')">切版本</u-action>
+                <u-action @run="openScripts(item)">脚本</u-action>
+                <u-action v-if="item.kind === 'custom'" @run="openEditEnv(item)">编辑</u-action>
+                <u-action v-if="item.kind === 'custom'" type="danger" @run="removeEnv(item)"
+                  >删除</u-action
                 >
               </u-action-group>
             </div>
-          </div>
-          <p class="job-summary">
-            {{ latestJobs[item.id]?.operation }}
-            <template v-if="latestJobs[item.id]?.requested_version">
-              · {{ latestJobs[item.id]?.requested_version }}
-            </template>
-          </p>
-        </section>
-      </article>
+          </header>
+
+          <section v-if="latestJobs[item.id]" class="block">
+            <div class="block-head">
+              <h4>最近任务</h4>
+              <div class="actions">
+                <span class="job-status">{{ jobStatusLabel(latestJobs[item.id]?.status) }}</span>
+                <u-action-group :max="2">
+                  <u-action @run="showJobLog(item.id, latestJobs[item.id]!)">日志</u-action>
+                  <u-action
+                    v-if="['failed', 'interrupted'].includes(latestJobs[item.id]?.status || '')"
+                    @run="retryJob(item.id, latestJobs[item.id]!)"
+                    >重试</u-action
+                  >
+                </u-action-group>
+              </div>
+            </div>
+            <p class="job-summary">
+              {{ latestJobs[item.id]?.operation }}
+              <template v-if="latestJobs[item.id]?.requested_version">
+                · {{ latestJobs[item.id]?.requested_version }}
+              </template>
+            </p>
+          </section>
+        </u-card-content>
+      </u-card>
     </div>
 
     <FormDialog
@@ -614,27 +617,17 @@ onUnmounted(stopJobPolling);
   </div>
 </template>
 
-<style scoped>
+<style scoped lang="scss">
+@use "pkg:@veltra/styles/functions" as fn;
+
 .page {
   display: flex;
   flex-direction: column;
   gap: 16px;
 }
-.page-head {
+.page-toolbar {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-}
-.page-head h2 {
-  margin: 0;
-  font-size: 18px;
-}
-.page-head p {
-  margin: 6px 0 0;
-  color: #6b7280;
-  font-size: 13px;
-  line-height: 1.5;
+  justify-content: flex-end;
 }
 .cards {
   display: grid;
@@ -642,15 +635,8 @@ onUnmounted(stopJobPolling);
   gap: 16px;
   align-items: start;
 }
-.card {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
+.env-card {
   min-width: 0;
-  padding: 16px;
-  border: 1px solid #e5e7eb;
-  border-radius: 10px;
-  background: #fff;
 }
 .card-head {
   display: flex;
@@ -689,7 +675,7 @@ onUnmounted(stopJobPolling);
 .source-url,
 .source-meta {
   margin: 4px 0 0;
-  color: #6b7280;
+  color: fn.use-var(text-color, second);
   font-size: 13px;
   line-height: 1.4;
 }
@@ -702,8 +688,9 @@ onUnmounted(stopJobPolling);
   display: flex;
   flex-direction: column;
   gap: 8px;
+  margin-top: 12px;
   padding-top: 12px;
-  border-top: 1px solid #f3f4f6;
+  border-top: fn.use-var(border, muted);
 }
 .block-head {
   display: flex;
@@ -736,7 +723,7 @@ onUnmounted(stopJobPolling);
   gap: 12px;
   min-width: 0;
   padding: 10px 0;
-  border-bottom: 1px solid #f3f4f6;
+  border-bottom: fn.use-var(border, muted);
 }
 .source-list li:last-child {
   border-bottom: none;
@@ -755,14 +742,14 @@ onUnmounted(stopJobPolling);
 }
 .job-status {
   font-size: 12px;
-  color: #374151;
+  color: fn.use-var(text-color, main);
 }
 .risk-warning {
   margin-bottom: 12px;
   padding: 10px;
-  border-radius: 6px;
-  color: #92400e;
-  background: #fef3c7;
+  border-radius: fn.use-var(radius, small);
+  color: fn.use-var(color, warning);
+  background: fn.use-var(color, warning, light, 9);
   line-height: 1.6;
 }
 .job-log {
@@ -770,9 +757,9 @@ onUnmounted(stopJobPolling);
   margin: 0;
   padding: 12px;
   overflow: auto;
-  border-radius: 6px;
-  color: #e5e7eb;
-  background: #111827;
+  border-radius: fn.use-var(radius, small);
+  color: fn.use-var(text-color, main);
+  background: fn.use-var(bg-color, bottom);
   white-space: pre-wrap;
 }
 </style>

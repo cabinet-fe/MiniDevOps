@@ -1,4 +1,6 @@
 <script setup lang="ts">
+defineOptions({ name: "CicdBuildRunDetail" });
+
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { message } from "@veltra/desktop";
@@ -214,13 +216,10 @@ onUnmounted(() => {
 
 <template>
   <div class="page">
-    <div class="page-head">
-      <div class="page-head__title">
-        <h2>执行详情 #{{ run?.build_number ?? route.params.id }}</h2>
-        <p class="risk-note">
-          构建脚本与 Bedrock 以同一操作系统用户执行，无沙箱隔离；请仅让可信人员编辑脚本。
-        </p>
-      </div>
+    <div class="page-toolbar">
+      <p class="risk-note">
+        构建脚本与 Bedrock 以同一操作系统用户执行，无沙箱隔离；请仅让可信人员编辑脚本。
+      </p>
       <div class="actions">
         <u-button v-if="canCancel" :disabled="acting" variant="outline" @click="onCancel">
           取消
@@ -323,7 +322,14 @@ onUnmounted(() => {
 <style scoped lang="scss">
 @use "pkg:@veltra/styles/functions" as fn;
 
-.page-head {
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
+.page-toolbar {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
@@ -331,19 +337,10 @@ onUnmounted(() => {
   flex-wrap: wrap;
 }
 
-.page-head__title {
-  min-width: 0;
-  flex: 1;
-}
-
-.page-head h2 {
-  margin: 0;
-  font-size: 18px;
-  color: fn.use-var(text-color, title);
-}
-
 .risk-note {
-  margin: 6px 0 0;
+  margin: 0;
+  flex: 1;
+  min-width: 0;
   font-size: 12px;
   line-height: 1.5;
   color: fn.use-var(text-color, assist);

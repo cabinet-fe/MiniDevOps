@@ -1,4 +1,6 @@
 <script setup lang="ts">
+defineOptions({ name: "SystemDictionaries" });
+
 import { reactive, ref, useTemplateRef } from "vue";
 import { o } from "@cat-kit/core";
 import { message } from "@veltra/desktop";
@@ -110,18 +112,17 @@ async function remove(row: Dictionary) {
 
 <template>
   <div class="page">
-    <div class="page-head">
-      <h2>字典</h2>
-      <u-button
-        v-if="hasPermission('system.dictionaries:create')"
-        type="primary"
-        @click="openCreate"
-      >
-        新建字典
-      </u-button>
-    </div>
-
     <ProTable ref="list" url="/dictionaries" :columns="columns" pagination>
+      <template #filters>
+        <u-button
+          v-if="hasPermission('system.dictionaries:create')"
+          type="primary"
+          style="margin-left: auto"
+          @click.prevent="openCreate"
+        >
+          新建字典
+        </u-button>
+      </template>
       <template #column:action="{ rowData }">
         <u-action-group :max="3">
           <u-action
@@ -170,15 +171,10 @@ async function remove(row: Dictionary) {
 </template>
 
 <style scoped>
-.page-head {
+.page {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-shrink: 0;
-}
-.page-head h2 {
-  margin: 0;
-  font-size: 20px;
+  flex-direction: column;
+  gap: 16px;
 }
 .items-head {
   display: flex;

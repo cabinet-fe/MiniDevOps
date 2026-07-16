@@ -1,4 +1,6 @@
 <script setup lang="ts">
+defineOptions({ name: "AiAgents" });
+
 import { reactive, ref, useTemplateRef } from "vue";
 import { useRouter } from "vue-router";
 import { o } from "@cat-kit/core";
@@ -142,15 +144,17 @@ async function remove(row: AiAgent) {
 
 <template>
   <div class="page">
-    <header class="page-head">
-      <h2>智能体</h2>
-      <p>上下文仅为系统提示词 + 选定代码仓库；构建事件异步触发，不影响 BuildRun 状态。</p>
-      <u-button v-if="hasPermission('ai.agents:create')" type="primary" @click="openCreate">
-        新建
-      </u-button>
-    </header>
-
     <ProTable ref="table" url="/ai/agents" mode="pagination" :columns="columns">
+      <template #filters>
+        <u-button
+          v-if="hasPermission('ai.agents:create')"
+          type="primary"
+          style="margin-left: auto"
+          @click.prevent="openCreate"
+        >
+          新建
+        </u-button>
+      </template>
       <template #column:cli_key="{ rowData }">
         <u-tag size="small" :type="tagType((rowData as AiAgent).cli_key, CLI_KEY_TAG)">
           {{ (rowData as AiAgent).cli_key }}
@@ -282,11 +286,6 @@ async function remove(row: AiAgent) {
   display: flex;
   flex-direction: column;
   gap: 16px;
-}
-.page-head p {
-  margin: 4px 0 12px;
-  color: var(--u-color-text-secondary, #666);
-  font-size: 13px;
 }
 .trigger-list {
   margin: 0 0 12px;

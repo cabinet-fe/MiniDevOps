@@ -1,4 +1,6 @@
 <script setup lang="ts">
+defineOptions({ name: "SystemRoles" });
+
 import { computed, reactive, ref, useTemplateRef } from "vue";
 import { o } from "@cat-kit/core";
 import { message } from "@veltra/desktop";
@@ -120,14 +122,17 @@ async function remove(row: Role) {
 
 <template>
   <div class="page">
-    <div class="page-head">
-      <h2>角色</h2>
-      <u-button v-if="hasPermission('system.roles:create')" type="primary" @click="openCreate">
-        新建角色
-      </u-button>
-    </div>
-
     <ProTable ref="list" url="/roles" :columns="columns" pagination>
+      <template #filters>
+        <u-button
+          v-if="hasPermission('system.roles:create')"
+          type="primary"
+          style="margin-left: auto"
+          @click.prevent="openCreate"
+        >
+          新建角色
+        </u-button>
+      </template>
       <template #column:action="{ rowData }">
         <u-action-group :max="4">
           <u-action v-if="hasPermission('system.roles:update')" @run="openEdit(rowData as Role)">
@@ -191,16 +196,6 @@ async function remove(row: Role) {
 </template>
 
 <style scoped>
-.page-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 16px;
-}
-.page-head h2 {
-  margin: 0;
-  font-size: 20px;
-}
 .perm-grid {
   max-height: 420px;
   overflow: auto;

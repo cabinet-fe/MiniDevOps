@@ -1,4 +1,6 @@
 <script setup lang="ts">
+defineOptions({ name: "AiRuns" });
+
 import { reactive, useTemplateRef } from "vue";
 import { useRouter } from "vue-router";
 
@@ -27,7 +29,6 @@ function openDetail(row: AgentRun) {
 
 <template>
   <div class="page">
-    <h2>Agent 运行</h2>
     <ProTable ref="table" url="/ai/runs" mode="pagination" :columns="columns" v-model:query="query">
       <template #filters>
         <u-input v-model="query.agent_id" placeholder="agent_id" clearable />

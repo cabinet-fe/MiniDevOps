@@ -1,4 +1,6 @@
 <script setup lang="ts">
+defineOptions({ name: "AiRunDetail" });
+
 import { onMounted, onUnmounted, ref } from "vue";
 import { useRoute } from "vue-router";
 import { message } from "@veltra/desktop";
@@ -49,7 +51,6 @@ onUnmounted(() => {
 
 <template>
   <div class="page" v-if="run">
-    <h2>运行 #{{ run.id }}</h2>
     <p>
       Agent {{ run.agent_id }} · {{ run.trigger_type }} ·
       <strong>{{ run.status }}</strong>
