@@ -33,6 +33,7 @@ declare module 'vue' {
     USelect: typeof import('@veltra/desktop')['USelect']
     USwitch: typeof import('@veltra/desktop')['USwitch']
     UTable: typeof import('@veltra/desktop')['UTable']
+    UTag: typeof import('@veltra/desktop')['UTag']
     UTextarea: typeof import('@veltra/desktop')['UTextarea']
   }
 }

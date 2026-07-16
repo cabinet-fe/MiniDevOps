@@ -14,6 +14,9 @@ import (
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 
+	aihandler "bedrock/internal/ai/handler"
+	airepo "bedrock/internal/ai/repository"
+	aiservice "bedrock/internal/ai/service"
 	authhandler "bedrock/internal/auth/handler"
 	authmiddleware "bedrock/internal/auth/middleware"
 	authrepo "bedrock/internal/auth/repository"
@@ -80,7 +83,7 @@ func main() {
 		zap.String("db_driver", cfg.Database.Driver),
 	)
 	logger.Info("database driver change does not migrate data; 2.0 supports fresh install only")
-	logger.Info("build scripts execute as the same OS user as Bedrock (no sandbox isolation)")
+	logger.Info("build scripts and AI CLIs execute as the same OS user as Bedrock (no OS/container sandbox isolation)")
 
 	if err := pkg.InitEncryption(cfg.Encryption.Key); err != nil {
 		logger.Fatal("Failed to init encryption", zap.Error(err))
@@ -164,13 +167,30 @@ func main() {
 	projectSvc := projectservice.NewProjectService(projectRepo, storageSvc)
 	projectHandler := projecthandler.NewProjectHandler(projectSvc, permSvc)
 
+	aiRepo := airepo.NewAIRepository(gdb)
+	cliSvc := aiservice.NewCLIService(aiRepo, auditSvc)
+	skillSvc := aiservice.NewSkillService(aiRepo, storageSvc, auditSvc)
+	patSvc := aiservice.NewPATService(aiRepo, auditSvc)
+
 	hub := ws.NewHub()
+	agentWorkDir := cfg.Build.WorkspaceDir
+	if agentWorkDir == "" {
+		agentWorkDir = "./data/workspace"
+	}
+	agentSvc := aiservice.NewAgentService(aiRepo, cliSvc, skillSvc, hub, logger, agentWorkDir, cfg.Build.LogDir, auditSvc)
+	agentSvc.SetDocDraftWriter(projectSvc)
+	agentSvc.SetRepoCloner(aiservice.NewSimpleRepoCloner(repoRepo))
+	docsBridge := aiservice.NewDocsBridge(agentSvc)
+	projectSvc.SetDocsAIBridge(docsBridge)
+	aiHandler := aihandler.NewHandler(cliSvc, agentSvc, skillSvc, patSvc, permSvc)
+
 	pipeline := engine.NewPipeline(
 		runRepo, jobRepo, repoRepo, serverRepo,
 		cicdservice.NewCredentialSecretResolver(credSvc),
 		hub, logger,
 		cfg.Build.WorkspaceDir, cfg.Build.ArtifactDir, cfg.Build.LogDir, cfg.Build.CacheDir,
 	)
+	pipeline.SetAgentEventHook(agentSvc)
 	sched := engine.NewScheduler(cfg.Build.MaxConcurrent, pipeline, runRepo, logger)
 	runSvc.SetScheduler(sched)
 	cronSched := engine.NewCronScheduler(jobRepo, runRepo, runSvc, sched, logger)
@@ -190,7 +210,7 @@ func main() {
 
 	api := r.Group("/api/v1")
 	api.Use(systemmw.AuditWrite(auditSvc))
-	authMW := authmiddleware.Auth(authSvc)
+	authMW := authmiddleware.AuthWithPAT(authSvc, patSvc)
 	authHandler.RegisterRoutes(api, authMW)
 	userHandler.RegisterRoutes(api, authMW)
 	roleHandler.RegisterRoutes(api, authMW)
@@ -206,6 +226,7 @@ func main() {
 	dashboardHandler.RegisterRoutes(api, authMW)
 	opsHandler.RegisterRoutes(api, authMW)
 	projectHandler.RegisterRoutes(api, authMW)
+	aiHandler.RegisterRoutes(api, authMW)
 
 	api.GET("/health", func(c *gin.Context) {
 		pkg.Success(c, gin.H{
@@ -217,6 +238,8 @@ func main() {
 
 	wsHandler := cicdhandler.NewWSHandler(authSvc, permSvc, runSvc, hub, corsCfg)
 	wsHandler.RegisterRoutes(r)
+	aiWSHandler := aihandler.NewWSHandler(authSvc, permSvc, agentSvc, hub, corsCfg)
+	aiWSHandler.RegisterRoutes(r)
 
 	serveSPA(r, cfg.Encryption.Key)
 
@@ -228,11 +251,19 @@ func main() {
 
 	sched.Start()
 	toolchainSvc.Start()
+	cliSvc.Start()
+	agentSvc.Start()
 	if err := sched.RecoverOnStartup(); err != nil {
 		logger.Error("scheduler recovery failed", zap.Error(err))
 	}
 	if err := toolchainSvc.RecoverOnStartup(); err != nil {
 		logger.Error("toolchain scheduler recovery failed", zap.Error(err))
+	}
+	if err := cliSvc.RecoverOnStartup(); err != nil {
+		logger.Error("AI CLI scheduler recovery failed", zap.Error(err))
+	}
+	if err := agentSvc.RecoverOnStartup(); err != nil {
+		logger.Error("agent run recovery failed", zap.Error(err))
 	}
 	if err := cronSched.Start(); err != nil {
 		logger.Error("cron start failed", zap.Error(err))
@@ -256,6 +287,8 @@ func main() {
 	cronSched.Stop()
 	sched.Shutdown()
 	toolchainSvc.Shutdown()
+	agentSvc.Shutdown()
+	cliSvc.Shutdown()
 	hub.Shutdown()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)

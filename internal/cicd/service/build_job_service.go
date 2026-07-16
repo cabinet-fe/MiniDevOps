@@ -56,6 +56,7 @@ type CreateBuildJobInput struct {
 	MaxArtifacts      int                 `json:"max_artifacts"`
 	ArtifactFormat    string              `json:"artifact_format"`
 	AgentTriggerEvent string              `json:"agent_trigger_event"`
+	AgentID           *uint               `json:"agent_id"`
 	DeployTargets     []DeployTargetInput `json:"deploy_targets"`
 }
 
@@ -80,6 +81,7 @@ type UpdateBuildJobInput struct {
 	MaxArtifacts      *int                 `json:"max_artifacts"`
 	ArtifactFormat    *string              `json:"artifact_format"`
 	AgentTriggerEvent *string              `json:"agent_trigger_event"`
+	AgentID           *uint                `json:"agent_id"`
 	DeployTargets     *[]DeployTargetInput `json:"deploy_targets"`
 }
 
@@ -112,6 +114,7 @@ func (s *BuildJobService) Create(createdBy uint, in CreateBuildJobInput) (*model
 		MaxArtifacts:      intOr(in.MaxArtifacts, 5),
 		ArtifactFormat:    normalizeArtifactFormat(in.ArtifactFormat),
 		AgentTriggerEvent: normalizeAgentEvent(in.AgentTriggerEvent),
+		AgentID:           in.AgentID,
 		CreatedBy:         createdBy,
 	}
 	if err := encodeEnvNames(job, in.EnvVarNames); err != nil {
@@ -203,6 +206,13 @@ func (s *BuildJobService) Update(id uint, in UpdateBuildJobInput) (*model.BuildJ
 	}
 	if in.AgentTriggerEvent != nil {
 		job.AgentTriggerEvent = normalizeAgentEvent(*in.AgentTriggerEvent)
+	}
+	if in.AgentID != nil {
+		if *in.AgentID == 0 {
+			job.AgentID = nil
+		} else {
+			job.AgentID = in.AgentID
+		}
 	}
 	if job.Name == "" {
 		return nil, errorsNew("名称不能为空")

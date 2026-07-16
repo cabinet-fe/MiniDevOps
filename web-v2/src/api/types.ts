@@ -190,6 +190,7 @@ export interface BuildJob {
   max_artifacts: number;
   artifact_format: string;
   agent_trigger_event: string;
+  agent_id?: number | null;
   deploy_targets?: DeployTarget[];
   created_by: number;
   created_at: string;
@@ -428,4 +429,99 @@ export interface ApiDocDiff {
   draft_lines: number;
   added_lines: number;
   removed_lines: number;
+}
+
+export interface CliRuntimeDefinition {
+  id: number;
+  key: string;
+  name: string;
+  binary_name: string;
+  description: string;
+  install_status: string;
+  installed_path: string;
+  installed_version: string;
+  healthy: boolean;
+  risk_notice?: string;
+}
+
+export interface CliInstallSource {
+  id: number;
+  cli_key: string;
+  name: string;
+  base_url: string;
+  priority: number;
+  enabled: boolean;
+}
+
+export interface CliInstallJob {
+  id: number;
+  cli_key: string;
+  operation: string;
+  requested_version: string;
+  status: string;
+  error_message?: string;
+  created_at: string;
+}
+
+export interface AiAgent {
+  id: number;
+  name: string;
+  description: string;
+  enabled: boolean;
+  cli_key: string;
+  system_prompt: string;
+  skill_ids: number[];
+  repository_id?: number | null;
+  timeout_sec: number;
+  created_by: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AgentTrigger {
+  id: number;
+  agent_id: number;
+  type: string;
+  enabled: boolean;
+  cron_expression?: string;
+  cron_timezone?: string;
+  build_job_id?: number | null;
+  build_event?: string;
+}
+
+export interface AgentRun {
+  id: number;
+  agent_id: number;
+  trigger_type: string;
+  status: string;
+  build_run_id?: number | null;
+  project_id?: number | null;
+  doc_node_id?: number | null;
+  error_message?: string;
+  output_text?: string;
+  created_at: string;
+}
+
+export interface SkillPackage {
+  id: number;
+  name: string;
+  description: string;
+  visibility: "public" | "private";
+  package_digest: string;
+  size_bytes: number;
+  created_by: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PersonalAccessToken {
+  id: number;
+  user_id: number;
+  name: string;
+  token_prefix: string;
+  scopes: string[];
+  expires_at?: string | null;
+  revoked_at?: string | null;
+  last_used_at?: string | null;
+  created_at: string;
 }

@@ -763,11 +763,14 @@ func (h *ProjectHandler) GenerateDocs(c *gin.Context) {
 	if !ok {
 		return
 	}
-	if err := h.svc.GenerateDocs(actor, projectID); err != nil {
+	var input projectservice.GenerateDocsInput
+	_ = c.ShouldBindJSON(&input)
+	result, err := h.svc.GenerateDocs(actor, projectID, input)
+	if err != nil {
 		writeServiceError(c, err)
 		return
 	}
-	pkg.Success(c, nil)
+	c.JSON(http.StatusAccepted, pkg.Response{Code: 0, Message: "accepted", Data: result})
 }
 
 func (h *ProjectHandler) actor(c *gin.Context) (projectservice.AccessContext, bool) {

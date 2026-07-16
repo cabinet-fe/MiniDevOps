@@ -1,12 +1,13 @@
 package middleware
 
 import (
+	"errors"
 	"net/http"
 	"strings"
 
 	"github.com/gin-gonic/gin"
 
-	"bedrock/internal/auth/service"
+	authservice "bedrock/internal/auth/service"
 	"bedrock/internal/pkg"
 )
 
@@ -14,10 +15,24 @@ const (
 	ctxUserID       = "user_id"
 	ctxUsername     = "username"
 	ctxIsSuperAdmin = "is_super_admin"
+	ctxIsPAT        = "is_pat"
+	ctxPATScopes    = "pat_scopes"
 )
 
+var ErrPATWrongScope = errors.New("token scope insufficient")
+
+// PATValidator validates personal access tokens without importing the AI package.
+type PATValidator interface {
+	ValidateBearer(raw string) (userID uint, scopes []string, err error)
+}
+
 // Auth extracts Bearer JWT and sets user context.
-func Auth(authSvc *service.AuthService) gin.HandlerFunc {
+func Auth(authSvc *authservice.AuthService) gin.HandlerFunc {
+	return AuthWithPAT(authSvc, nil)
+}
+
+// AuthWithPAT accepts JWT or PAT (br_pat_*) under Authorization: Bearer.
+func AuthWithPAT(authSvc *authservice.AuthService, patSvc PATValidator) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		authHeader := c.GetHeader("Authorization")
 		if authHeader == "" {
@@ -30,14 +45,34 @@ func Auth(authSvc *service.AuthService) gin.HandlerFunc {
 			pkg.Error(c, http.StatusUnauthorized, "invalid authorization header")
 			return
 		}
+		raw := parts[1]
 
-		claims, err := authSvc.ParseToken(parts[1])
+		if patSvc != nil && strings.HasPrefix(raw, "br_pat_") {
+			userID, scopes, err := patSvc.ValidateBearer(raw)
+			if err != nil {
+				pkg.Error(c, http.StatusUnauthorized, "invalid or expired token")
+				return
+			}
+			user, err := authSvc.GetByID(userID)
+			if err != nil || user == nil || !user.IsActive {
+				pkg.Error(c, http.StatusUnauthorized, "用户不存在或已被禁用")
+				return
+			}
+			c.Set(ctxUserID, user.ID)
+			c.Set(ctxUsername, user.Username)
+			c.Set(ctxIsSuperAdmin, user.IsSuperAdmin)
+			c.Set(ctxIsPAT, true)
+			c.Set(ctxPATScopes, scopes)
+			c.Next()
+			return
+		}
+
+		claims, err := authSvc.ParseToken(raw)
 		if err != nil {
 			pkg.Error(c, http.StatusUnauthorized, "invalid or expired token")
 			return
 		}
 
-		// Disabled users must fail subsequent requests.
 		user, err := authSvc.GetByID(claims.UserID)
 		if err != nil || user == nil || !user.IsActive {
 			pkg.Error(c, http.StatusUnauthorized, "用户不存在或已被禁用")
@@ -47,6 +82,7 @@ func Auth(authSvc *service.AuthService) gin.HandlerFunc {
 		c.Set(ctxUserID, claims.UserID)
 		c.Set(ctxUsername, claims.Username)
 		c.Set(ctxIsSuperAdmin, user.IsSuperAdmin)
+		c.Set(ctxIsPAT, false)
 		c.Next()
 	}
 }
@@ -80,4 +116,31 @@ func IsSuperAdmin(c *gin.Context) bool {
 	}
 	b, _ := v.(bool)
 	return b
+}
+
+func IsPAT(c *gin.Context) bool {
+	v, ok := c.Get(ctxIsPAT)
+	if !ok {
+		return false
+	}
+	b, _ := v.(bool)
+	return b
+}
+
+func PATScopes(c *gin.Context) []string {
+	v, ok := c.Get(ctxPATScopes)
+	if !ok {
+		return nil
+	}
+	scopes, _ := v.([]string)
+	return scopes
+}
+
+func RequirePATScope(c *gin.Context, required string) error {
+	for _, sc := range PATScopes(c) {
+		if sc == required {
+			return nil
+		}
+	}
+	return ErrPATWrongScope
 }

@@ -42,11 +42,20 @@ func EnsureRBACResources(db *gorm.DB) error {
 			},
 		},
 		{
-			Path: "project", Title: "项目管理", Route: "/projects", SortKey: 40,
+			Path: "project", Title: "项目管理", Route: "/project", SortKey: 40,
 			Children: []seedMenu{
-				{Path: "project.projects", Title: "产品项目", Route: "/projects", SortKey: 10},
-				{Path: "project.requirements", Title: "需求管理", Route: "/projects", SortKey: 20},
-				{Path: "project.docs", Title: "接口文档", Route: "/projects", SortKey: 30},
+				{Path: "project.projects", Title: "产品项目", Route: "/project/projects", SortKey: 10},
+				{Path: "project.requirements", Title: "需求管理", Route: "/project/requirements", SortKey: 20},
+				{Path: "project.docs", Title: "接口文档", Route: "/project/docs", SortKey: 30},
+			},
+		},
+		{
+			Path: "ai", Title: "AI", Route: "/ai", SortKey: 50,
+			Children: []seedMenu{
+				{Path: "ai.clis", Title: "AI CLI", Route: "/ai/clis", SortKey: 10},
+				{Path: "ai.agents", Title: "智能体", Route: "/ai/agents", SortKey: 20},
+				{Path: "ai.skills", Title: "Skills", Route: "/ai/skills", SortKey: 30},
+				{Path: "ai.tokens", Title: "访问令牌", Route: "/ai/tokens", SortKey: 40},
 			},
 		},
 		{
@@ -93,6 +102,13 @@ func insertMenu(tx *gorm.DB, node seedMenu, parentID *uint, now time.Time) error
 		}
 	} else if err != nil {
 		return fmt.Errorf("find resource %s: %w", node.Path, err)
+	} else if res.SortKey != node.SortKey {
+		if err := tx.Model(&res).Updates(map[string]any{
+			"sort_key":   node.SortKey,
+			"updated_at": now,
+		}).Error; err != nil {
+			return fmt.Errorf("update resource %s: %w", node.Path, err)
+		}
 	}
 	var meta model.MenuMetadata
 	err = tx.Where("resource_id = ?", res.ID).First(&meta).Error
@@ -107,6 +123,14 @@ func insertMenu(tx *gorm.DB, node seedMenu, parentID *uint, now time.Time) error
 		}
 	} else if err != nil {
 		return fmt.Errorf("find menu metadata %s: %w", node.Path, err)
+	} else if meta.Title != node.Title || meta.Route != node.Route {
+		// Keep preset routes/titles in sync when seeds evolve (e.g. P3 path fix).
+		if err := tx.Model(&meta).Updates(map[string]any{
+			"title": node.Title,
+			"route": node.Route,
+		}).Error; err != nil {
+			return fmt.Errorf("update menu metadata %s: %w", node.Path, err)
+		}
 	}
 	id := res.ID
 	for _, child := range node.Children {

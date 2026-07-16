@@ -88,16 +88,39 @@ const router = createRouter({
           meta: { permission: "cicd.credentials:view" },
         },
         {
-          path: "projects",
+          path: "project",
+          redirect: "/project/projects",
+        },
+        {
+          path: "project/projects",
           name: "projects",
           component: () => import("@/views/projects/projects-view.vue"),
           meta: { permission: "project.projects:view" },
         },
         {
-          path: "projects/:id",
+          path: "project/projects/:id",
           name: "project-detail",
           component: () => import("@/views/projects/project-detail-view.vue"),
           meta: { permission: "project.projects:view" },
+        },
+        {
+          // Requirements/docs live inside a project; menu entries land on the list.
+          path: "project/requirements",
+          redirect: "/project/projects",
+          meta: { permission: "project.requirements:view" },
+        },
+        {
+          path: "project/docs",
+          redirect: "/project/projects",
+          meta: { permission: "project.docs:view" },
+        },
+        {
+          path: "projects",
+          redirect: "/project/projects",
+        },
+        {
+          path: "projects/:id",
+          redirect: (to) => `/project/projects/${String(to.params.id)}`,
         },
         {
           path: "cicd/:rest(.*)*",
@@ -115,6 +138,41 @@ const router = createRouter({
           name: "ops-toolchains",
           component: () => import("@/views/ops/toolchains-view.vue"),
           meta: { permission: "ops.toolchains:view" },
+        },
+        {
+          path: "ai/clis",
+          name: "ai-clis",
+          component: () => import("@/views/ai/clis-view.vue"),
+          meta: { permission: "ai.clis:view" },
+        },
+        {
+          path: "ai/agents",
+          name: "ai-agents",
+          component: () => import("@/views/ai/agents-view.vue"),
+          meta: { permission: "ai.agents:view" },
+        },
+        {
+          path: "ai/runs",
+          name: "ai-runs",
+          component: () => import("@/views/ai/runs-view.vue"),
+          meta: { permission: "ai.agents:view" },
+        },
+        {
+          path: "ai/runs/:id",
+          name: "ai-run-detail",
+          component: () => import("@/views/ai/run-detail-view.vue"),
+          meta: { permission: "ai.agents:view" },
+        },
+        {
+          path: "ai/skills",
+          name: "ai-skills",
+          component: () => import("@/views/ai/skills-view.vue"),
+          meta: { permission: "ai.skills:view" },
+        },
+        {
+          path: "ai/tokens",
+          name: "ai-tokens",
+          component: () => import("@/views/ai/tokens-view.vue"),
         },
       ],
     },

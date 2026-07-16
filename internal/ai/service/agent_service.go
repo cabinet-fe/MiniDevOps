@@ -1,0 +1,822 @@
+package service
+
+import (
+	"bufio"
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/robfig/cron/v3"
+	"go.uber.org/zap"
+
+	"bedrock/internal/ai/model"
+	"bedrock/internal/ai/repository"
+	cicdmodel "bedrock/internal/cicd/model"
+	"bedrock/internal/ws"
+)
+
+// DocDraftWriter writes draft content after a docs_generate AgentRun succeeds.
+type DocDraftWriter interface {
+	WriteDraftFromAgentRun(projectID, nodeID, runID uint, content string, userID uint) error
+}
+
+// RepoCloner optionally clones a repository for agent workspace context.
+type RepoCloner interface {
+	CloneForAgent(ctx context.Context, repositoryID uint, destDir string) error
+}
+
+type AgentService struct {
+	repo     *repository.AIRepository
+	cli      *CLIService
+	skills   *SkillService
+	hub      *ws.Hub
+	logger   *zap.Logger
+	workDir  string
+	logDir   string
+	docs     DocDraftWriter
+	cloner   RepoCloner
+	audit    AuditWriter
+
+	runs    chan uint
+	stop    chan struct{}
+	wg      sync.WaitGroup
+	startMu sync.Mutex
+	started bool
+
+	cronMu   sync.Mutex
+	cron     *cron.Cron
+	cronIDs  map[uint]cron.EntryID
+}
+
+// locSchedule interprets cron fields in loc (equivalent to cron.WithLocation per trigger).
+type locSchedule struct {
+	inner cron.Schedule
+	loc   *time.Location
+}
+
+func (s locSchedule) Next(t time.Time) time.Time {
+	return s.inner.Next(t.In(s.loc))
+}
+
+var cronParser = cron.NewParser(cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow | cron.Descriptor)
+
+func NewAgentService(
+	repo *repository.AIRepository,
+	cli *CLIService,
+	skills *SkillService,
+	hub *ws.Hub,
+	logger *zap.Logger,
+	workDir, logDir string,
+	audit ...AuditWriter,
+) *AgentService {
+	svc := &AgentService{
+		repo: repo, cli: cli, skills: skills, hub: hub, logger: logger,
+		workDir: workDir, logDir: logDir,
+		runs: make(chan uint, 128), stop: make(chan struct{}),
+		cronIDs: make(map[uint]cron.EntryID),
+	}
+	if len(audit) > 0 {
+		svc.audit = audit[0]
+	}
+	return svc
+}
+
+func (s *AgentService) SetDocDraftWriter(w DocDraftWriter) { s.docs = w }
+func (s *AgentService) SetRepoCloner(c RepoCloner)         { s.cloner = c }
+
+func (s *AgentService) Start() {
+	s.startMu.Lock()
+	defer s.startMu.Unlock()
+	if s.started {
+		return
+	}
+	s.started = true
+	s.cron = cron.New(cron.WithLocation(time.UTC), cron.WithParser(cronParser))
+	s.wg.Add(1)
+	go s.worker()
+	_ = s.reloadCronLocked()
+	s.cron.Start()
+}
+
+func (s *AgentService) Shutdown() {
+	s.startMu.Lock()
+	if !s.started {
+		s.startMu.Unlock()
+		return
+	}
+	s.started = false
+	if s.cron != nil {
+		s.cron.Stop()
+	}
+	close(s.stop)
+	s.startMu.Unlock()
+	s.wg.Wait()
+}
+
+func (s *AgentService) RecoverOnStartup() error {
+	if _, err := s.repo.MarkRunningRunsInterrupted(); err != nil {
+		return err
+	}
+	queued, err := s.repo.ListRunsByStatuses(model.JobQueued, model.JobPending)
+	if err != nil {
+		return err
+	}
+	for _, run := range queued {
+		_ = s.submit(run.ID)
+	}
+	return nil
+}
+
+type AgentInput struct {
+	Name         string `json:"name"`
+	Description  string `json:"description"`
+	Enabled      *bool  `json:"enabled"`
+	CliKey       string `json:"cli_key"`
+	SystemPrompt string `json:"system_prompt"`
+	SkillIDs     []uint `json:"skill_ids"`
+	RepositoryID *uint  `json:"repository_id"`
+	TimeoutSec   int    `json:"timeout_sec"`
+}
+
+func (s *AgentService) CreateAgent(createdBy uint, in AgentInput) (*model.AiAgent, error) {
+	name := strings.TrimSpace(in.Name)
+	if name == "" || strings.TrimSpace(in.CliKey) == "" {
+		return nil, errors.New("名称与 cli_key 不能为空")
+	}
+	if _, err := s.repo.FindCLIByKey(in.CliKey); err != nil {
+		return nil, errors.New("CLI 不存在")
+	}
+	agent := &model.AiAgent{
+		Name: name, Description: strings.TrimSpace(in.Description),
+		Enabled: boolOr(in.Enabled, true), CliKey: in.CliKey,
+		SystemPrompt: in.SystemPrompt, RepositoryID: in.RepositoryID,
+		TimeoutSec: intOr(in.TimeoutSec, 600), CreatedBy: createdBy,
+	}
+	if err := encodeSkillIDs(agent, in.SkillIDs); err != nil {
+		return nil, err
+	}
+	if err := s.repo.CreateAgent(agent); err != nil {
+		return nil, err
+	}
+	decodeSkillIDs(agent)
+	if s.audit != nil {
+		_ = s.audit.Write(createdBy, "", "agent_create", "ai_agent", fmt.Sprintf("%d", agent.ID), agent.Name, "")
+	}
+	return agent, nil
+}
+
+func (s *AgentService) UpdateAgent(id, userID uint, in AgentInput) (*model.AiAgent, error) {
+	agent, err := s.repo.FindAgent(id)
+	if err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(in.Name) != "" {
+		agent.Name = strings.TrimSpace(in.Name)
+	}
+	if in.Description != "" {
+		agent.Description = strings.TrimSpace(in.Description)
+	}
+	if in.Enabled != nil {
+		agent.Enabled = *in.Enabled
+	}
+	if strings.TrimSpace(in.CliKey) != "" {
+		if _, err := s.repo.FindCLIByKey(in.CliKey); err != nil {
+			return nil, errors.New("CLI 不存在")
+		}
+		agent.CliKey = in.CliKey
+	}
+	if in.SystemPrompt != "" || in.SystemPrompt == "" && in.Name != "" {
+		agent.SystemPrompt = in.SystemPrompt
+	}
+	if in.SkillIDs != nil {
+		if err := encodeSkillIDs(agent, in.SkillIDs); err != nil {
+			return nil, err
+		}
+	}
+	if in.RepositoryID != nil {
+		agent.RepositoryID = in.RepositoryID
+	}
+	if in.TimeoutSec > 0 {
+		agent.TimeoutSec = in.TimeoutSec
+	}
+	if err := s.repo.UpdateAgent(agent); err != nil {
+		return nil, err
+	}
+	decodeSkillIDs(agent)
+	if s.audit != nil {
+		_ = s.audit.Write(userID, "", "agent_update", "ai_agent", fmt.Sprintf("%d", agent.ID), agent.Name, "")
+	}
+	return agent, nil
+}
+
+func (s *AgentService) DeleteAgent(id, userID uint) error {
+	if err := s.repo.DeleteAgent(id); err != nil {
+		return err
+	}
+	if s.audit != nil {
+		_ = s.audit.Write(userID, "", "agent_delete", "ai_agent", fmt.Sprintf("%d", id), "", "")
+	}
+	_ = s.ReloadCron()
+	return nil
+}
+
+func (s *AgentService) GetAgent(id uint) (*model.AiAgent, error) {
+	agent, err := s.repo.FindAgent(id)
+	if err != nil {
+		return nil, err
+	}
+	decodeSkillIDs(agent)
+	return agent, nil
+}
+
+func (s *AgentService) ListAgents(page, pageSize int) ([]model.AiAgent, int64, error) {
+	items, total, err := s.repo.ListAgents(page, pageSize)
+	for i := range items {
+		decodeSkillIDs(&items[i])
+	}
+	return items, total, err
+}
+
+type TriggerInput struct {
+	Type           string `json:"type"`
+	Enabled        *bool  `json:"enabled"`
+	CronExpression string `json:"cron_expression"`
+	CronTimezone   string `json:"cron_timezone"`
+	BuildJobID     *uint  `json:"build_job_id"`
+	BuildEvent     string `json:"build_event"`
+}
+
+func (s *AgentService) CreateTrigger(agentID, userID uint, in TriggerInput) (*model.AgentTrigger, error) {
+	if _, err := s.repo.FindAgent(agentID); err != nil {
+		return nil, errors.New("智能体不存在")
+	}
+	t := &model.AgentTrigger{
+		AgentID: agentID, Type: strings.TrimSpace(in.Type),
+		Enabled: boolOr(in.Enabled, true),
+		CronExpression: strings.TrimSpace(in.CronExpression),
+		CronTimezone: stringOr(in.CronTimezone, "UTC"),
+		BuildJobID: in.BuildJobID,
+		BuildEvent: strings.TrimSpace(in.BuildEvent),
+	}
+	if err := validateTrigger(t); err != nil {
+		return nil, err
+	}
+	if err := s.repo.CreateTrigger(t); err != nil {
+		return nil, err
+	}
+	_ = s.ReloadCron()
+	if s.audit != nil {
+		_ = s.audit.Write(userID, "", "agent_trigger_create", "agent_trigger", fmt.Sprintf("%d", t.ID),
+			fmt.Sprintf("agent_id=%d type=%s", agentID, t.Type), "")
+	}
+	return t, nil
+}
+
+func (s *AgentService) UpdateTrigger(id, userID uint, in TriggerInput) (*model.AgentTrigger, error) {
+	t, err := s.repo.FindTrigger(id)
+	if err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(in.Type) != "" {
+		t.Type = strings.TrimSpace(in.Type)
+	}
+	if in.Enabled != nil {
+		t.Enabled = *in.Enabled
+	}
+	if in.CronExpression != "" {
+		t.CronExpression = strings.TrimSpace(in.CronExpression)
+	}
+	if in.CronTimezone != "" {
+		t.CronTimezone = strings.TrimSpace(in.CronTimezone)
+	}
+	if in.BuildJobID != nil {
+		t.BuildJobID = in.BuildJobID
+	}
+	if in.BuildEvent != "" {
+		t.BuildEvent = strings.TrimSpace(in.BuildEvent)
+	}
+	if err := validateTrigger(t); err != nil {
+		return nil, err
+	}
+	if err := s.repo.UpdateTrigger(t); err != nil {
+		return nil, err
+	}
+	_ = s.ReloadCron()
+	if s.audit != nil {
+		_ = s.audit.Write(userID, "", "agent_trigger_update", "agent_trigger", fmt.Sprintf("%d", t.ID),
+			fmt.Sprintf("agent_id=%d type=%s", t.AgentID, t.Type), "")
+	}
+	return t, nil
+}
+
+func (s *AgentService) DeleteTrigger(id, userID uint) error {
+	if err := s.repo.DeleteTrigger(id); err != nil {
+		return err
+	}
+	if s.audit != nil {
+		_ = s.audit.Write(userID, "", "agent_trigger_delete", "agent_trigger", fmt.Sprintf("%d", id), "", "")
+	}
+	return s.ReloadCron()
+}
+
+func (s *AgentService) ListTriggers(agentID uint) ([]model.AgentTrigger, error) {
+	return s.repo.ListTriggers(agentID)
+}
+
+type CreateRunInput struct {
+	TriggerType string
+	TriggerID   *uint
+	TriggeredBy uint
+	BuildRunID  *uint
+	ProjectID   *uint
+	DocNodeID   *uint
+}
+
+func (s *AgentService) CreateRun(agentID uint, in CreateRunInput) (*model.AgentRun, error) {
+	agent, err := s.repo.FindAgent(agentID)
+	if err != nil {
+		return nil, errors.New("智能体不存在")
+	}
+	if !agent.Enabled {
+		return nil, errors.New("智能体未启用")
+	}
+	decodeSkillIDs(agent)
+	snapshot, _ := json.Marshal(map[string]any{
+		"agent_id":      agent.ID,
+		"cli_key":       agent.CliKey,
+		"system_prompt": agent.SystemPrompt,
+		"skill_ids":     agent.SkillIDs,
+		"repository_id": agent.RepositoryID,
+		"timeout_sec":   agent.TimeoutSec,
+		"context_note":  "system_prompt + repository only; no requirements/history injection",
+		"risk_notice":   model.RiskNoticeSameUID,
+	})
+	run := &model.AgentRun{
+		AgentID: agentID, TriggerType: in.TriggerType, TriggerID: in.TriggerID,
+		Status: model.JobQueued, TriggeredBy: in.TriggeredBy,
+		BuildRunID: in.BuildRunID, ProjectID: in.ProjectID, DocNodeID: in.DocNodeID,
+		SnapshotJSON: string(snapshot),
+	}
+	if err := s.repo.CreateRun(run); err != nil {
+		return nil, err
+	}
+	if err := s.submit(run.ID); err != nil {
+		return nil, err
+	}
+	if s.audit != nil && in.TriggeredBy != 0 {
+		_ = s.audit.Write(in.TriggeredBy, "", "agent_run_enqueue", "agent_run", fmt.Sprintf("%d", run.ID),
+			fmt.Sprintf("agent_id=%d trigger=%s", agentID, in.TriggerType), "")
+	}
+	return run, nil
+}
+
+func (s *AgentService) ManualRun(agentID, userID uint) (*model.AgentRun, error) {
+	return s.CreateRun(agentID, CreateRunInput{TriggerType: model.TriggerManual, TriggeredBy: userID})
+}
+
+func (s *AgentService) APIRun(agentID, userID uint) (*model.AgentRun, error) {
+	return s.CreateRun(agentID, CreateRunInput{TriggerType: model.TriggerAPI, TriggeredBy: userID})
+}
+
+func (s *AgentService) DocsGenerateRun(agentID, userID, projectID, nodeID uint) (*model.AgentRun, error) {
+	return s.CreateRun(agentID, CreateRunInput{
+		TriggerType: model.TriggerDocsGen, TriggeredBy: userID,
+		ProjectID: &projectID, DocNodeID: &nodeID,
+	})
+}
+
+// OnBuildEvent creates AgentRuns asynchronously. Never mutates BuildRun.status.
+func (s *AgentService) OnBuildEvent(event string, job *cicdmodel.BuildJob, run *cicdmodel.BuildRun) {
+	if job == nil || run == nil || event == "" || event == model.EventNone {
+		return
+	}
+	desired := strings.TrimSpace(job.AgentTriggerEvent)
+	if desired == "" {
+		desired = model.EventArtifactReady
+	}
+	if desired == model.EventNone {
+		return
+	}
+	if desired != event {
+		return
+	}
+	go s.dispatchBuildEvent(event, job, run)
+}
+
+func (s *AgentService) dispatchBuildEvent(event string, job *cicdmodel.BuildJob, run *cicdmodel.BuildRun) {
+	// Prefer explicit AgentTrigger rows; also support BuildJob.AgentID binding.
+	triggers, _ := s.repo.ListBuildEventTriggers(job.ID, event)
+	seen := map[uint]bool{}
+	for _, t := range triggers {
+		if seen[t.AgentID] {
+			continue
+		}
+		seen[t.AgentID] = true
+		_, err := s.CreateRun(t.AgentID, CreateRunInput{
+			TriggerType: model.TriggerBuildEvent, TriggerID: &t.ID,
+			TriggeredBy: run.TriggeredBy, BuildRunID: &run.ID,
+		})
+		if err != nil && s.logger != nil {
+			s.logger.Warn("build event agent run failed", zap.Error(err), zap.Uint("agent_id", t.AgentID))
+		}
+	}
+	if job.AgentID != nil && !seen[*job.AgentID] {
+		_, err := s.CreateRun(*job.AgentID, CreateRunInput{
+			TriggerType: model.TriggerBuildEvent,
+			TriggeredBy: run.TriggeredBy, BuildRunID: &run.ID,
+		})
+		if err != nil && s.logger != nil {
+			s.logger.Warn("build event job agent binding failed", zap.Error(err))
+		}
+	}
+}
+
+func (s *AgentService) GetRun(id uint) (*model.AgentRun, error) {
+	return s.repo.FindRun(id)
+}
+
+func (s *AgentService) ListRuns(page, pageSize int, agentID uint, status string) ([]model.AgentRun, int64, error) {
+	return s.repo.ListRuns(page, pageSize, agentID, status)
+}
+
+func (s *AgentService) CancelRun(id uint) error {
+	run, err := s.repo.FindRun(id)
+	if err != nil {
+		return err
+	}
+	if run.Status != model.JobQueued && run.Status != model.JobRunning && run.Status != model.JobPending {
+		return errors.New("仅 queued/running 可取消")
+	}
+	return s.repo.UpdateRunFields(id, map[string]any{
+		"status": model.JobCancelled, "finished_at": time.Now().UTC(),
+	})
+}
+
+func (s *AgentService) submit(id uint) error {
+	s.startMu.Lock()
+	started := s.started
+	s.startMu.Unlock()
+	if !started {
+		// Allow enqueue before Start in tests; Start/Recover will pick up queued.
+		return nil
+	}
+	select {
+	case s.runs <- id:
+		return nil
+	default:
+		go func() { s.runs <- id }()
+		return nil
+	}
+}
+
+func (s *AgentService) worker() {
+	defer s.wg.Done()
+	for {
+		select {
+		case <-s.stop:
+			return
+		case id := <-s.runs:
+			s.ExecuteRun(context.Background(), id)
+		}
+	}
+}
+
+func (s *AgentService) ExecuteRun(ctx context.Context, id uint) {
+	run, err := s.repo.FindRun(id)
+	if err != nil || (run.Status != model.JobQueued && run.Status != model.JobPending) {
+		return
+	}
+	agent, err := s.repo.FindAgent(run.AgentID)
+	if err != nil {
+		s.failRun(run, err)
+		return
+	}
+	decodeSkillIDs(agent)
+	cli, err := s.repo.FindCLIByKey(agent.CliKey)
+	if err != nil {
+		s.failRun(run, err)
+		return
+	}
+
+	now := time.Now().UTC()
+	run.Status = model.JobRunning
+	run.StartedAt = &now
+	logDir := filepath.Join(s.logDir, "ai-runs")
+	_ = os.MkdirAll(logDir, 0o755)
+	run.LogPath = filepath.Join(logDir, fmt.Sprintf("run-%d.log", run.ID))
+	_ = s.repo.UpdateRun(run)
+
+	logFile, err := os.OpenFile(run.LogPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
+	if err != nil {
+		s.failRun(run, err)
+		return
+	}
+	defer logFile.Close()
+	writeLog := func(line string) {
+		_, _ = logFile.WriteString(line + "\n")
+		if s.hub != nil {
+			s.hub.BroadcastToChannel(fmt.Sprintf("ai-run:%d", run.ID), []byte(line))
+		}
+	}
+	writeLog(model.RiskNoticeSameUID)
+	writeLog(fmt.Sprintf("agent=%s cli=%s trigger=%s", agent.Name, agent.CliKey, run.TriggerType))
+	writeLog("context: system_prompt + selected repository only (no requirements/history)")
+
+	timeout := time.Duration(agent.TimeoutSec) * time.Second
+	if timeout <= 0 {
+		timeout = 10 * time.Minute
+	}
+	runCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	workRoot := filepath.Join(s.workDir, fmt.Sprintf("agent-run-%d", run.ID))
+	_ = os.RemoveAll(workRoot)
+	if err := os.MkdirAll(workRoot, 0o755); err != nil {
+		s.failRun(run, err)
+		return
+	}
+	defer os.RemoveAll(workRoot)
+
+	if agent.RepositoryID != nil && s.cloner != nil {
+		repoDir := filepath.Join(workRoot, "repo")
+		writeLog(fmt.Sprintf("cloning repository_id=%d", *agent.RepositoryID))
+		if err := s.cloner.CloneForAgent(runCtx, *agent.RepositoryID, repoDir); err != nil {
+			writeLog("clone failed: " + err.Error())
+			// Continue with prompt-only context when clone fails (observable failure path).
+		}
+	}
+
+	digests, err := s.skills.InjectSkills(workRoot, agent.SkillIDs, run.TriggeredBy, true)
+	if err != nil {
+		s.failRun(run, err)
+		return
+	}
+	if len(digests) > 0 {
+		b, _ := json.Marshal(digests)
+		run.SkillDigestJSON = string(b)
+		writeLog("injected skills: " + run.SkillDigestJSON)
+	}
+
+	promptPath := filepath.Join(workRoot, "SYSTEM_PROMPT.md")
+	_ = os.WriteFile(promptPath, []byte(agent.SystemPrompt), 0o644)
+
+	binary, lookErr := ResolveBinary(cli)
+	if lookErr != nil {
+		writeLog("CLI binary not found: " + lookErr.Error())
+		// Reference run path: observable failure when CLI missing.
+		s.failRun(run, fmt.Errorf("CLI %s 未安装或不可用: %w", agent.CliKey, lookErr))
+		return
+	}
+	writeLog("binary=" + binary)
+
+	args := strings.Fields(cli.DefaultArgs)
+	if run.TriggerType == model.TriggerDocsGen {
+		args = append(args, "Generate API documentation draft based on the repository. Output Markdown only.")
+	} else if strings.TrimSpace(agent.SystemPrompt) != "" {
+		args = append(args, agent.SystemPrompt)
+	}
+
+	cmd := exec.CommandContext(runCtx, binary, args...)
+	cmd.Dir = workRoot
+	cmd.Env = BuildRuntimeEnv(cli, "", nil)
+	stdout, _ := cmd.StdoutPipe()
+	stderr, _ := cmd.StderrPipe()
+	if err := cmd.Start(); err != nil {
+		s.failRun(run, err)
+		return
+	}
+	var output strings.Builder
+	copyStream := func(r io.Reader) {
+		sc := bufio.NewScanner(r)
+		buf := make([]byte, 0, 64*1024)
+		sc.Buffer(buf, 1024*1024)
+		for sc.Scan() {
+			line := sc.Text()
+			writeLog(line)
+			output.WriteString(line)
+			output.WriteByte('\n')
+		}
+	}
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() { defer wg.Done(); copyStream(stdout) }()
+	go func() { defer wg.Done(); copyStream(stderr) }()
+	err = cmd.Wait()
+	wg.Wait()
+
+	// Check cancellation
+	latest, _ := s.repo.FindRun(run.ID)
+	if latest != nil && latest.Status == model.JobCancelled {
+		writeLog("run cancelled")
+		s.notifyTerminal(run, model.JobCancelled)
+		return
+	}
+
+	finished := time.Now().UTC()
+	run.FinishedAt = &finished
+	if run.StartedAt != nil {
+		run.DurationMs = finished.Sub(*run.StartedAt).Milliseconds()
+	}
+	run.OutputText = output.String()
+	if err != nil {
+		run.Status = model.JobFailed
+		run.ErrorMessage = err.Error()
+		writeLog("failed: " + err.Error())
+		_ = s.repo.UpdateRun(run)
+		s.notifyTerminal(run, model.JobFailed)
+		return
+	}
+	run.Status = model.JobSuccess
+	run.ErrorMessage = ""
+	writeLog("success")
+	_ = s.repo.UpdateRun(run)
+
+	if run.TriggerType == model.TriggerDocsGen && s.docs != nil && run.ProjectID != nil && run.DocNodeID != nil {
+		content := strings.TrimSpace(run.OutputText)
+		if content == "" {
+			content = "# Generated Draft\n\n(empty CLI output)\n"
+		}
+		if err := s.docs.WriteDraftFromAgentRun(*run.ProjectID, *run.DocNodeID, run.ID, content, run.TriggeredBy); err != nil {
+			writeLog("docs draft write failed: " + err.Error())
+		} else {
+			writeLog("docs draft written (not published)")
+		}
+	}
+	s.notifyTerminal(run, model.JobSuccess)
+}
+
+func (s *AgentService) failRun(run *model.AgentRun, err error) {
+	finished := time.Now().UTC()
+	run.Status = model.JobFailed
+	run.FinishedAt = &finished
+	run.ErrorMessage = err.Error()
+	if run.StartedAt != nil {
+		run.DurationMs = finished.Sub(*run.StartedAt).Milliseconds()
+	}
+	_ = s.repo.UpdateRun(run)
+	if run.LogPath != "" {
+		f, openErr := os.OpenFile(run.LogPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+		if openErr == nil {
+			_, _ = f.WriteString("error: " + err.Error() + "\n")
+			_ = f.Close()
+		}
+	}
+	s.notifyTerminal(run, model.JobFailed)
+}
+
+func (s *AgentService) notifyTerminal(run *model.AgentRun, status string) {
+	if s.hub == nil || run.TriggeredBy == 0 {
+		return
+	}
+	payload, _ := json.Marshal(map[string]any{
+		"type": "agent_run_" + status, "agent_run_id": run.ID, "agent_id": run.AgentID, "status": status,
+	})
+	s.hub.BroadcastToUser(run.TriggeredBy, payload)
+	s.hub.BroadcastToChannel(fmt.Sprintf("ai-run:%d", run.ID), []byte("__TERMINAL__:"+status))
+}
+
+func (s *AgentService) ReloadCron() error {
+	s.cronMu.Lock()
+	defer s.cronMu.Unlock()
+	return s.reloadCronLocked()
+}
+
+// CronEntries returns a snapshot of scheduled cron entries (for tests).
+func (s *AgentService) CronEntries() []cron.Entry {
+	s.cronMu.Lock()
+	defer s.cronMu.Unlock()
+	if s.cron == nil {
+		return nil
+	}
+	return s.cron.Entries()
+}
+
+func (s *AgentService) reloadCronLocked() error {
+	if s.cron == nil {
+		return nil
+	}
+	for id, entry := range s.cronIDs {
+		s.cron.Remove(entry)
+		delete(s.cronIDs, id)
+	}
+	triggers, err := s.repo.ListCronTriggers()
+	if err != nil {
+		return err
+	}
+	for _, t := range triggers {
+		trigger := t
+		loc, err := time.LoadLocation(stringOr(trigger.CronTimezone, "UTC"))
+		if err != nil {
+			if s.logger != nil {
+				s.logger.Warn("invalid agent cron timezone", zap.Uint("trigger_id", trigger.ID), zap.Error(err))
+			}
+			continue
+		}
+		schedule, err := cronParser.Parse(trigger.CronExpression)
+		if err != nil {
+			if s.logger != nil {
+				s.logger.Warn("invalid agent cron", zap.Uint("trigger_id", trigger.ID), zap.Error(err))
+			}
+			continue
+		}
+		entryID := s.cron.Schedule(locSchedule{inner: schedule, loc: loc}, cron.FuncJob(func() {
+			s.fireCron(trigger)
+		}))
+		s.cronIDs[trigger.ID] = entryID
+	}
+	return nil
+}
+
+func (s *AgentService) fireCron(t model.AgentTrigger) {
+	// No overlap: skip if agent already has active run. Missed ticks during downtime are not backfilled.
+	n, err := s.repo.CountActiveRuns(t.AgentID)
+	if err != nil || n > 0 {
+		return
+	}
+	_, _ = s.CreateRun(t.AgentID, CreateRunInput{
+		TriggerType: model.TriggerCron, TriggerID: &t.ID, TriggeredBy: 0,
+	})
+}
+
+func validateTrigger(t *model.AgentTrigger) error {
+	switch t.Type {
+	case model.TriggerManual, model.TriggerAPI:
+		return nil
+	case model.TriggerCron:
+		if t.CronExpression == "" {
+			return errors.New("cron_expression 不能为空")
+		}
+		if _, err := time.LoadLocation(stringOr(t.CronTimezone, "UTC")); err != nil {
+			return errors.New("无效 IANA 时区")
+		}
+		if _, err := cronParser.Parse(t.CronExpression); err != nil {
+			return errors.New("无效 cron 表达式")
+		}
+		return nil
+	case model.TriggerBuildEvent:
+		if t.BuildJobID == nil {
+			return errors.New("build_job_id 不能为空")
+		}
+		ev := t.BuildEvent
+		if ev == "" {
+			ev = model.EventArtifactReady
+			t.BuildEvent = ev
+		}
+		if ev != model.EventArtifactReady && ev != model.EventDistributionFinished {
+			return errors.New("build_event 必须为 artifact_ready 或 distribution_finished")
+		}
+		return nil
+	default:
+		return errors.New("不支持的触发器类型")
+	}
+}
+
+func encodeSkillIDs(agent *model.AiAgent, ids []uint) error {
+	if ids == nil {
+		ids = []uint{}
+	}
+	b, err := json.Marshal(ids)
+	if err != nil {
+		return err
+	}
+	agent.SkillIDsJSON = string(b)
+	agent.SkillIDs = ids
+	return nil
+}
+
+func decodeSkillIDs(agent *model.AiAgent) {
+	if agent.SkillIDsJSON == "" {
+		agent.SkillIDs = []uint{}
+		return
+	}
+	_ = json.Unmarshal([]byte(agent.SkillIDsJSON), &agent.SkillIDs)
+}
+
+func boolOr(p *bool, def bool) bool {
+	if p == nil {
+		return def
+	}
+	return *p
+}
+
+func intOr(v, def int) int {
+	if v <= 0 {
+		return def
+	}
+	return v
+}
+
+func stringOr(v, def string) string {
+	if strings.TrimSpace(v) == "" {
+		return def
+	}
+	return strings.TrimSpace(v)
+}

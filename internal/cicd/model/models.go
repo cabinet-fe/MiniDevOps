@@ -90,6 +90,7 @@ type BuildJob struct {
 	MaxArtifacts      int       `json:"max_artifacts" gorm:"default:5"`
 	ArtifactFormat    string    `json:"artifact_format" gorm:"size:20;default:gzip"`
 	AgentTriggerEvent string    `json:"agent_trigger_event" gorm:"size:40;default:artifact_ready"`
+	AgentID           *uint     `json:"agent_id" gorm:"index"`
 	CreatedBy         uint      `json:"created_by" gorm:"index"`
 	CreatedAt         time.Time `json:"created_at"`
 	UpdatedAt         time.Time `json:"updated_at"`

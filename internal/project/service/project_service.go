@@ -16,14 +16,24 @@ import (
 	"gorm.io/gorm"
 )
 
+// DocsAIBridge creates AgentRuns for documentation generation (P4).
+type DocsAIBridge interface {
+	StartDocsGenerate(userID, projectID, nodeID, agentID uint) (runID uint, err error)
+}
+
 type ProjectService struct {
 	repo    *repository.ProjectRepository
 	storage *storageservice.StorageService
 	acl     *projectACL
+	docsAI  DocsAIBridge
 }
 
 func NewProjectService(repo *repository.ProjectRepository, storage *storageservice.StorageService) *ProjectService {
 	return &ProjectService{repo: repo, storage: storage, acl: newProjectACL(repo)}
+}
+
+func (s *ProjectService) SetDocsAIBridge(bridge DocsAIBridge) {
+	s.docsAI = bridge
 }
 
 type CreateProjectInput struct {

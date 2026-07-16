@@ -3,14 +3,18 @@ package handler
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
 	"gorm.io/gorm"
 
+	airepository "bedrock/internal/ai/repository"
+	aiservice "bedrock/internal/ai/service"
 	authmodel "bedrock/internal/auth/model"
 	authrepo "bedrock/internal/auth/repository"
 	"bedrock/internal/platform/config"
@@ -99,7 +103,7 @@ func TestListRequirementStatusesAllowsLeastPrivilegeMember(t *testing.T) {
 	}
 }
 
-func TestGenerateDocsRemainsNotImplemented(t *testing.T) {
+func TestGenerateDocsUnwiredReturnsNotImplemented(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	handler, service := newProjectHandlerForTest(t)
 	owner := projectservice.NewAccessContext(1, true, nil)
@@ -110,7 +114,9 @@ func TestGenerateDocsRemainsNotImplemented(t *testing.T) {
 
 	recorder := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(recorder)
-	c.Request = httptest.NewRequest(http.MethodPost, "/api/v1/projects/1/docs/generate", nil)
+	c.Request = httptest.NewRequest(http.MethodPost, "/api/v1/projects/1/docs/generate",
+		bytes.NewBufferString(`{"agent_id":1}`))
+	c.Request.Header.Set("Content-Type", "application/json")
 	c.Params = gin.Params{{Key: "id", Value: strconv.FormatUint(uint64(project.ID), 10)}}
 	c.Set("user_id", uint(1))
 	c.Set("is_super_admin", true)
@@ -118,6 +124,50 @@ func TestGenerateDocsRemainsNotImplemented(t *testing.T) {
 
 	if recorder.Code != http.StatusNotImplemented {
 		t.Fatalf("status = %d, body=%s", recorder.Code, recorder.Body.String())
+	}
+}
+
+func TestGenerateDocsWiredReturnsAccepted(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	handler, projectSvc, gdb := newProjectHandlerForTestWithDB(t)
+	owner := projectservice.NewAccessContext(1, true, nil)
+	project, err := projectSvc.CreateProject(owner, projectservice.CreateProjectInput{Name: "Docs Wired", Slug: "generate-docs-wired"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	aiRepo := airepository.NewAIRepository(gdb)
+	cli := aiservice.NewCLIService(aiRepo)
+	cli.Start()
+	t.Cleanup(cli.Shutdown)
+	agents := aiservice.NewAgentService(aiRepo, cli, nil, nil, zap.NewNop(), t.TempDir(), t.TempDir())
+	agents.Start()
+	t.Cleanup(agents.Shutdown)
+	agents.SetDocDraftWriter(projectSvc)
+	projectSvc.SetDocsAIBridge(aiservice.NewDocsBridge(agents))
+
+	agent, err := agents.CreateAgent(1, aiservice.AgentInput{
+		Name: "docs", CliKey: "claude_code", SystemPrompt: "generate", TimeoutSec: 5,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	body := fmt.Sprintf(`{"agent_id":%d}`, agent.ID)
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodPost, "/api/v1/projects/1/docs/generate", bytes.NewBufferString(body))
+	c.Request.Header.Set("Content-Type", "application/json")
+	c.Params = gin.Params{{Key: "id", Value: strconv.FormatUint(uint64(project.ID), 10)}}
+	c.Set("user_id", uint(1))
+	c.Set("is_super_admin", true)
+	handler.GenerateDocs(c)
+
+	if recorder.Code != http.StatusAccepted {
+		t.Fatalf("status = %d, body=%s", recorder.Code, recorder.Body.String())
+	}
+	if !bytes.Contains(recorder.Body.Bytes(), []byte(`"agent_run_id"`)) {
+		t.Fatalf("expected agent_run_id in response: %s", recorder.Body.String())
 	}
 }
 

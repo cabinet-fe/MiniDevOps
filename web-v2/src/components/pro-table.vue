@@ -318,11 +318,6 @@ defineExpose({ search, reload, load });
               v-bind="slotData || {}"
             />
           </template>
-          <template #empty>
-            <slot name="empty">
-              <u-empty :text="loading && !loadedOnce ? '加载中…' : '暂无数据'" />
-            </slot>
-          </template>
         </u-table>
       </div>
 

@@ -63,6 +63,8 @@ const form = reactive({
   cron_timezone: "Asia/Shanghai",
   max_artifacts: 5,
   artifact_format: "gzip",
+  agent_trigger_event: "artifact_ready",
+  agent_id: undefined as number | undefined,
   deploy_targets: [] as DeployTarget[],
 });
 
@@ -124,6 +126,8 @@ function resetForm() {
     cron_timezone: "Asia/Shanghai",
     max_artifacts: 5,
     artifact_format: "gzip",
+    agent_trigger_event: "artifact_ready",
+    agent_id: undefined,
     deploy_targets: [],
   });
 }
@@ -158,6 +162,8 @@ async function openEdit(row: BuildJob) {
       cron_timezone: full.cron_timezone || "Asia/Shanghai",
       max_artifacts: full.max_artifacts || 5,
       artifact_format: full.artifact_format || "gzip",
+      agent_trigger_event: full.agent_trigger_event || "artifact_ready",
+      agent_id: full.agent_id ?? undefined,
       deploy_targets: (full.deploy_targets ?? []).map((t) => ({ ...t })),
     });
     dialogOpen.value = true;
@@ -204,6 +210,8 @@ function buildBody(): Record<string, unknown> {
     cron_timezone: form.cron_timezone,
     max_artifacts: form.max_artifacts,
     artifact_format: form.artifact_format,
+    agent_trigger_event: form.agent_trigger_event,
+    agent_id: form.agent_id || null,
     deploy_targets: form.deploy_targets.map((t, i) => ({
       server_id: t.method === "local" ? null : t.server_id,
       remote_path: t.remote_path,
@@ -352,6 +360,16 @@ async function trigger(row: BuildJob) {
 
       <u-number-input label="制品保留" field="max_artifacts" />
       <u-select label="制品格式" field="artifact_format" :options="ARTIFACT_OPTIONS" />
+      <u-select
+        label="Agent 事件"
+        field="agent_trigger_event"
+        :options="[
+          { label: 'artifact_ready（默认）', value: 'artifact_ready' },
+          { label: 'distribution_finished', value: 'distribution_finished' },
+          { label: 'none（不触发）', value: 'none' },
+        ]"
+      />
+      <u-number-input label="绑定 Agent ID" field="agent_id" placeholder="可选" />
 
       <div class="targets-head">
         <strong>部署目标（Job 私有）</strong>

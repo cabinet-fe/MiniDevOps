@@ -18,6 +18,12 @@ import (
 	"bedrock/internal/ws"
 )
 
+// AgentEventHook receives build lifecycle events for async AgentRun creation.
+// Implementations must not mutate BuildRun.status.
+type AgentEventHook interface {
+	OnBuildEvent(event string, job *model.BuildJob, run *model.BuildRun)
+}
+
 // Pipeline executes BuildRun: clone → build → archive → success → distribute.
 // Distribution failure never sets status=failed (DESIGN §5.2).
 // Sync AI Agent stage is intentionally absent (P4 async AgentRun only).
@@ -33,6 +39,12 @@ type Pipeline struct {
 	artifact  string
 	logDir    string
 	cacheDir  string
+	agentHook AgentEventHook
+}
+
+// SetAgentEventHook wires P4 async AgentRun creation from build events.
+func (p *Pipeline) SetAgentEventHook(h AgentEventHook) {
+	p.agentHook = h
 }
 
 func NewPipeline(
@@ -447,6 +459,13 @@ func (p *Pipeline) markArtifactSuccess(run *model.BuildRun, writeLine func(strin
 	})
 	writeLine(fmt.Sprintf("=== Build phase succeeded in %dms (artifact ready) ===", run.DurationMs))
 	p.notifyTerminal(run, "success", "")
+	if p.agentHook != nil && run.ArtifactPath != "" {
+		// Default event: artifact_ready (archive succeeded with a usable artifact path).
+		job, err := p.jobs.FindByID(run.BuildJobID)
+		if err == nil {
+			p.agentHook.OnBuildEvent("artifact_ready", job, run)
+		}
+	}
 }
 
 func (p *Pipeline) notifyTerminal(run *model.BuildRun, status, message string) {

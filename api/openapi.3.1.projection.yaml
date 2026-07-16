@@ -30,6 +30,10 @@ tags:
   - name: Dashboard
   - name: Ops
   - name: Projects
+  - name: AICLIs
+  - name: Agents
+  - name: Skills
+  - name: Tokens
 paths:
   /auth/login:
     post:
@@ -2237,12 +2241,40 @@ paths:
     parameters: [{$ref: "#/components/parameters/ID"}]
     post:
       tags: [Projects]
-      summary: Generate API documentation draft
-      description: Contract hook for P4 AI domain. P3 responds with a clear unavailable error and never publishes content.
+      summary: Generate API documentation draft via AgentRun
+      description: |
+        Creates an asynchronous AgentRun. On success the run writes **only** `draft_content`
+        (and draft metadata / optional `draft_source_run_id`). Never auto-publishes.
+        AI CLIs run as the same OS UID as Bedrock with no sandbox.
       operationId: projectDocsGenerate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [agent_id]
+              properties:
+                agent_id: {type: integer}
+                node_id: {type: integer, nullable: true, description: Target document node; created when omitted}
       responses:
+        "202":
+          description: AgentRun accepted
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          agent_run_id: {type: integer}
+                          node_id: {type: integer}
+        "400": {$ref: "#/components/responses/Error"}
         "501":
-          description: AI domain not enabled
+          description: AI domain bridge not wired
           content:
             application/json:
               schema: {$ref: "#/components/schemas/Error"}
@@ -2321,12 +2353,388 @@ paths:
                   - $ref: "#/components/schemas/SuccessEnvelope"
                   - type: object
                     properties: {data: {$ref: "#/components/schemas/ApiDocDiff"}}
+  /ai/clis:
+    get:
+      tags: [AICLIs]
+      summary: List AI CLI runtimes
+      description: Four parallel CLIs (Claude Code, OpenCode, Reasonix, Codex). Same-UID execution; no OS/container sandbox.
+      operationId: aiCLIsList
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          items:
+                            type: array
+                            items: {$ref: "#/components/schemas/CliRuntimeDefinition"}
+                          risk_notice: {type: string}
+  /ai/clis/{key}/detect:
+    parameters: [{name: key, in: path, required: true, schema: {type: string}}]
+    post:
+      tags: [AICLIs]
+      summary: Detect CLI installation/health
+      operationId: aiCLIDetect
+      responses:
+        "200":
+          description: Detect result
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data: {$ref: "#/components/schemas/CliDetectResult"}
+  /ai/clis/{key}/install:
+    parameters: [{name: key, in: path, required: true, schema: {type: string}}]
+    post:
+      tags: [AICLIs]
+      summary: Enqueue CLI install (multi-source fallback)
+      operationId: aiCLIInstall
+      requestBody:
+        content:
+          application/json:
+            schema: {type: object, properties: {version: {type: string}}}
+      responses:
+        "202": {description: Accepted}
+  /ai/clis/{key}/upgrade:
+    parameters: [{name: key, in: path, required: true, schema: {type: string}}]
+    post:
+      tags: [AICLIs]
+      summary: Enqueue CLI upgrade
+      operationId: aiCLIUpgrade
+      requestBody:
+        content:
+          application/json:
+            schema: {type: object, properties: {version: {type: string}}}
+      responses:
+        "202": {description: Accepted}
+  /ai/clis/{key}/uninstall:
+    parameters: [{name: key, in: path, required: true, schema: {type: string}}]
+    post:
+      tags: [AICLIs]
+      summary: Enqueue CLI uninstall
+      operationId: aiCLIUninstall
+      responses:
+        "202": {description: Accepted}
+  /ai/cli-sources:
+    get:
+      tags: [AICLIs]
+      summary: List CLI install sources
+      operationId: aiCLISourcesList
+      parameters: [{name: cli_key, in: query, schema: {type: string}}]
+      responses: {"200": {description: OK}}
+    post:
+      tags: [AICLIs]
+      summary: Create CLI install source
+      operationId: aiCLISourcesCreate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/CliInstallSourceInput"}
+      responses: {"201": {description: Created}}
+  /ai/cli-sources/{id}:
+    parameters: [{$ref: "#/components/parameters/ID"}]
+    put:
+      tags: [AICLIs]
+      summary: Update CLI install source
+      operationId: aiCLISourcesUpdate
+      requestBody:
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/CliInstallSourceInput"}
+      responses: {"200": {description: OK}}
+    delete:
+      tags: [AICLIs]
+      summary: Delete CLI install source
+      operationId: aiCLISourcesDelete
+      responses: {"200": {description: Deleted}}
+  /ai/cli-install-jobs:
+    get:
+      tags: [AICLIs]
+      summary: List CLI install jobs
+      operationId: aiCLIInstallJobsList
+      parameters:
+        - {$ref: "#/components/parameters/Page"}
+        - {$ref: "#/components/parameters/PageSize"}
+        - {name: cli_key, in: query, schema: {type: string}}
+        - {name: status, in: query, schema: {type: string}}
+      responses: {"200": {description: OK}}
+  /ai/cli-install-jobs/{id}:
+    parameters: [{$ref: "#/components/parameters/ID"}]
+    get:
+      tags: [AICLIs]
+      summary: Get CLI install job
+      operationId: aiCLIInstallJobsGet
+      responses: {"200": {description: OK}}
+  /ai/cli-install-jobs/{id}/logs:
+    parameters: [{$ref: "#/components/parameters/ID"}]
+    get:
+      tags: [AICLIs]
+      summary: Get CLI install job logs
+      operationId: aiCLIInstallJobsLogs
+      responses: {"200": {description: OK}}
+  /ai/cli-install-jobs/{id}/retry:
+    parameters: [{$ref: "#/components/parameters/ID"}]
+    post:
+      tags: [AICLIs]
+      summary: Retry CLI install job (new job)
+      operationId: aiCLIInstallJobsRetry
+      responses: {"202": {description: Accepted}}
+  /ai/agents:
+    get:
+      tags: [Agents]
+      summary: List AI agents
+      operationId: aiAgentsList
+      parameters:
+        - {$ref: "#/components/parameters/Page"}
+        - {$ref: "#/components/parameters/PageSize"}
+      responses: {"200": {description: OK}}
+    post:
+      tags: [Agents]
+      summary: Create AI agent
+      operationId: aiAgentsCreate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/AiAgentInput"}
+      responses: {"201": {description: Created}}
+  /ai/agents/{id}:
+    parameters: [{$ref: "#/components/parameters/ID"}]
+    get:
+      tags: [Agents]
+      summary: Get AI agent
+      operationId: aiAgentsGet
+      responses: {"200": {description: OK}}
+    put:
+      tags: [Agents]
+      summary: Update AI agent
+      operationId: aiAgentsUpdate
+      requestBody:
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/AiAgentInput"}
+      responses: {"200": {description: OK}}
+    delete:
+      tags: [Agents]
+      summary: Delete AI agent
+      operationId: aiAgentsDelete
+      responses: {"200": {description: Deleted}}
+  /ai/agents/{id}/triggers:
+    parameters: [{$ref: "#/components/parameters/ID"}]
+    get:
+      tags: [Agents]
+      summary: List agent triggers
+      operationId: aiAgentTriggersList
+      responses: {"200": {description: OK}}
+    post:
+      tags: [Agents]
+      summary: Create agent trigger
+      description: Types — manual, api, cron (IANA timezone; no overlap; no missed catch-up), build_event.
+      operationId: aiAgentTriggersCreate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/AgentTriggerInput"}
+      responses: {"201": {description: Created}}
+  /ai/agents/{id}/triggers/{tid}:
+    parameters:
+      - {$ref: "#/components/parameters/ID"}
+      - {name: tid, in: path, required: true, schema: {type: integer}}
+    put:
+      tags: [Agents]
+      summary: Update agent trigger
+      operationId: aiAgentTriggersUpdate
+      requestBody:
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/AgentTriggerInput"}
+      responses: {"200": {description: OK}}
+    delete:
+      tags: [Agents]
+      summary: Delete agent trigger
+      operationId: aiAgentTriggersDelete
+      responses: {"200": {description: Deleted}}
+  /ai/agents/{id}/runs:
+    parameters: [{$ref: "#/components/parameters/ID"}]
+    post:
+      tags: [Agents]
+      summary: Manual trigger AgentRun
+      description: Requires `ai.agents:execute`. Context = system_prompt + selected repository only.
+      operationId: aiAgentsManualRun
+      responses: {"202": {description: Accepted}}
+  /ai/agents/{id}/api-runs:
+    parameters: [{$ref: "#/components/parameters/ID"}]
+    post:
+      tags: [Agents]
+      summary: API trigger AgentRun
+      description: JWT with `ai.agents:execute` or PAT with scope `agents:run`.
+      operationId: aiAgentsAPIRun
+      responses:
+        "202": {description: Accepted}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+  /ai/runs:
+    get:
+      tags: [Agents]
+      summary: List AgentRuns
+      operationId: aiRunsList
+      parameters:
+        - {$ref: "#/components/parameters/Page"}
+        - {$ref: "#/components/parameters/PageSize"}
+        - {name: agent_id, in: query, schema: {type: integer}}
+        - {name: status, in: query, schema: {type: string}}
+      responses: {"200": {description: OK}}
+  /ai/runs/{id}:
+    parameters: [{$ref: "#/components/parameters/ID"}]
+    get:
+      tags: [Agents]
+      summary: Get AgentRun detail
+      operationId: aiRunsGet
+      responses: {"200": {description: OK}}
+  /ai/runs/{id}/cancel:
+    parameters: [{$ref: "#/components/parameters/ID"}]
+    post:
+      tags: [Agents]
+      summary: Cancel AgentRun
+      operationId: aiRunsCancel
+      responses: {"200": {description: Cancelled}}
+  /skills:
+    get:
+      tags: [Skills]
+      summary: List Skill packages
+      description: public skills visible with view permission; private only to creator.
+      operationId: skillsList
+      parameters:
+        - {$ref: "#/components/parameters/Page"}
+        - {$ref: "#/components/parameters/PageSize"}
+      responses: {"200": {description: OK}}
+    post:
+      tags: [Skills]
+      summary: Upload Skill ZIP
+      description: Requires SKILL.md; Zip Slip / zip bomb protected; default max 50MB via StorageService.
+      operationId: skillsCreate
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                name: {type: string}
+                description: {type: string}
+                visibility: {type: string, enum: [public, private]}
+                file: {type: string, format: binary}
+      responses:
+        "201": {description: Created}
+        "422": {description: Missing SKILL.md}
+  /skills/{id}:
+    parameters: [{$ref: "#/components/parameters/ID"}]
+    get:
+      tags: [Skills]
+      summary: Get Skill metadata
+      operationId: skillsGet
+      responses: {"200": {description: OK}}
+    put:
+      tags: [Skills]
+      summary: Overwrite Skill package (no version history)
+      operationId: skillsOverwrite
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                name: {type: string}
+                description: {type: string}
+                visibility: {type: string, enum: [public, private]}
+                file: {type: string, format: binary}
+      responses: {"200": {description: Updated}}
+    delete:
+      tags: [Skills]
+      summary: Delete Skill
+      operationId: skillsDelete
+      responses: {"200": {description: Deleted}}
+  /skills/{id}/package:
+    parameters: [{$ref: "#/components/parameters/ID"}]
+    get:
+      tags: [Skills]
+      summary: Download Skill ZIP
+      description: JWT with `ai.skills:download` or PAT scope `skills:read`.
+      operationId: skillsDownload
+      responses:
+        "200":
+          description: ZIP bytes
+          content:
+            application/zip:
+              schema: {type: string, format: binary}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+  /tokens:
+    get:
+      tags: [Tokens]
+      summary: List personal access tokens (metadata only)
+      operationId: tokensList
+      responses: {"200": {description: OK}}
+    post:
+      tags: [Tokens]
+      summary: Create PAT
+      description: |
+        Plaintext token is returned **once** in the create response and never again.
+        Stored as hash. Scopes ⊆ {skills:read, agents:run}. Does not replace HTTPS/TLS.
+      operationId: tokensCreate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, scopes]
+              properties:
+                name: {type: string}
+                scopes:
+                  type: array
+                  items: {type: string, enum: ['skills:read', 'agents:run']}
+                expires_at: {type: string, format: date-time, nullable: true}
+      responses:
+        "201":
+          description: Created (includes plaintext once)
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data: {$ref: "#/components/schemas/PATCreateResponse"}
+  /tokens/{id}:
+    parameters: [{$ref: "#/components/parameters/ID"}]
+    delete:
+      tags: [Tokens]
+      summary: Revoke PAT
+      operationId: tokensRevoke
+      responses: {"200": {description: Revoked}}
 components:
   securitySchemes:
     bearerAuth:
       type: http
       scheme: bearer
-      bearerFormat: JWT
+      bearerFormat: "JWT or PAT"
+      description: "Authorization Bearer accepts JWT access tokens or personal access tokens (prefix br_pat_)."
   parameters:
     Id:
       name: id
@@ -2859,7 +3267,11 @@ components:
         cron_timezone: {type: string}
         max_artifacts: {type: integer}
         artifact_format: {type: string}
-        agent_trigger_event: {type: string}
+        agent_trigger_event:
+          type: string
+          description: Default artifact_ready; override distribution_finished or none
+          enum: [artifact_ready, distribution_finished, none]
+        agent_id: {type: integer, nullable: true, description: Optional agent bound for build-event trigger}
         deploy_targets:
           type: array
           items:
@@ -2893,7 +3305,8 @@ components:
         cron_timezone: {type: string}
         max_artifacts: {type: integer}
         artifact_format: {type: string}
-        agent_trigger_event: {type: string}
+        agent_trigger_event: {type: string, enum: [artifact_ready, distribution_finished, none]}
+        agent_id: {type: integer, nullable: true}
         deploy_targets:
           type: array
           items:
@@ -2922,7 +3335,8 @@ components:
         cron_timezone: {type: string}
         max_artifacts: {type: integer}
         artifact_format: {type: string}
-        agent_trigger_event: {type: string}
+        agent_trigger_event: {type: string, enum: [artifact_ready, distribution_finished, none]}
+        agent_id: {type: integer, nullable: true}
         deploy_targets:
           type: array
           items:
@@ -3476,3 +3890,127 @@ components:
         draft_lines: {type: integer}
         added_lines: {type: integer}
         removed_lines: {type: integer}
+    CliRuntimeDefinition:
+      type: object
+      properties:
+        id: {type: integer}
+        key: {type: string, enum: [claude_code, opencode, reasonix, codex]}
+        name: {type: string}
+        binary_name: {type: string}
+        description: {type: string}
+        install_status: {type: string}
+        installed_path: {type: string}
+        installed_version: {type: string}
+        healthy: {type: boolean}
+        risk_notice: {type: string}
+        api_base_env: {type: string}
+        default_args: {type: string}
+    CliDetectResult:
+      type: object
+      properties:
+        detected: {type: boolean}
+        output: {type: string}
+        path: {type: string}
+        version: {type: string}
+        healthy: {type: boolean}
+        risk_notice: {type: string}
+    CliInstallSourceInput:
+      type: object
+      required: [cli_key, name, base_url]
+      properties:
+        cli_key: {type: string}
+        name: {type: string}
+        base_url: {type: string}
+        priority: {type: integer}
+        enabled: {type: boolean}
+    AiAgentInput:
+      type: object
+      properties:
+        name: {type: string}
+        description: {type: string}
+        enabled: {type: boolean}
+        cli_key: {type: string}
+        system_prompt: {type: string}
+        skill_ids:
+          type: array
+          items: {type: integer}
+        repository_id: {type: integer, nullable: true}
+        timeout_sec: {type: integer}
+    AgentTriggerInput:
+      type: object
+      required: [type]
+      properties:
+        type: {type: string, enum: [manual, api, cron, build_event]}
+        enabled: {type: boolean}
+        cron_expression: {type: string}
+        cron_timezone: {type: string, description: IANA timezone}
+        build_job_id: {type: integer, nullable: true}
+        build_event: {type: string, enum: [artifact_ready, distribution_finished]}
+    AiAgent:
+      type: object
+      properties:
+        id: {type: integer}
+        name: {type: string}
+        description: {type: string}
+        enabled: {type: boolean}
+        cli_key: {type: string}
+        system_prompt: {type: string}
+        skill_ids:
+          type: array
+          items: {type: integer}
+        repository_id: {type: integer, nullable: true}
+        timeout_sec: {type: integer}
+        created_by: {type: integer}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    AgentRun:
+      type: object
+      properties:
+        id: {type: integer}
+        agent_id: {type: integer}
+        trigger_type: {type: string}
+        status: {type: string}
+        build_run_id: {type: integer, nullable: true}
+        project_id: {type: integer, nullable: true}
+        doc_node_id: {type: integer, nullable: true}
+        log_path: {type: string}
+        output_text: {type: string}
+        error_message: {type: string}
+        duration_ms: {type: integer}
+        created_at: {type: string, format: date-time}
+    SkillPackage:
+      type: object
+      properties:
+        id: {type: integer}
+        name: {type: string}
+        description: {type: string}
+        visibility: {type: string, enum: [public, private]}
+        storage_object_id: {type: integer}
+        package_digest: {type: string}
+        size_bytes: {type: integer}
+        created_by: {type: integer}
+        updated_by: {type: integer}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    PATCreateResponse:
+      type: object
+      properties:
+        token:
+          type: string
+          description: Plaintext shown only once; never logged or re-read
+        metadata:
+          $ref: "#/components/schemas/PersonalAccessToken"
+    PersonalAccessToken:
+      type: object
+      properties:
+        id: {type: integer}
+        user_id: {type: integer}
+        name: {type: string}
+        token_prefix: {type: string}
+        scopes:
+          type: array
+          items: {type: string, enum: ['skills:read', 'agents:run']}
+        expires_at: {type: string, format: date-time, nullable: true}
+        revoked_at: {type: string, format: date-time, nullable: true}
+        last_used_at: {type: string, format: date-time, nullable: true}
+        created_at: {type: string, format: date-time}

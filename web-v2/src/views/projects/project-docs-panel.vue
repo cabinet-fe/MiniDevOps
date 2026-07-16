@@ -2,9 +2,11 @@
 import { computed, onMounted, reactive, ref, watch } from "vue";
 import { message } from "@veltra/desktop";
 
+import { listAgents } from "@/api/ai";
 import {
   createDocNode,
   deleteDocNode,
+  generateDocs,
   getDocDiff,
   getDocNode,
   importDocsZIP,
@@ -36,6 +38,9 @@ const moveDialogOpen = ref(false);
 const creatingKind = ref<"dir" | "doc">("doc");
 const nodeForm = reactive({ name: "" });
 const moveForm = reactive({ parent_id: undefined as number | undefined, sort_order: 0 });
+const generateAgentID = ref<number>();
+const agentOptions = ref<{ label: string; value: number }[]>([]);
+const generating = ref(false);
 
 const canEditProjectContent = computed(
   () =>
@@ -55,6 +60,9 @@ const canUpdate = computed(
 );
 const canDelete = computed(
   () => hasPermission("project.docs:delete") && canAdminProjectContent.value,
+);
+const canGenerate = computed(
+  () => hasPermission("project.docs:execute") && canEditProjectContent.value,
 );
 // Markdown is intentionally rendered as interpolated text below, never v-html.
 // This keeps raw HTML and javascript: links inert until a vetted renderer exists.
@@ -130,6 +138,26 @@ async function saveDraft() {
     message.success("草稿已保存");
   } catch (error) {
     message.error(error instanceof Error ? error.message : "草稿保存失败");
+  }
+}
+
+async function runGenerate() {
+  if (!selected.value || selected.value.kind !== "doc") return;
+  if (!generateAgentID.value) {
+    message.error("请选择智能体");
+    return;
+  }
+  generating.value = true;
+  try {
+    const result = await generateDocs(props.project.id, {
+      agent_id: generateAgentID.value,
+      node_id: selected.value.id,
+    });
+    message.success(`已创建 AgentRun #${result.agent_run_id}；成功后仅写入草稿，请人工发布`);
+  } catch (error) {
+    message.error(error instanceof Error ? error.message : "生成失败");
+  } finally {
+    generating.value = false;
   }
 }
 
@@ -225,7 +253,16 @@ watch(
   { immediate: true },
 );
 
-onMounted(() => void loadTree());
+onMounted(() => {
+  void loadTree();
+  void listAgents({ page: 1, page_size: 100 })
+    .then((page) => {
+      agentOptions.value = (page.items ?? []).map((a) => ({ label: a.name, value: a.id }));
+    })
+    .catch(() => {
+      /* AI menu may be unavailable */
+    });
+});
 </script>
 
 <template>
@@ -279,8 +316,19 @@ onMounted(() => void loadTree());
             <u-button v-if="canUpdate && selected.draft_updated_at" type="success" @click="publish">
               发布草稿
             </u-button>
-            <u-button disabled title="文档生成依赖 P4 AI 域">AI 生成（P4）</u-button>
+            <template v-if="canGenerate">
+              <u-select
+                v-model="generateAgentID"
+                :options="agentOptions"
+                placeholder="选择智能体"
+                style="width: 160px"
+              />
+              <u-button :loading="generating" @click="runGenerate">AI 生成草稿</u-button>
+            </template>
           </div>
+          <p v-if="selected.draft_source_run_id" class="gen-hint">
+            草稿来源 AgentRun #{{ selected.draft_source_run_id }}（需人工发布）
+          </p>
           <u-textarea
             v-if="canUpdate"
             v-model="draftContent"
@@ -375,6 +423,11 @@ onMounted(() => void loadTree());
 .doc-actions {
   flex-wrap: wrap;
   gap: 8px;
+}
+.gen-hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--u-color-text-secondary, #666);
 }
 .markdown-preview {
   max-height: 260px;

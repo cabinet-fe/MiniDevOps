@@ -322,6 +322,13 @@ export async function getDocDiff(projectID: number, nodeID: number): Promise<Api
   return body;
 }
 
-export async function generateDocs(projectID: number): Promise<void> {
-  await http.post(`/projects/${projectID}/docs/generate`, {});
+export async function generateDocs(
+  projectID: number,
+  input: { agent_id: number; node_id?: number },
+): Promise<{ agent_run_id: number; node_id: number }> {
+  const { body } = await http.post<{ agent_run_id: number; node_id: number }>(
+    `/projects/${projectID}/docs/generate`,
+    input,
+  );
+  return body;
 }

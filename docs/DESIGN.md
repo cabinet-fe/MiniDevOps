@@ -33,12 +33,12 @@
 
 | # | 主题 | 决策 |
 | --- | --- | --- |
-| D12 | 命令执行 | 构建与 AI CLI **同 Bedrock 进程 UID** 直接运行；不做 OS/容器隔离 |
+| D12 | 命令执行 | 构建与 AI CLI **同 Bedrock 进程 UID** 直接运行；**无 OS/容器沙箱**；产品不得声称沙箱安全 |
 | D13 | Web 会话 | 允许 HTTP；`access_token` / `refresh_token` 存 **localStorage** + Bearer |
 | D14 | 凭证授权时点 | **绑定/修改**时校验 `credential:use`；之后执行仅需任务 `execute` |
 | D15 | Webhook | 优先平台签名头 + delivery ID 去重；保留 URL secret 兼容；日志脱敏 |
 | D16 | Cron | 每任务 IANA 时区；禁止同任务重叠；停机错过的触发**跳过** |
-| D17 | PAT scope | 固定白名单：`skills:read`、`agents:run`；哈希存储、一次性回显、可过期/吊销 |
+| D17 | PAT scope | 固定白名单：`skills:read`、`agents:run`；哈希存储、一次性回显、可过期/吊销；**不替代 HTTPS/TLS**；供 Skill 安装器与 `agents:run` API 对接 |
 | D18 | 重启恢复 | `queued` 恢复调度；`running` → `interrupted`（可人工重试）；不做断点续跑 |
 | D19 | 平台支持 | 生产：Linux amd64/arm64；macOS 仅开发；部署目标继续支持 Linux/Windows |
 | D20 | 非功能验收 | **仅功能 Gate**；不设容量/延迟 SLO |
@@ -272,7 +272,7 @@ flowchart TB
 | AgentRun | pending/queued/running/success/failed/cancelled/interrupted | queued 恢复；running→interrupted；重试建议**新 Run** |
 | ToolchainInstallJob / CliInstallJob | 同上 | running→interrupted/failed，保留日志；人工重试新任务 |
 
-构建事件默认：`artifact_ready`（归档成功且制品路径有效）。Job 配置可覆盖为 `distribution_finished`（本轮分发流程结束，无论成功失败）。Agent 失败**不**修改 BuildRun.status。
+构建事件默认：`artifact_ready`（归档成功且制品路径有效）。BuildJob.`agent_trigger_event` 可覆盖为 `distribution_finished`（本轮分发流程结束，无论成功失败）或 `none`。可选 `agent_id` 绑定默认智能体；亦可在 AgentTrigger 中按 Job 过滤。事件**异步**创建独立 AgentRun；Agent 失败**不**修改 BuildRun.status。流水线**禁止**内嵌同步 agent 阶段。
 
 ### 5.4 文档节点双态
 

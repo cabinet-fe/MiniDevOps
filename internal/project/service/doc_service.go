@@ -407,11 +407,64 @@ func (s *ProjectService) GetDocDiff(actor AccessContext, id uint) (*DocDiff, err
 	}, nil
 }
 
-func (s *ProjectService) GenerateDocs(actor AccessContext, projectID uint) error {
+type GenerateDocsInput struct {
+	AgentID  uint  `json:"agent_id"`
+	NodeID   *uint `json:"node_id"`
+}
+
+type GenerateDocsResult struct {
+	AgentRunID uint `json:"agent_run_id"`
+	NodeID     uint `json:"node_id"`
+}
+
+func (s *ProjectService) GenerateDocs(actor AccessContext, projectID uint, input GenerateDocsInput) (*GenerateDocsResult, error) {
 	if _, err := s.acl.Require(projectID, actor, "project.docs:execute", capDocEdit); err != nil {
+		return nil, err
+	}
+	if s.docsAI == nil {
+		return nil, ErrAIDomainUnavailable
+	}
+	if input.AgentID == 0 {
+		return nil, errors.New("agent_id 不能为空")
+	}
+	var nodeID uint
+	if input.NodeID != nil {
+		node, err := s.repo.FindDocNode(*input.NodeID)
+		if err != nil {
+			return nil, NewNotFound("文档节点不存在")
+		}
+		if node.ProjectID != projectID || node.Kind != projectmodel.DocNodeDocument {
+			return nil, errors.New("node_id 必须指向本项目的文档节点")
+		}
+		nodeID = node.ID
+	} else {
+		// Create an empty draft document to receive generated content.
+		node, err := s.createImportedDocument(projectID, nil, "AI Generated Draft", "", actor.UserID)
+		if err != nil {
+			return nil, err
+		}
+		nodeID = node.ID
+	}
+	runID, err := s.docsAI.StartDocsGenerate(actor.UserID, projectID, nodeID, input.AgentID)
+	if err != nil {
+		return nil, err
+	}
+	return &GenerateDocsResult{AgentRunID: runID, NodeID: nodeID}, nil
+}
+
+// WriteDraftFromAgentRun writes only draft fields after a successful AgentRun (never publishes).
+func (s *ProjectService) WriteDraftFromAgentRun(projectID, nodeID, runID uint, content string, userID uint) error {
+	node, err := s.repo.FindDocNode(nodeID)
+	if err != nil {
 		return err
 	}
-	return ErrAIDomainUnavailable
+	if node.ProjectID != projectID {
+		return errors.New("文档节点不属于当前项目")
+	}
+	s.writeDraft(node, content, userID)
+	rid := runID
+	node.DraftSourceRunID = &rid
+	return s.repo.UpdateDocNode(node)
 }
 
 func (s *ProjectService) validateDocParent(projectID uint, parentID *uint) error {
@@ -439,7 +492,6 @@ func (s *ProjectService) writeDraft(node *projectmodel.ApiDocNode, content strin
 	node.DraftContent = content
 	node.DraftBaseVersion = node.ContentVersion
 	node.DraftUpdatedAt = &now
-	node.DraftSourceRunID = nil
 	node.UpdatedBy = userID
 }
 

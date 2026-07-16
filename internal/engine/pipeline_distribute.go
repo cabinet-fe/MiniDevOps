@@ -108,6 +108,13 @@ func (p *Pipeline) runDistributions(
 		"distribution_summary": summary,
 	})
 	writeLine(fmt.Sprintf("=== Distribution phase finished (%s) ===", summary))
+	if p.agentHook != nil {
+		job, err := p.jobs.FindByID(run.BuildJobID)
+		if err == nil {
+			// Job may override default artifact_ready to distribution_finished.
+			p.agentHook.OnBuildEvent("distribution_finished", job, run)
+		}
+	}
 }
 
 func (p *Pipeline) recordAttemptCancelled(run *model.BuildRun, batchNo int, t *model.DeployTarget) {

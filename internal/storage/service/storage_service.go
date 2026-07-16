@@ -19,6 +19,7 @@ import (
 const (
 	DefaultAttachmentMaxBytes int64 = 20 * 1024 * 1024
 	DefaultDocImportMaxBytes  int64 = 100 * 1024 * 1024
+	DefaultSkillZIPMaxBytes   int64 = 50 * 1024 * 1024
 )
 
 var (
@@ -29,6 +30,7 @@ var (
 type Limits struct {
 	AttachmentMaxBytes int64
 	DocImportMaxBytes  int64
+	SkillZIPMaxBytes   int64
 }
 
 func (l Limits) normalized() Limits {
@@ -37,6 +39,9 @@ func (l Limits) normalized() Limits {
 	}
 	if l.DocImportMaxBytes <= 0 {
 		l.DocImportMaxBytes = DefaultDocImportMaxBytes
+	}
+	if l.SkillZIPMaxBytes <= 0 {
+		l.SkillZIPMaxBytes = DefaultSkillZIPMaxBytes
 	}
 	return l
 }
@@ -69,6 +74,8 @@ func (s *StorageService) MaxBytes(kind string) int64 {
 		return s.limits.AttachmentMaxBytes
 	case model.KindDocImport:
 		return s.limits.DocImportMaxBytes
+	case model.KindSkillZIP:
+		return s.limits.SkillZIPMaxBytes
 	default:
 		return s.limits.DocImportMaxBytes
 	}
