@@ -1,38 +1,43 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref, useTemplateRef } from "vue";
+import { onMounted, reactive, ref } from "vue";
 import { o } from "@cat-kit/core";
 import { message } from "@veltra/desktop";
+import { Setting } from "@veltra/icons/normal";
 
 import {
   createCLISource,
   deleteCLISource,
   detectCLI,
-  enqueueCLI,
+  executeCLI,
   listCLIs,
   listCLISources,
   updateCLISource,
 } from "@/api/ai";
-import type { CliInstallJob, CliInstallSource, CliRuntimeDefinition } from "@/api/types";
+import type { CliExecuteResult, CliInstallSource, CliRuntimeDefinition } from "@/api/types";
 import FormDialog from "@/components/form-dialog";
-import ProTable, { defineProTableColumns } from "@/components/pro-table";
 import { usePermission } from "@/composables/use-permission";
-import { INSTALL_OP_TAG, JOB_STATUS_TAG, tagType, type TagType } from "@/lib/tag";
 
-const INSTALL_STATUS_TAG: Record<string, TagType> = {
-  installed: "success",
-  missing: "warning",
-  unknown: undefined,
+type DetectState = {
+  status: "loading" | "detected" | "missing" | "error";
+  version?: string;
 };
 
+type Operation = "install" | "upgrade" | "uninstall";
+
 const { hasPermission } = usePermission();
+
+const loading = ref(false);
 const items = ref<CliRuntimeDefinition[]>([]);
 const riskNotice = ref("");
-const loading = ref(false);
-const jobList = useTemplateRef("jobList");
-const jobQuery = reactive({ cli_key: "", status: "" });
+const detectStates = ref<Record<string, DetectState>>({});
+const pendingOps = ref<Record<string, Operation | undefined>>({});
 
-const sourceList = ref<CliInstallSource[]>([]);
-const sourceLoading = ref(false);
+const sourcesDialogOpen = ref(false);
+const sourcesCliKey = ref("");
+const sourcesCliName = ref("");
+const sourcesList = ref<CliInstallSource[]>([]);
+const sourcesLoading = ref(false);
+
 const sourceDialogOpen = ref(false);
 const editingSource = ref<CliInstallSource | null>(null);
 const sourceForm = reactive({
@@ -43,39 +48,39 @@ const sourceForm = reactive({
   enabled: true,
 });
 
-const cliKeyOptions = [
-  { label: "Claude Code", value: "claude_code" },
-  { label: "OpenCode", value: "opencode" },
-  { label: "Reasonix", value: "reasonix" },
-  { label: "Codex", value: "codex" },
-];
+const failureDialogOpen = ref(false);
+const failureTitle = ref("");
+const failureDetail = ref("");
 
-const columns = defineProTableColumns([
-  { key: "name", name: "名称" },
-  { key: "key", name: "Key", width: 120 },
-  { key: "binary_name", name: "二进制", width: 110 },
-  { key: "installed_version", name: "版本" },
-  { key: "install_status", name: "状态", width: 100 },
-  { key: "healthy", name: "健康", width: 80 },
-  { key: "action", name: "操作", width: 280, align: "center", fixed: "right" },
-]);
+function showError(error: unknown) {
+  message.error(error instanceof Error ? error.message : "操作失败");
+}
 
-const sourceColumns = defineProTableColumns([
-  { key: "cli_key", name: "CLI", width: 120 },
-  { key: "name", name: "名称" },
-  { key: "base_url", name: "地址" },
-  { key: "priority", name: "优先级", width: 90 },
-  { key: "enabled", name: "启用", width: 80 },
-  { key: "action", name: "操作", width: 140, align: "center", fixed: "right" },
-]);
+function versionTagType(state?: DetectState) {
+  if (!state) return "info";
+  if (state.status === "detected") return "success";
+  if (state.status === "missing") return "warning";
+  if (state.status === "error") return "danger";
+  return "info";
+}
 
-const jobColumns = defineProTableColumns([
-  { key: "id", name: "ID", width: 70 },
-  { key: "cli_key", name: "CLI", width: 120 },
-  { key: "operation", name: "操作", width: 100 },
-  { key: "status", name: "状态", width: 100 },
-  { key: "created_at", name: "创建时间" },
-]);
+function formatVersion(version?: string) {
+  const trimmed = version?.trim();
+  if (!trimmed || trimmed.includes("/") || trimmed.includes("\\")) return "";
+  return trimmed;
+}
+
+function versionTagLabel(state?: DetectState) {
+  if (!state || state.status === "loading") return "检测中…";
+  if (state.status === "detected") return formatVersion(state.version) || "已安装";
+  if (state.status === "missing") return "未安装";
+  return "检测失败";
+}
+
+function formatFailureDetail(result: CliExecuteResult) {
+  const parts = [result.output?.trim(), result.error?.trim()].filter(Boolean);
+  return parts.join("\n\n") || "无输出";
+}
 
 async function reload() {
   loading.value = true;
@@ -83,54 +88,115 @@ async function reload() {
     const data = await listCLIs();
     items.value = data.items ?? [];
     riskNotice.value = data.risk_notice ?? "";
+    void detectAll(items.value);
   } catch (error) {
-    message.error(error instanceof Error ? error.message : "加载失败");
+    showError(error);
   } finally {
     loading.value = false;
   }
 }
 
-async function loadSources() {
-  sourceLoading.value = true;
+async function detectAll(clis: CliRuntimeDefinition[]) {
+  await Promise.all(clis.map((item) => runDetect(item, { silent: true })));
+}
+
+async function runDetect(item: CliRuntimeDefinition, options?: { silent?: boolean }) {
+  detectStates.value = {
+    ...detectStates.value,
+    [item.key]: { status: "loading", version: detectStates.value[item.key]?.version },
+  };
   try {
-    sourceList.value = await listCLISources();
+    const result = await detectCLI(item.key);
+    detectStates.value = {
+      ...detectStates.value,
+      [item.key]: result.detected
+        ? { status: "detected", version: formatVersion(result.version) || undefined }
+        : { status: "missing" },
+    };
+    if (!options?.silent) {
+      message[result.detected ? "success" : "warning"](
+        result.detected ? `已检测到 ${item.name}` : `${item.name} 未安装`,
+      );
+    }
+  } catch {
+    detectStates.value = { ...detectStates.value, [item.key]: { status: "error" } };
+    if (!options?.silent) {
+      message.error("检测失败");
+    }
+  }
+}
+
+function isOpPending(key: string, op: Operation) {
+  return pendingOps.value[key] === op;
+}
+
+async function runOperation(item: CliRuntimeDefinition, operation: Operation) {
+  if (pendingOps.value[item.key]) return;
+
+  let version = "";
+  if (operation !== "uninstall") {
+    const requested = window.prompt(`输入 ${item.name} 的目标版本（可留空）`);
+    if (requested === null) return;
+    version = requested;
+  }
+  if (operation === "uninstall" && !window.confirm(`确认卸载 ${item.name}？`)) return;
+
+  pendingOps.value = { ...pendingOps.value, [item.key]: operation };
+  try {
+    const result = await executeCLI(item.key, operation, version);
+    if (result.success) {
+      message.success(`${item.name} ${operation} 完成`);
+      await runDetect(item, { silent: true });
+      return;
+    }
+    failureTitle.value = `${item.name} · ${operation} 失败`;
+    failureDetail.value = formatFailureDetail(result);
+    failureDialogOpen.value = true;
   } catch (error) {
-    message.error(error instanceof Error ? error.message : "加载安装源失败");
+    showError(error);
   } finally {
-    sourceLoading.value = false;
+    const next = { ...pendingOps.value };
+    delete next[item.key];
+    pendingOps.value = next;
   }
 }
 
-async function onDetect(row: CliRuntimeDefinition) {
+async function openSourcesManager(item: CliRuntimeDefinition) {
+  sourcesCliKey.value = item.key;
+  sourcesCliName.value = item.name;
+  sourcesDialogOpen.value = true;
+  sourcesLoading.value = true;
   try {
-    const result = await detectCLI(row.key);
-    message.info(
-      result.detected ? `已检测到: ${result.version || result.path}` : result.output || "未安装",
-    );
-    await reload();
+    sourcesList.value = await listCLISources(item.key);
   } catch (error) {
-    message.error(error instanceof Error ? error.message : "检测失败");
+    showError(error);
+    sourcesList.value = [];
+  } finally {
+    sourcesLoading.value = false;
   }
 }
 
-async function onOp(row: CliRuntimeDefinition, op: "install" | "upgrade" | "uninstall") {
+async function refreshSources() {
+  if (!sourcesCliKey.value) return;
+  sourcesLoading.value = true;
   try {
-    await enqueueCLI(row.key, op);
-    message.success("已提交任务（同 UID 执行，无沙箱）");
-    jobList.value?.reload();
+    sourcesList.value = await listCLISources(sourcesCliKey.value);
   } catch (error) {
-    message.error(error instanceof Error ? error.message : "提交失败");
+    showError(error);
+  } finally {
+    sourcesLoading.value = false;
   }
 }
 
 function openCreateSource() {
   editingSource.value = null;
+  sourceForm.cli_key = sourcesCliKey.value;
   sourceDialogOpen.value = true;
 }
 
-function openEditSource(item: CliInstallSource) {
-  editingSource.value = item;
-  o(sourceForm).extend(item);
+function openEditSource(source: CliInstallSource) {
+  editingSource.value = source;
+  o(sourceForm).extend(source);
   sourceDialogOpen.value = true;
 }
 
@@ -140,165 +206,157 @@ async function saveSource() {
       await updateCLISource(editingSource.value.id, sourceForm);
       message.success("安装源已更新");
     } else {
-      await createCLISource(sourceForm);
+      await createCLISource({ ...sourceForm, cli_key: sourcesCliKey.value });
       message.success("安装源已创建");
     }
     sourceDialogOpen.value = false;
-    await loadSources();
+    await refreshSources();
   } catch (error) {
-    message.error(error instanceof Error ? error.message : "保存失败");
+    showError(error);
   }
 }
 
-async function removeSource(item: CliInstallSource) {
-  if (!window.confirm(`删除安装源 ${item.name}？`)) return;
+async function removeSource(source: CliInstallSource) {
+  if (!window.confirm(`删除安装源 ${source.name}？`)) return;
   try {
-    await deleteCLISource(item.id);
-    message.success("已删除");
-    await loadSources();
+    await deleteCLISource(source.id);
+    await refreshSources();
   } catch (error) {
-    message.error(error instanceof Error ? error.message : "删除失败");
+    showError(error);
   }
 }
 
 onMounted(() => {
   void reload();
-  void loadSources();
 });
 </script>
 
 <template>
-  <div class="page">
-    <header class="page-head">
-      <h2>AI CLI</h2>
-      <p class="risk">{{ riskNotice || "AI CLI 以 Bedrock 同 UID 执行，无 OS/容器沙箱。" }}</p>
-    </header>
-
-    <u-table :columns="columns" :data="items" v-loading="loading">
-      <template #column:install_status="{ rowData }">
-        <u-tag
-          size="small"
-          :type="tagType((rowData as CliRuntimeDefinition).install_status, INSTALL_STATUS_TAG)"
-        >
-          {{ (rowData as CliRuntimeDefinition).install_status || "—" }}
-        </u-tag>
-      </template>
-      <template #column:healthy="{ rowData }">
-        <u-tag
-          size="small"
-          :type="(rowData as CliRuntimeDefinition).healthy ? 'success' : 'danger'"
-        >
-          {{ (rowData as CliRuntimeDefinition).healthy ? "健康" : "异常" }}
-        </u-tag>
-      </template>
-      <template #column:action="{ rowData }">
-        <u-action-group :max="4">
-          <u-action
-            v-if="hasPermission('ai.clis:execute')"
-            @run="onDetect(rowData as CliRuntimeDefinition)"
-          >
-            检测
-          </u-action>
-          <u-action
-            v-if="hasPermission('ai.clis:execute')"
-            @run="onOp(rowData as CliRuntimeDefinition, 'install')"
-          >
-            安装
-          </u-action>
-          <u-action
-            v-if="hasPermission('ai.clis:execute')"
-            @run="onOp(rowData as CliRuntimeDefinition, 'upgrade')"
-          >
-            升级
-          </u-action>
-          <u-action
-            v-if="hasPermission('ai.clis:execute')"
-            type="danger"
-            @run="onOp(rowData as CliRuntimeDefinition, 'uninstall')"
-          >
-            卸载
-          </u-action>
-        </u-action-group>
-      </template>
-    </u-table>
-
-    <section class="section">
-      <div class="section-head">
-        <h3>安装源</h3>
-        <u-button v-if="hasPermission('ai.clis:create')" type="primary" @click="openCreateSource">
-          新建安装源
-        </u-button>
+  <div v-loading="loading" class="page">
+    <div class="page-head">
+      <div>
+        <h2>AI CLI</h2>
+        <p class="risk">
+          {{ riskNotice || "AI CLI 以 Bedrock 同 UID 执行，无 OS/容器沙箱。" }}
+        </p>
+        <p class="hint">进入页面时自动检测版本；安装源通过各 CLI 的设置管理。</p>
       </div>
-      <div v-loading="sourceLoading" class="source-table">
-        <u-table :columns="sourceColumns" :data="sourceList">
-          <template #column:enabled="{ rowData }">
-            <u-tag
+    </div>
+
+    <div class="cards">
+      <article v-for="item in items" :key="item.key" class="card">
+        <header class="card-head">
+          <div class="card-title">
+            <div class="title-row">
+              <h3>{{ item.name }}</h3>
+              <u-tag size="small" :type="versionTagType(detectStates[item.key])">
+                {{ versionTagLabel(detectStates[item.key]) }}
+              </u-tag>
+            </div>
+            <p class="meta">
+              <span>{{ item.key }}</span>
+              <span>{{ item.binary_name }}</span>
+            </p>
+            <p v-if="item.description" class="desc">{{ item.description }}</p>
+          </div>
+          <div class="actions">
+            <u-button
+              v-if="hasPermission('ai.clis:view')"
               size="small"
-              :type="(rowData as CliInstallSource).enabled ? 'success' : undefined"
+              text
+              :icon="Setting"
+              @click="openSourcesManager(item)"
             >
-              {{ (rowData as CliInstallSource).enabled ? "启用" : "停用" }}
-            </u-tag>
-          </template>
-          <template #column:action="{ rowData }">
-            <u-action-group :max="2">
+              设置
+            </u-button>
+            <u-action-group v-if="hasPermission('ai.clis:execute')" :max="4">
+              <u-action :disabled="!!pendingOps[item.key]" @run="runDetect(item)">检测</u-action>
               <u-action
-                v-if="hasPermission('ai.clis:update')"
-                @run="openEditSource(rowData as CliInstallSource)"
+                :disabled="!!pendingOps[item.key]"
+                :loading="isOpPending(item.key, 'install')"
+                @run="runOperation(item, 'install')"
               >
-                编辑
+                安装
               </u-action>
               <u-action
-                v-if="hasPermission('ai.clis:delete')"
-                type="danger"
-                @run="removeSource(rowData as CliInstallSource)"
+                :disabled="!!pendingOps[item.key]"
+                :loading="isOpPending(item.key, 'upgrade')"
+                @run="runOperation(item, 'upgrade')"
               >
-                删除
+                升级
+              </u-action>
+              <u-action
+                :disabled="!!pendingOps[item.key]"
+                :loading="isOpPending(item.key, 'uninstall')"
+                type="danger"
+                @run="runOperation(item, 'uninstall')"
+              >
+                卸载
               </u-action>
             </u-action-group>
-          </template>
-        </u-table>
-      </div>
-    </section>
+          </div>
+        </header>
+      </article>
+    </div>
 
-    <h3 class="section-title">安装任务</h3>
-    <ProTable
-      ref="jobList"
-      url="/ai/cli-install-jobs"
-      mode="pagination"
-      :columns="jobColumns"
-      v-model:query="jobQuery"
+    <u-dialog
+      v-model="sourcesDialogOpen"
+      :title="sourcesCliName ? `${sourcesCliName} · 安装源管理` : '安装源管理'"
+      style="width: 640px"
     >
-      <template #filters>
-        <u-input v-model="jobQuery.cli_key" placeholder="cli_key" clearable />
-        <u-input v-model="jobQuery.status" placeholder="status" clearable />
+      <div v-loading="sourcesLoading" class="sources-dialog">
+        <div class="block-head">
+          <h4>安装源列表</h4>
+          <u-button
+            v-if="hasPermission('ai.clis:create')"
+            size="small"
+            text
+            type="primary"
+            @click="openCreateSource"
+          >
+            添加
+          </u-button>
+        </div>
+        <ul v-if="sourcesList.length" class="source-list">
+          <li v-for="source in sourcesList" :key="source.id">
+            <div class="source-info">
+              <strong>{{ source.name }}</strong>
+              <span class="source-url">{{ source.base_url }}</span>
+              <span class="source-meta">
+                优先级 {{ source.priority }} · {{ source.enabled ? "启用" : "停用" }}
+              </span>
+            </div>
+            <div class="actions">
+              <u-action-group :max="2">
+                <u-action v-if="hasPermission('ai.clis:update')" @run="openEditSource(source)">
+                  编辑
+                </u-action>
+                <u-action
+                  v-if="hasPermission('ai.clis:delete')"
+                  type="danger"
+                  @run="removeSource(source)"
+                >
+                  删除
+                </u-action>
+              </u-action-group>
+            </div>
+          </li>
+        </ul>
+        <p v-else class="empty">尚未配置安装源</p>
+      </div>
+      <template #footer="{ close }">
+        <u-button type="primary" @click="close()">关闭</u-button>
       </template>
-      <template #column:operation="{ rowData }">
-        <u-tag size="small" :type="tagType((rowData as CliInstallJob).operation, INSTALL_OP_TAG)">
-          {{ (rowData as CliInstallJob).operation }}
-        </u-tag>
-      </template>
-      <template #column:status="{ rowData }">
-        <u-tag size="small" :type="tagType((rowData as CliInstallJob).status, JOB_STATUS_TAG)">
-          {{ (rowData as CliInstallJob).status }}
-        </u-tag>
-      </template>
-    </ProTable>
+    </u-dialog>
 
     <FormDialog
       v-model="sourceDialogOpen"
-      :title="editingSource ? '编辑安装源' : '新建安装源'"
+      :title="editingSource ? '编辑安装源' : '添加安装源'"
       :model="sourceForm"
       label-width="100px"
       style="width: 560px"
       @submit="saveSource"
     >
-      <u-select
-        label="CLI"
-        field="cli_key"
-        :options="cliKeyOptions"
-        :rules="{ required: '必填' }"
-        :disabled="!!editingSource"
-      />
       <u-input label="名称" field="name" :rules="{ required: '必填' }" />
       <u-input label="地址" field="base_url" :rules="{ required: '必填' }" />
       <u-input label="优先级" field="priority" type="number" />
@@ -311,6 +369,13 @@ onMounted(() => {
         ]"
       />
     </FormDialog>
+
+    <u-dialog v-model="failureDialogOpen" :title="failureTitle" style="width: 760px">
+      <pre class="failure-log">{{ failureDetail }}</pre>
+      <template #footer="{ close }">
+        <u-button type="primary" @click="close()">关闭</u-button>
+      </template>
+    </u-dialog>
   </div>
 </template>
 
@@ -321,29 +386,132 @@ onMounted(() => {
   gap: 16px;
 }
 .page-head h2 {
-  margin: 0 0 8px;
+  margin: 0;
+  font-size: 18px;
 }
 .risk {
-  margin: 0;
+  margin: 6px 0 0;
   color: var(--u-color-warning, #b45309);
   font-size: 13px;
+  line-height: 1.5;
 }
-.section {
+.hint {
+  margin: 4px 0 0;
+  color: #6b7280;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));
+  gap: 16px;
+  align-items: start;
+}
+.card {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  background: #fff;
 }
-.section-head {
+.card-head {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+.title-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.card-title h3 {
+  margin: 0;
+  font-size: 16px;
+  line-height: 1.4;
+}
+.actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+.meta,
+.desc,
+.empty,
+.source-url,
+.source-meta {
+  margin: 4px 0 0;
+  color: #6b7280;
+  font-size: 13px;
+  line-height: 1.4;
+}
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.block-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
+  gap: 8px;
 }
-.section-head h3,
-.section-title {
-  margin: 8px 0 0;
+.block-head h4 {
+  margin: 0;
+  font-size: 14px;
 }
-.source-table {
-  min-height: 100px;
+.sources-dialog {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 120px;
+}
+.source-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.source-list li {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+  padding: 10px 0;
+  border-bottom: 1px solid #f3f4f6;
+}
+.source-list li:last-child {
+  border-bottom: none;
+}
+.source-info {
+  min-width: 0;
+  flex: 1;
+}
+.source-info strong {
+  display: block;
+  font-size: 13px;
+}
+.source-url {
+  display: block;
+  word-break: break-all;
+}
+.failure-log {
+  max-height: 55vh;
+  margin: 0;
+  padding: 12px;
+  overflow: auto;
+  border-radius: 6px;
+  color: #e5e7eb;
+  background: #111827;
+  white-space: pre-wrap;
 }
 </style>

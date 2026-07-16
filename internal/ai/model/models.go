@@ -80,27 +80,6 @@ type CliInstallSource struct {
 
 func (CliInstallSource) TableName() string { return "cli_install_sources" }
 
-// CliInstallJob is an async install/upgrade/uninstall task.
-type CliInstallJob struct {
-	ID               uint                 `json:"id" gorm:"primaryKey"`
-	CliKey           string               `json:"cli_key" gorm:"size:40;not null;index"`
-	Operation        string               `json:"operation" gorm:"size:20;not null"`
-	RequestedVersion string               `json:"requested_version" gorm:"size:100"`
-	Status           string               `json:"status" gorm:"size:20;not null;default:queued;index"`
-	SourceID         *uint                `json:"source_id" gorm:"index"`
-	CommandSnapshot  string               `json:"command_snapshot" gorm:"type:text"`
-	LogText          string               `json:"-" gorm:"type:text"`
-	ErrorMessage     string               `json:"error_message" gorm:"type:text"`
-	CreatedBy        uint                 `json:"created_by" gorm:"index"`
-	StartedAt        *time.Time           `json:"started_at"`
-	FinishedAt       *time.Time           `json:"finished_at"`
-	CreatedAt        time.Time            `json:"created_at"`
-	Cli              *CliRuntimeDefinition `json:"cli,omitempty" gorm:"foreignKey:CliKey;references:Key"`
-	Source           *CliInstallSource    `json:"source,omitempty" gorm:"foreignKey:SourceID"`
-}
-
-func (CliInstallJob) TableName() string { return "cli_install_jobs" }
-
 // AiAgent is a configured agent bound to one CLI and optional skills/repo.
 type AiAgent struct {
 	ID           uint      `json:"id" gorm:"primaryKey"`

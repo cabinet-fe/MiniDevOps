@@ -71,63 +71,6 @@ func (r *AIRepository) DeleteSource(id uint) error {
 	return r.db.Delete(&model.CliInstallSource{}, id).Error
 }
 
-func (r *AIRepository) CreateInstallJob(job *model.CliInstallJob) error {
-	return r.db.Create(job).Error
-}
-
-func (r *AIRepository) UpdateInstallJob(job *model.CliInstallJob) error {
-	return r.db.Save(job).Error
-}
-
-func (r *AIRepository) FindInstallJob(id uint) (*model.CliInstallJob, error) {
-	var job model.CliInstallJob
-	if err := r.db.First(&job, id).Error; err != nil {
-		return nil, err
-	}
-	return &job, nil
-}
-
-func (r *AIRepository) ListInstallJobs(page, pageSize int, cliKey, status string) ([]model.CliInstallJob, int64, error) {
-	q := r.db.Model(&model.CliInstallJob{})
-	if cliKey != "" {
-		q = q.Where("cli_key = ?", cliKey)
-	}
-	if status != "" {
-		q = q.Where("status = ?", status)
-	}
-	var total int64
-	if err := q.Count(&total).Error; err != nil {
-		return nil, 0, err
-	}
-	if page < 1 {
-		page = 1
-	}
-	if pageSize < 1 {
-		pageSize = 20
-	}
-	var items []model.CliInstallJob
-	err := q.Order("id DESC").Offset((page - 1) * pageSize).Limit(pageSize).Find(&items).Error
-	return items, total, err
-}
-
-func (r *AIRepository) ListInstallJobsByStatuses(statuses ...string) ([]model.CliInstallJob, error) {
-	var items []model.CliInstallJob
-	err := r.db.Where("status IN ?", statuses).Order("id ASC").Find(&items).Error
-	return items, err
-}
-
-func (r *AIRepository) MarkRunningInstallJobsInterrupted() (int64, error) {
-	now := time.Now().UTC()
-	res := r.db.Model(&model.CliInstallJob{}).
-		Where("status = ?", model.JobRunning).
-		Updates(map[string]any{
-			"status":        model.JobInterrupted,
-			"error_message": "interrupted by server restart",
-			"finished_at":   now,
-		})
-	return res.RowsAffected, res.Error
-}
-
 func (r *AIRepository) CreateAgent(agent *model.AiAgent) error {
 	return r.db.Create(agent).Error
 }
@@ -348,4 +291,8 @@ func (r *AIRepository) ListPATs(userID uint) ([]model.PersonalAccessToken, error
 
 func (r *AIRepository) UpdatePAT(token *model.PersonalAccessToken) error {
 	return r.db.Save(token).Error
+}
+
+func (r *AIRepository) DeletePAT(id uint) error {
+	return r.db.Delete(&model.PersonalAccessToken{}, id).Error
 }

@@ -7,13 +7,14 @@ import (
 	"strings"
 	"testing"
 
+	"bedrock/internal/cicd/model"
 	"bedrock/internal/cicd/repository"
 	"bedrock/internal/cicd/service"
 	"gorm.io/gorm"
 )
 
 func TestWebhook_SignatureFailRejects(t *testing.T) {
-	_, repoSvc, _, _, runSvc, gdb := setupCICD(t)
+	_, repoSvc, _, jobSvc, runSvc, gdb := setupCICD(t)
 
 	repo, err := repoSvc.Create(1, service.CreateRepositoryInput{
 		Name: "wh-sig", RepoURL: "https://example.com/a.git", AuthType: "none",
@@ -21,7 +22,7 @@ func TestWebhook_SignatureFailRejects(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	secret := revealedWebhookSecret(t, repoSvc, repo.ID)
+	job, secret := createWebhookJob(t, jobSvc, repo.ID, "job-sig", "main", true)
 
 	wh := newWebhookSvc(gdb, runSvc)
 	body := []byte(`{"ref":"refs/heads/main","after":"abc"}`)
@@ -30,7 +31,7 @@ func TestWebhook_SignatureFailRejects(t *testing.T) {
 		"X-Hub-Signature-256": "sha256=deadbeef",
 		"X-GitHub-Delivery":   "del-1",
 	}
-	_, err = wh.Receive(repo.ID, secret, headers, body, 0)
+	_, err = wh.Receive(job.ID, secret, headers, body)
 	if err == nil || !service.IsUnauthorized(err) {
 		t.Fatalf("want unauthorized, got %v", err)
 	}
@@ -41,30 +42,18 @@ func TestWebhook_GenericSecretAndDedup(t *testing.T) {
 
 	repo, err := repoSvc.Create(1, service.CreateRepositoryInput{
 		Name: "wh-gen", RepoURL: "https://example.com/b.git", AuthType: "none",
-		WebhookType: "generic",
 	}, false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	secret := revealedWebhookSecret(t, repoSvc, repo.ID)
-
-	_, err = jobSvc.Create(1, service.CreateBuildJobInput{
-		RepositoryID:   repo.ID,
-		Name:           "job1",
-		Branch:         "main",
-		BranchPolicy:   "fixed",
-		TriggerWebhook: boolPtr(true),
-		BuildScript:    "echo ok",
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	job, secret := createWebhookJob(t, jobSvc, repo.ID, "job1", "main", true)
+	_ = job
 
 	wh := newWebhookSvc(gdb, runSvc)
 	body := []byte(`{"ref":"refs/heads/main","after":"abc123","message":"hi"}`)
 	headers := map[string]string{"X-GitHub-Delivery": "same-del"}
 
-	r1, err := wh.Receive(repo.ID, secret, headers, body, 0)
+	r1, err := wh.Receive(job.ID, secret, headers, body)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -72,7 +61,7 @@ func TestWebhook_GenericSecretAndDedup(t *testing.T) {
 		t.Fatalf("first: %+v", r1)
 	}
 
-	r2, err := wh.Receive(repo.ID, secret, headers, body, 0)
+	r2, err := wh.Receive(job.ID, secret, headers, body)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -97,28 +86,15 @@ func TestWebhook_BranchMatching_FixedMissDoesNotEnqueue(t *testing.T) {
 
 	repo, err := repoSvc.Create(1, service.CreateRepositoryInput{
 		Name: "wh-branch-miss", RepoURL: "https://example.com/miss.git", AuthType: "none",
-		WebhookType: "generic",
 	}, false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	secret := revealedWebhookSecret(t, repoSvc, repo.ID)
-
-	_, err = jobSvc.Create(1, service.CreateBuildJobInput{
-		RepositoryID:   repo.ID,
-		Name:           "fixed-main",
-		Branch:         "main",
-		BranchPolicy:   "fixed",
-		TriggerWebhook: boolPtr(true),
-		BuildScript:    "echo ok",
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	job, secret := createWebhookJob(t, jobSvc, repo.ID, "fixed-main", "main", true)
 
 	wh := newWebhookSvc(gdb, runSvc)
-	res, err := wh.Receive(repo.ID, secret, map[string]string{"X-GitHub-Delivery": "branch-miss-1"},
-		[]byte(`{"ref":"refs/heads/develop","after":"abc"}`), 0)
+	res, err := wh.Receive(job.ID, secret, map[string]string{"X-GitHub-Delivery": "branch-miss-1"},
+		[]byte(`{"ref":"refs/heads/develop","after":"abc"}`))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -127,93 +103,59 @@ func TestWebhook_BranchMatching_FixedMissDoesNotEnqueue(t *testing.T) {
 	}
 }
 
-func TestWebhook_BranchMatching_MultiJobOnlyMatching(t *testing.T) {
+func TestWebhook_BranchMatching_JobScopedOnlySelf(t *testing.T) {
 	_, repoSvc, _, jobSvc, runSvc, gdb := setupCICD(t)
 
 	repo, err := repoSvc.Create(1, service.CreateRepositoryInput{
 		Name: "wh-branch-multi", RepoURL: "https://example.com/multi.git", AuthType: "none",
-		WebhookType: "generic",
 	}, false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	secret := revealedWebhookSecret(t, repoSvc, repo.ID)
 
-	mainJob, err := jobSvc.Create(1, service.CreateBuildJobInput{
-		RepositoryID: repo.ID, Name: "job-main", Branch: "main", BranchPolicy: "fixed",
-		TriggerWebhook: boolPtr(true), BuildScript: "echo main",
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, err = jobSvc.Create(1, service.CreateBuildJobInput{
-		RepositoryID: repo.ID, Name: "job-develop", Branch: "develop", BranchPolicy: "fixed",
-		TriggerWebhook: boolPtr(true), BuildScript: "echo develop",
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	mainJob, mainSecret := createWebhookJob(t, jobSvc, repo.ID, "job-main", "main", true)
+	devJob, devSecret := createWebhookJob(t, jobSvc, repo.ID, "job-develop", "develop", true)
 
 	wh := newWebhookSvc(gdb, runSvc)
-	res, err := wh.Receive(repo.ID, secret, map[string]string{"X-GitHub-Delivery": "branch-multi-1"},
-		[]byte(`{"ref":"refs/heads/main","after":"deadbeef"}`), 0)
+	res, err := wh.Receive(mainJob.ID, mainSecret, map[string]string{"X-GitHub-Delivery": "branch-multi-1"},
+		[]byte(`{"ref":"refs/heads/main","after":"deadbeef"}`))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.Triggered != 1 || len(res.JobIDs) != 1 {
-		t.Fatalf("want only matching job: %+v", res)
+	if res.Triggered != 1 || len(res.JobIDs) != 1 || res.JobIDs[0] != mainJob.ID {
+		t.Fatalf("main job webhook should only trigger itself: %+v", res)
 	}
-	if res.JobIDs[0] != mainJob.ID {
-		t.Fatalf("job_ids=%v want %d", res.JobIDs, mainJob.ID)
+
+	resDev, err := wh.Receive(devJob.ID, devSecret, map[string]string{"X-GitHub-Delivery": "branch-multi-2"},
+		[]byte(`{"ref":"refs/heads/main","after":"deadbeef"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resDev.Triggered != 0 {
+		t.Fatalf("develop job should reject main branch: %+v", resDev)
 	}
 }
 
-func TestWebhook_BranchMatching_ParamAcceptsAnyBranch(t *testing.T) {
+func TestWebhook_BranchMatching_MismatchDoesNotEnqueue(t *testing.T) {
 	_, repoSvc, _, jobSvc, runSvc, gdb := setupCICD(t)
 
 	repo, err := repoSvc.Create(1, service.CreateRepositoryInput{
-		Name: "wh-branch-param", RepoURL: "https://example.com/param.git", AuthType: "none",
-		WebhookType: "generic",
+		Name: "wh-branch-mismatch", RepoURL: "https://example.com/mismatch.git", AuthType: "none",
 	}, false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	secret := revealedWebhookSecret(t, repoSvc, repo.ID)
 
-	paramJob, err := jobSvc.Create(1, service.CreateBuildJobInput{
-		RepositoryID: repo.ID, Name: "job-param", Branch: "main", BranchPolicy: "param",
-		TriggerWebhook: boolPtr(true), BuildScript: "echo param",
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, err = jobSvc.Create(1, service.CreateBuildJobInput{
-		RepositoryID: repo.ID, Name: "job-fixed-main", Branch: "main", BranchPolicy: "fixed",
-		TriggerWebhook: boolPtr(true), BuildScript: "echo fixed",
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	mainJob, secret := createWebhookJob(t, jobSvc, repo.ID, "job-main-only", "main", true)
 
 	wh := newWebhookSvc(gdb, runSvc)
-	res, err := wh.Receive(repo.ID, secret, map[string]string{"X-GitHub-Delivery": "branch-param-1"},
-		[]byte(`{"ref":"refs/heads/feature/x","after":"cafebabe"}`), 0)
+	res, err := wh.Receive(mainJob.ID, secret, map[string]string{"X-GitHub-Delivery": "branch-mismatch-1"},
+		[]byte(`{"ref":"refs/heads/feature/x","after":"cafebabe"}`))
 	if err != nil {
 		t.Fatal(err)
 	}
-	// param = all-branch policy; fixed main must not match feature/x
-	if res.Triggered != 1 || len(res.JobIDs) != 1 || res.JobIDs[0] != paramJob.ID {
-		t.Fatalf("param policy should enqueue only param job: %+v", res)
-	}
-	if res.Branch != "feature/x" {
-		t.Fatalf("branch=%q", res.Branch)
-	}
-	run, err := runSvc.Get(res.RunIDs[0])
-	if err != nil {
-		t.Fatal(err)
-	}
-	if run.Branch != "feature/x" {
-		t.Fatalf("enqueued run branch=%q want feature/x", run.Branch)
+	if res.Triggered != 0 || len(res.RunIDs) != 0 {
+		t.Fatalf("branch mismatch should not enqueue: %+v", res)
 	}
 }
 
@@ -226,13 +168,7 @@ func TestWebhook_ValidGitHubSignature(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	secret := revealedWebhookSecret(t, repoSvc, repo.ID)
-	_, err = jobSvc.Create(1, service.CreateBuildJobInput{
-		RepositoryID: repo.ID, Name: "j", Branch: "main", TriggerWebhook: boolPtr(true), BuildScript: "echo",
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	job, secret := createWebhookJob(t, jobSvc, repo.ID, "j", "main", true)
 
 	body := []byte(`{"ref":"refs/heads/main","after":"deadbeef","head_commit":{"id":"deadbeef","message":"m"}}`)
 	mac := hmac.New(sha256.New, []byte(secret))
@@ -240,11 +176,11 @@ func TestWebhook_ValidGitHubSignature(t *testing.T) {
 	sig := "sha256=" + hex.EncodeToString(mac.Sum(nil))
 
 	wh := newWebhookSvc(gdb, runSvc)
-	res, err := wh.Receive(repo.ID, secret, map[string]string{
+	res, err := wh.Receive(job.ID, secret, map[string]string{
 		"X-GitHub-Event":      "push",
 		"X-Hub-Signature-256": sig,
 		"X-GitHub-Delivery":   "del-ok",
-	}, body, 0)
+	}, body)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -253,25 +189,40 @@ func TestWebhook_ValidGitHubSignature(t *testing.T) {
 	}
 }
 
-func revealedWebhookSecret(t *testing.T, repoSvc *service.RepositoryService, id uint) string {
+func createWebhookJob(
+	t *testing.T,
+	jobSvc *service.BuildJobService,
+	repoID uint,
+	name, branch string,
+	triggerWebhook bool,
+) (*model.BuildJob, string) {
 	t.Helper()
-	repo, err := repoSvc.Get(id, true)
+	job, err := jobSvc.Create(1, service.CreateBuildJobInput{
+		RepositoryID:   repoID,
+		Name:           name,
+		Branch:         branch,
+		TriggerWebhook: boolPtr(triggerWebhook),
+		BuildScript:    "echo ok",
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if repo.WebhookSecret == "" {
-		rotated, err := repoSvc.RotateWebhookSecret(id)
+	revealed, err := jobSvc.GetWithSecret(job.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if revealed.WebhookSecret == "" {
+		rotated, err := jobSvc.RotateWebhookSecret(job.ID)
 		if err != nil {
 			t.Fatal(err)
 		}
-		return rotated.WebhookSecret
+		return rotated, rotated.WebhookSecret
 	}
-	return repo.WebhookSecret
+	return revealed, revealed.WebhookSecret
 }
 
 func newWebhookSvc(gdb *gorm.DB, runSvc *service.BuildRunService) *service.WebhookService {
 	return service.NewWebhookService(
-		repository.NewRepositoryRepository(gdb),
 		repository.NewBuildJobRepository(gdb),
 		repository.NewWebhookDeliveryRepository(gdb),
 		runSvc,

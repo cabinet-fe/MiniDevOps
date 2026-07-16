@@ -42,8 +42,6 @@ func setupAI(t *testing.T) (*gorm.DB, *service.CLIService, *service.AgentService
 	}
 	repo := repository.NewAIRepository(gdb)
 	cli := service.NewCLIService(repo)
-	cli.Start()
-	t.Cleanup(cli.Shutdown)
 
 	storageRoot := filepath.Join(t.TempDir(), "storage")
 	storageSvc, err := storageservice.NewStorageService(storagerepo.NewStorageRepository(gdb), storageRoot, storageservice.Limits{})
@@ -256,9 +254,15 @@ func TestPATPlaintextOnceAndScopes(t *testing.T) {
 	if err := pats.RequireScope(scopes, model.ScopeSkillsRead); err != nil {
 		t.Fatal(err)
 	}
-	_ = pats.Revoke(1, created.Metadata.ID)
+	if err := pats.Delete(1, created.Metadata.ID); err != nil {
+		t.Fatal(err)
+	}
 	if _, _, err := pats.ValidateBearer(created.Token); err == nil {
-		t.Fatal("revoked PAT must be invalid")
+		t.Fatal("deleted PAT must be invalid")
+	}
+	list, err = pats.List(1)
+	if err != nil || len(list) != 0 {
+		t.Fatalf("deleted PAT must be removed from list: %v %#v", err, list)
 	}
 }
 
@@ -421,5 +425,143 @@ func TestAgentRunRecovery_QueuedAndInterrupted(t *testing.T) {
 		// ok — re-submit may advance or fail without a real CLI binary
 	default:
 		t.Fatalf("unexpected queued recovery status %s", gotQueued.Status)
+	}
+}
+
+func TestDetectExtractsVersionNotPath(t *testing.T) {
+	gdb, cli, _, _, _, _ := setupAI(t)
+	if err := gdb.Model(&model.CliRuntimeDefinition{}).
+		Where("key = ?", "claude_code").
+		Updates(map[string]any{
+			"detect_command": `printf '/usr/local/bin/claude\nclaude version 2.3.4\n'`,
+		}).Error; err != nil {
+		t.Fatal(err)
+	}
+	result, err := cli.Detect("claude_code")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !result.Detected {
+		t.Fatal("expected detected")
+	}
+	if result.Version != "2.3.4" {
+		t.Fatalf("version=%q want 2.3.4", result.Version)
+	}
+	if strings.Contains(result.Version, "/") {
+		t.Fatalf("version looks like path: %q", result.Version)
+	}
+}
+
+func TestDetectClearsStaleWhenMissing(t *testing.T) {
+	gdb, cli, _, _, _, _ := setupAI(t)
+	if err := gdb.Model(&model.CliRuntimeDefinition{}).
+		Where("key = ?", "codex").
+		Updates(map[string]any{
+			"detect_command":      "false",
+			"installed_path":      "/stale/codex",
+			"installed_version":   "9.9.9",
+			"install_status":      "installed",
+			"healthy":             true,
+		}).Error; err != nil {
+		t.Fatal(err)
+	}
+	result, err := cli.Detect("codex")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Detected {
+		t.Fatal("expected missing")
+	}
+	var got model.CliRuntimeDefinition
+	if err := gdb.Where("key = ?", "codex").First(&got).Error; err != nil {
+		t.Fatal(err)
+	}
+	if got.InstallStatus != "missing" || got.InstalledPath != "" || got.InstalledVersion != "" || got.Healthy {
+		t.Fatalf("stale fields not cleared: %+v", got)
+	}
+}
+
+func TestExecuteSyncSuccessAndFailure(t *testing.T) {
+	gdb, cli, _, _, _, _ := setupAI(t)
+	if err := gdb.Model(&model.CliRuntimeDefinition{}).
+		Where("key = ?", "reasonix").
+		Updates(map[string]any{
+			"install_template":   `echo install-ok`,
+			"upgrade_template":   `echo upgrade-ok`,
+			"uninstall_template": `echo uninstall-ok; exit 1`,
+		}).Error; err != nil {
+		t.Fatal(err)
+	}
+	ok, err := cli.Execute(context.Background(), "reasonix", "install", service.ExecuteInput{}, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ok.Success || !strings.Contains(ok.Output, "install-ok") {
+		t.Fatalf("install: %+v", ok)
+	}
+	fail, err := cli.Execute(context.Background(), "reasonix", "uninstall", service.ExecuteInput{}, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fail.Success || fail.Error == "" || !strings.Contains(fail.Output, "uninstall-ok") {
+		t.Fatalf("uninstall: %+v", fail)
+	}
+	if gdb.Migrator().HasTable("cli_install_jobs") {
+		t.Fatal("cli_install_jobs table should not exist")
+	}
+}
+
+func TestExecuteMultiSourceFallback(t *testing.T) {
+	gdb, cli, _, _, _, _ := setupAI(t)
+	if err := gdb.Model(&model.CliRuntimeDefinition{}).
+		Where("key = ?", "opencode").
+		Updates(map[string]any{
+			"install_template": `base="{{base_url}}"; if [ "$base" = "https://bad.example" ]; then echo fail; exit 1; fi; echo ok-from-$base`,
+		}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := gdb.Where("cli_key = ?", "opencode").Delete(&model.CliInstallSource{}).Error; err != nil {
+		t.Fatal(err)
+	}
+	for i, src := range []struct {
+		name string
+		url  string
+		prio int
+	}{
+		{"bad", "https://bad.example", 10},
+		{"good", "https://good.example", 20},
+	} {
+		if err := gdb.Create(&model.CliInstallSource{
+			CliKey: "opencode", Name: src.name, BaseURL: src.url, Priority: src.prio, Enabled: true,
+		}).Error; err != nil {
+			t.Fatal(err)
+		}
+		_ = i
+	}
+	result, err := cli.Execute(context.Background(), "opencode", "install", service.ExecuteInput{}, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !result.Success || !strings.Contains(result.Output, "ok-from-https://good.example") {
+		t.Fatalf("fallback result: %+v", result)
+	}
+	if !strings.Contains(result.Output, `source "bad" failed`) {
+		t.Fatalf("expected first source failure in output: %s", result.Output)
+	}
+}
+
+func TestCLIInstallJobsTableDropped(t *testing.T) {
+	gdb, err := db.Open(&config.DatabaseConfig{
+		Driver: "sqlite",
+		Path:   filepath.Join(t.TempDir(), "migrate.sqlite"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := migration.Up(context.Background(), gdb, migration.Driver("sqlite")); err != nil {
+		t.Fatal(err)
+	}
+	if gdb.Migrator().HasTable("cli_install_jobs") {
+		t.Fatal("cli_install_jobs table should be dropped by 000014")
 	}
 }

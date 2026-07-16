@@ -2,7 +2,6 @@ package handler
 
 import (
 	"net/http"
-	"strconv"
 
 	"github.com/gin-gonic/gin"
 
@@ -31,8 +30,6 @@ func (h *RepositoryHandler) RegisterRoutes(rg *gin.RouterGroup, authMW gin.Handl
 	g.DELETE("/:id", rbacmw.RequirePermission(h.perm, "cicd.repositories:delete"), h.Delete)
 	g.GET("/:id/branches", rbacmw.RequirePermission(h.perm, "cicd.repositories:view"), h.Branches)
 	g.POST("/:id/test", rbacmw.RequirePermission(h.perm, "cicd.repositories:view"), h.Test)
-	g.GET("/:id/webhook-secret", rbacmw.RequirePermission(h.perm, "cicd.repositories:view"), h.GetWebhookSecret)
-	g.POST("/:id/webhook-secret/rotate", rbacmw.RequirePermission(h.perm, "cicd.repositories:update"), h.RotateWebhookSecret)
 }
 
 func (h *RepositoryHandler) canUseCredential(c *gin.Context) bool {
@@ -57,7 +54,7 @@ func (h *RepositoryHandler) Get(c *gin.Context) {
 		pkg.Error(c, http.StatusBadRequest, "无效 ID")
 		return
 	}
-	item, err := h.svc.Get(id, false)
+	item, err := h.svc.Get(id)
 	if err != nil {
 		writeServiceError(c, err)
 		return
@@ -137,42 +134,4 @@ func (h *RepositoryHandler) Test(c *gin.Context) {
 		return
 	}
 	pkg.Success(c, result)
-}
-
-func (h *RepositoryHandler) GetWebhookSecret(c *gin.Context) {
-	id, err := parseID(c)
-	if err != nil {
-		pkg.Error(c, http.StatusBadRequest, "无效 ID")
-		return
-	}
-	item, err := h.svc.Get(id, true)
-	if err != nil {
-		writeServiceError(c, err)
-		return
-	}
-	pkg.Success(c, gin.H{
-		"webhook_secret": item.WebhookSecret,
-		"webhook_url":    "/api/v1/webhook/repos/" + strconvU(item.ID) + "/" + item.WebhookSecret,
-	})
-}
-
-func (h *RepositoryHandler) RotateWebhookSecret(c *gin.Context) {
-	id, err := parseID(c)
-	if err != nil {
-		pkg.Error(c, http.StatusBadRequest, "无效 ID")
-		return
-	}
-	item, err := h.svc.RotateWebhookSecret(id)
-	if err != nil {
-		writeServiceError(c, err)
-		return
-	}
-	pkg.Success(c, gin.H{
-		"webhook_secret": item.WebhookSecret,
-		"webhook_url":    "/api/v1/webhook/repos/" + strconvU(item.ID) + "/" + item.WebhookSecret,
-	})
-}
-
-func strconvU(id uint) string {
-	return strconv.FormatUint(uint64(id), 10)
 }

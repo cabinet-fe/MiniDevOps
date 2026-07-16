@@ -4,7 +4,6 @@ import (
 	"io"
 	"net/http"
 	"strconv"
-	"strings"
 
 	"github.com/gin-gonic/gin"
 
@@ -21,13 +20,14 @@ func NewWebhookHandler(svc *service.WebhookService) *WebhookHandler {
 }
 
 func (h *WebhookHandler) RegisterRoutes(rg *gin.RouterGroup) {
-	rg.POST("/webhook/repos/:repository_id/:secret", h.Receive)
+	rg.POST("/webhook/jobs/:build_job_id/:secret", h.Receive)
+	rg.POST("/webhook/repos/:repository_id/:secret", h.ReceiveDeprecated)
 }
 
 func (h *WebhookHandler) Receive(c *gin.Context) {
-	repoID, err := strconv.ParseUint(c.Param("repository_id"), 10, 64)
+	jobID, err := strconv.ParseUint(c.Param("build_job_id"), 10, 64)
 	if err != nil {
-		pkg.Error(c, http.StatusBadRequest, "无效仓库 ID")
+		pkg.Error(c, http.StatusBadRequest, "无效构建任务 ID")
 		return
 	}
 	secret := c.Param("secret")
@@ -44,16 +44,8 @@ func (h *WebhookHandler) Receive(c *gin.Context) {
 		}
 	}
 
-	var filterJobID uint
-	if q := strings.TrimSpace(c.Query("build_job_id")); q != "" {
-		if id, err := strconv.ParseUint(q, 10, 64); err == nil {
-			filterJobID = uint(id)
-		}
-	}
-
-	result, err := h.svc.Receive(uint(repoID), secret, headers, body, filterJobID)
+	result, err := h.svc.Receive(uint(jobID), secret, headers, body)
 	if err != nil {
-		// Never echo secret in error messages
 		msg := service.RedactSecret(err.Error(), secret)
 		switch {
 		case service.IsUnauthorized(err):
@@ -66,4 +58,9 @@ func (h *WebhookHandler) Receive(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusAccepted, pkg.Response{Code: 0, Message: "accepted", Data: result})
+}
+
+func (h *WebhookHandler) ReceiveDeprecated(c *gin.Context) {
+	pkg.Error(c, http.StatusGone,
+		"仓库级 Webhook 已弃用，请改用构建任务 Webhook：POST /api/v1/webhook/jobs/:build_job_id/:secret")
 }

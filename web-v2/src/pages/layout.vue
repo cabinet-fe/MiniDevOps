@@ -71,7 +71,9 @@ function onNavClick(item: NavItem) {
         </div>
       </header>
       <main class="app-main">
-        <router-view />
+        <u-scroll class="app-main__scroll" height="100%" content-class="app-main__scroll-content">
+          <router-view />
+        </u-scroll>
       </main>
     </div>
   </div>
@@ -81,8 +83,9 @@ function onNavClick(item: NavItem) {
 @use "pkg:@veltra/styles/functions" as fn;
 
 .app-shell {
-  min-height: 100vh;
+  height: 100%;
   display: flex;
+  overflow: hidden;
   background: fn.use-var(bg-color, bottom);
   color: fn.use-var(text-color, main);
 }
@@ -92,18 +95,22 @@ function onNavClick(item: NavItem) {
   width: 260px;
   min-width: 260px;
   max-width: 260px;
-  min-height: 100vh;
+  height: 100%;
+  overflow: hidden;
 }
 
 .app-body {
   flex: 1;
   min-width: 0;
+  min-height: 0;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
   background: fn.use-var(bg-color, middle);
 }
 
 .app-header {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -139,14 +146,27 @@ function onNavClick(item: NavItem) {
   flex-direction: column;
   padding: fn.use-var(gap, large);
   overflow: hidden;
+}
 
-  :deep(> .page) {
-    flex: 1;
-    min-height: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-    overflow: auto;
-  }
+.app-main__scroll {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+}
+
+:deep(.app-main__scroll-content) {
+  box-sizing: border-box;
+  height: 100%;
+  min-height: min-content;
+  display: flex;
+  flex-direction: column;
+}
+
+:deep(.app-main__scroll-content > .page) {
+  flex: 1 0 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
 </style>

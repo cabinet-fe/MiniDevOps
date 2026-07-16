@@ -29,6 +29,7 @@ import type {
 import FormDialog from "@/components/form-dialog";
 import ProTable, { defineProTableColumns } from "@/components/pro-table";
 import { usePermission } from "@/composables/use-permission";
+import { formatDateTime } from "@/lib/datetime";
 import { tagType, type TagType } from "@/lib/tag";
 import { useAuthStore } from "@/stores/auth";
 
@@ -113,7 +114,7 @@ const columns = defineProTableColumns([
   { key: "status", name: "状态", width: 100 },
   { key: "priority", name: "优先级", width: 100, sortable: true },
   { key: "assignee_id", name: "负责人", width: 90 },
-  { key: "updated_at", name: "更新时间", sortable: true },
+  { key: "updated_at", name: "更新时间", sortable: true, render: ({ val }) => formatDateTime(val) },
   { key: "action", name: "操作", width: 180, align: "center", fixed: "right" },
 ]);
 
@@ -420,7 +421,7 @@ onMounted(() => void loadRequirementStatuses());
               </div>
             </template>
             <p v-else>{{ comment.content }}</p>
-            <small>用户 #{{ comment.created_by }} · {{ comment.created_at }}</small>
+            <small>用户 #{{ comment.created_by }} · {{ formatDateTime(comment.created_at) }}</small>
             <u-action v-if="canEditComment(comment)" @run="startCommentEdit(comment)"
               >编辑</u-action
             >

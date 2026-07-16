@@ -313,7 +313,7 @@ func TestArchiveMarksSuccessAndArtifactDownloadable(t *testing.T) {
 		},
 	}
 	repoStore := &memRepoStore{
-		repo: &model.Repository{ID: 1, RepoURL: repoDir, AuthType: "none", DefaultBranch: "main"},
+		repo: &model.Repository{ID: 1, RepoURL: repoDir, AuthType: "none"},
 	}
 	p := NewPipeline(store, jobStore, repoStore, &memServerStore{}, nopSecrets{}, nil, zap.NewNop(),
 		workspace, artifactRoot, logDir, cacheDir)

@@ -5,6 +5,7 @@ import { message } from "@veltra/desktop";
 import { killProcess } from "@/api/ops";
 import type { ProcessInfo } from "@/api/types";
 import ProTable, { defineProTableColumns } from "@/components/pro-table";
+import { formatDateTime } from "@/lib/datetime";
 import { tagType, type TagType } from "@/lib/tag";
 
 const PROCESS_STATUS_TAG: Record<string, TagType> = {
@@ -34,7 +35,12 @@ const columns = defineProTableColumns([
   { key: "username", name: "用户", width: 100 },
   { key: "num_threads", name: "线程", width: 80 },
   { key: "status", name: "状态", width: 80 },
-  { key: "start_time", name: "启动时间", width: 170 },
+  {
+    key: "start_time",
+    name: "启动时间",
+    width: 170,
+    render: ({ val }) => (val ? formatDateTime(val) : "—"),
+  },
   { key: "ports", name: "监听端口", width: 120 },
   { key: "cmdline", name: "命令行" },
   { key: "action", name: "操作", width: 90, align: "center", fixed: "right" },
@@ -45,11 +51,6 @@ function formatBytes(value: number): string {
   const units = ["B", "KB", "MB", "GB", "TB"];
   const index = Math.min(Math.floor(Math.log(value) / Math.log(1024)), units.length - 1);
   return `${(value / 1024 ** index).toFixed(index ? 1 : 0)} ${units[index]}`;
-}
-
-function formatStartTime(ms: number): string {
-  if (!ms) return "—";
-  return new Date(ms).toLocaleString("zh-CN");
 }
 
 async function terminate(row: ProcessInfo) {
@@ -104,9 +105,6 @@ async function terminate(row: ProcessInfo) {
           {{ (rowData as ProcessInfo).status }}
         </u-tag>
         <span v-else>—</span>
-      </template>
-      <template #column:start_time="{ rowData }">
-        {{ formatStartTime((rowData as ProcessInfo).start_time) }}
       </template>
       <template #column:ports="{ rowData }">
         {{ (rowData as ProcessInfo).ports.join(", ") || "—" }}

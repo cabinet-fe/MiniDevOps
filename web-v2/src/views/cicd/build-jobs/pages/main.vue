@@ -9,21 +9,19 @@ import {
   deleteBuildJob,
   enqueueBuildRun,
   getBuildJob,
+  getBuildJobWebhookSecret,
   listRepositories,
   listRepositoryBranches,
   listServers,
+  rotateBuildJobWebhookSecret,
   updateBuildJob,
 } from "@/api/cicd";
-import type { BuildJob, DeployTarget, Repository, Server } from "@/api/types";
+import type { BuildJob, BuildRun, DeployTarget, Repository, Server } from "@/api/types";
 import FormDialog from "@/components/form-dialog";
 import ProTable, { defineProTableColumns } from "@/components/pro-table";
 import { usePermission } from "@/composables/use-permission";
-import type { TagType } from "@/lib/tag";
-
-const BRANCH_POLICY_OPTIONS = [
-  { label: "固定分支", value: "fixed" },
-  { label: "Webhook 任意分支", value: "param" },
-];
+import { formatDateTime } from "@/lib/datetime";
+import { JOB_STATUS_TAG, TRIGGER_TYPE_TAG, tagType, type TagType } from "@/lib/tag";
 
 const METHOD_OPTIONS = [
   { label: "rsync", value: "rsync" },
@@ -47,23 +45,18 @@ const BUILD_SCRIPT_TYPE_OPTIONS = [
   { label: "CMD", value: "cmd" },
 ];
 
-const BUILD_SCRIPT_PLACEHOLDERS: Record<string, string> = {
-  bash: "npm install && npm run build",
-  node: "const { execSync } = require('child_process');\nexecSync('npm install && npm run build', { stdio: 'inherit' });",
-  python:
-    "import subprocess\nsubprocess.run(['npm', 'install'], check=True)\nsubprocess.run(['npm', 'run', 'build'], check=True)",
-  pwsh: "$ErrorActionPreference = 'Stop'\npnpm i\npnpm gen:routes\nSet-Location core\npnpm build",
-  powershell:
-    "$ErrorActionPreference = 'Stop'\npnpm i\npnpm gen:routes\nSet-Location core\npnpm build",
-  cmd: "pnpm i && pnpm gen:routes && cd core && pnpm build",
-};
-
 const { hasPermission } = usePermission();
 const router = useRouter();
 const listRef = useTemplateRef("list");
-const query = reactive({ keyword: "", repository_id: undefined as number | undefined });
+const historyRef = useTemplateRef("history");
+let query = reactive({ keyword: "", repository_id: undefined as number | undefined });
 const dialogOpen = ref(false);
+const secretOpen = ref(false);
+const historyOpen = ref(false);
+const historyJob = ref<BuildJob | null>(null);
+let historyQuery = reactive({ build_job_id: undefined as number | undefined });
 const editing = ref<BuildJob | null>(null);
+const webhookInfo = reactive({ secret: "", url: "" });
 const repoOptions = ref<{ label: string; value: number }[]>([]);
 const serverOptions = ref<{ label: string; value: number }[]>([]);
 const branchOptions = ref<{ label: string; value: string }[]>([]);
@@ -73,7 +66,6 @@ const form = reactive({
   name: "",
   description: "",
   enabled: true,
-  branch_policy: "fixed",
   branch: "main",
   shallow_clone: true,
   build_script_type: "bash",
@@ -84,6 +76,10 @@ const form = reactive({
   trigger_manual: true,
   trigger_webhook: false,
   trigger_cron: false,
+  webhook_type: "auto",
+  webhook_ref_path: "",
+  webhook_commit_path: "",
+  webhook_message_path: "",
   cron_expression: "",
   cron_timezone: "Asia/Shanghai",
   max_artifacts: 5,
@@ -93,21 +89,45 @@ const form = reactive({
   deploy_targets: [] as DeployTarget[],
 });
 
-const scriptPlaceholder = computed(
-  () => BUILD_SCRIPT_PLACEHOLDERS[form.build_script_type] ?? BUILD_SCRIPT_PLACEHOLDERS.bash,
-);
 const branchPlaceholder = computed(() => (branchesLoading.value ? "加载分支…" : "选择或输入分支"));
 const showPs5Tip = computed(() => form.build_script_type === "powershell");
+
+const repoNameMap = computed(() => {
+  const map = new Map<number, string>();
+  for (const opt of repoOptions.value) {
+    map.set(opt.value, opt.label);
+  }
+  return map;
+});
 
 const columns = defineProTableColumns([
   { key: "id", name: "ID", width: 80 },
   { key: "name", name: "名称" },
-  { key: "repository_id", name: "仓库", width: 90 },
+  { key: "repository", name: "仓库", width: 140 },
   { key: "branch", name: "分支" },
   { key: "enabled", name: "启用", width: 80 },
   { key: "triggers", name: "触发" },
-  { key: "action", name: "操作", width: 240, align: "center", fixed: "right" },
+  { key: "action", name: "操作", width: 380, align: "center", fixed: "right" },
 ]);
+
+const historyColumns = defineProTableColumns([
+  { key: "build_number", name: "#", width: 70 },
+  { key: "status", name: "状态", width: 100 },
+  { key: "stage", name: "阶段", width: 100 },
+  { key: "branch", name: "分支" },
+  { key: "trigger_type", name: "触发", width: 100 },
+  { key: "created_at", name: "创建时间", sortable: true, render: ({ val }) => formatDateTime(val) },
+  { key: "action", name: "操作", width: 100, align: "center", fixed: "right" },
+]);
+
+const HISTORY_STAGE_TAG: Record<string, TagType> = {
+  pending: undefined,
+  cloning: "primary",
+  building: "primary",
+  archiving: "primary",
+  distributing: "warning",
+  idle: "success",
+};
 
 async function loadBranches(repositoryId?: number) {
   if (!repositoryId) {
@@ -159,6 +179,26 @@ onMounted(async () => {
   }
 });
 
+function repoName(repositoryId: number): string {
+  return repoNameMap.value.get(repositoryId) ?? `#${repositoryId}`;
+}
+
+function openHistory(row: BuildJob) {
+  historyJob.value = row;
+  historyQuery.build_job_id = row.id;
+  historyOpen.value = true;
+}
+
+function openRunDetail(row: BuildRun) {
+  void router.push({ name: "cicd-build-run-detail", params: { id: String(row.id) } });
+}
+
+watch(historyOpen, (open) => {
+  if (open) {
+    void historyRef.value?.reload();
+  }
+});
+
 function triggerParts(job: BuildJob): { label: string; type: TagType }[] {
   const parts: { label: string; type: TagType }[] = [];
   if (job.trigger_manual) parts.push({ label: "手动", type: undefined });
@@ -205,7 +245,6 @@ function buildBody(): Record<string, unknown> {
     name: form.name,
     description: form.description,
     enabled: form.enabled,
-    branch_policy: form.branch_policy,
     branch: form.branch,
     shallow_clone: form.shallow_clone,
     build_script_type: form.build_script_type,
@@ -219,6 +258,10 @@ function buildBody(): Record<string, unknown> {
     trigger_manual: form.trigger_manual,
     trigger_webhook: form.trigger_webhook,
     trigger_cron: form.trigger_cron,
+    webhook_type: form.webhook_type,
+    webhook_ref_path: form.webhook_ref_path,
+    webhook_commit_path: form.webhook_commit_path,
+    webhook_message_path: form.webhook_message_path,
     cron_expression: form.cron_expression,
     cron_timezone: form.cron_timezone,
     max_artifacts: form.max_artifacts,
@@ -268,7 +311,31 @@ async function trigger(row: BuildJob) {
     message.success(`已入队 #${run.build_number}`);
     await router.push({ name: "cicd-build-run-detail", params: { id: run.id } });
   } catch (err) {
-    message.error(err instanceof Error ? err.message : "触发失败");
+    message.error(err instanceof Error ? err.message : "构建失败");
+  }
+}
+
+async function showWebhook(row: BuildJob) {
+  try {
+    const res = await getBuildJobWebhookSecret(row.id);
+    webhookInfo.secret = res.webhook_secret;
+    webhookInfo.url = res.webhook_url;
+    editing.value = row;
+    secretOpen.value = true;
+  } catch (err) {
+    message.error(err instanceof Error ? err.message : "获取 Webhook 失败");
+  }
+}
+
+async function rotateWebhookSecret() {
+  if (!editing.value) return;
+  try {
+    const res = await rotateBuildJobWebhookSecret(editing.value.id);
+    webhookInfo.secret = res.webhook_secret;
+    webhookInfo.url = res.webhook_url;
+    message.success("已轮换");
+  } catch (err) {
+    message.error(err instanceof Error ? err.message : "轮换失败");
   }
 }
 </script>
@@ -301,6 +368,9 @@ async function trigger(row: BuildJob) {
         <u-input v-model="query.keyword" placeholder="名称" style="width: 160px" />
         <u-button type="primary" @click="search">查询</u-button>
       </template>
+      <template #column:repository="{ rowData }">
+        {{ repoName((rowData as BuildJob).repository_id) }}
+      </template>
       <template #column:enabled="{ rowData }">
         <u-tag size="small" :type="(rowData as BuildJob).enabled ? 'success' : undefined">
           {{ (rowData as BuildJob).enabled ? "启用" : "停用" }}
@@ -331,7 +401,19 @@ async function trigger(row: BuildJob) {
             v-if="hasPermission('cicd.build_jobs:execute')"
             @run="trigger(rowData as BuildJob)"
           >
-            触发
+            构建
+          </u-action>
+          <u-action
+            v-if="hasPermission('cicd.build_jobs:view')"
+            @run="openHistory(rowData as BuildJob)"
+          >
+            构建历史
+          </u-action>
+          <u-action
+            v-if="hasPermission('cicd.build_jobs:view') && (rowData as BuildJob).trigger_webhook"
+            @run="showWebhook(rowData as BuildJob)"
+          >
+            Webhook
           </u-action>
           <u-action
             v-if="hasPermission('cicd.build_jobs:delete')"
@@ -363,7 +445,6 @@ async function trigger(row: BuildJob) {
       <u-input label="名称" field="name" :rules="{ required: '必填' }" />
       <u-input label="描述" field="description" />
       <u-switch label="启用" field="enabled" />
-      <u-select label="分支策略" field="branch_policy" :options="BRANCH_POLICY_OPTIONS" />
       <u-select
         label="分支"
         field="branch"
@@ -379,11 +460,12 @@ async function trigger(row: BuildJob) {
         Windows PowerShell 5.x 不支持 <code>&&</code>，请改用多行、<code>pwsh</code> 或
         <code>cmd</code>
       </p>
-      <u-textarea
+      <u-code-editor
         label="构建脚本"
         field="build_script"
-        :rows="5"
-        :placeholder="scriptPlaceholder"
+        :langs="['js']"
+        :default-lines="12"
+        tips="语法高亮为 JavaScript 模式，不影响 bash / python 等脚本执行"
       />
       <u-input label="工作目录" field="work_dir" placeholder="相对仓库根" />
       <u-input label="输出目录" field="output_dir" />
@@ -399,6 +481,12 @@ async function trigger(row: BuildJob) {
       <template v-if="form.trigger_cron">
         <u-input label="Cron 表达式" field="cron_expression" placeholder="如 0 */6 * * *" />
         <u-input label="时区" field="cron_timezone" placeholder="IANA，如 Asia/Shanghai" />
+      </template>
+      <template v-if="form.trigger_webhook">
+        <u-input label="Webhook 类型" field="webhook_type" placeholder="auto / github / generic" />
+        <u-input label="Ref JSONPath" field="webhook_ref_path" placeholder="generic 平台可选" />
+        <u-input label="Commit JSONPath" field="webhook_commit_path" />
+        <u-input label="Message JSONPath" field="webhook_message_path" />
       </template>
 
       <u-number-input label="制品保留" field="max_artifacts" />
@@ -439,6 +527,59 @@ async function trigger(row: BuildJob) {
         />
       </div>
     </FormDialog>
+
+    <u-dialog
+      v-model="historyOpen"
+      :title="historyJob ? `构建历史 · ${historyJob.name}` : '构建历史'"
+      style="width: 960px"
+    >
+      <ProTable
+        ref="history"
+        url="/build-runs"
+        v-model:query="historyQuery"
+        :columns="historyColumns"
+        :immediate="false"
+        pagination
+        height="420px"
+      >
+        <template #column:status="{ rowData }">
+          <u-tag size="small" :type="tagType((rowData as BuildRun).status, JOB_STATUS_TAG)">
+            {{ (rowData as BuildRun).status }}
+          </u-tag>
+        </template>
+        <template #column:stage="{ rowData }">
+          <u-tag size="small" :type="tagType((rowData as BuildRun).stage, HISTORY_STAGE_TAG)">
+            {{ (rowData as BuildRun).stage || "—" }}
+          </u-tag>
+        </template>
+        <template #column:trigger_type="{ rowData }">
+          <u-tag size="small" :type="tagType((rowData as BuildRun).trigger_type, TRIGGER_TYPE_TAG)">
+            {{ (rowData as BuildRun).trigger_type }}
+          </u-tag>
+        </template>
+        <template #column:action="{ rowData }">
+          <u-action @run="openRunDetail(rowData as BuildRun)">查看详情</u-action>
+        </template>
+      </ProTable>
+      <template #footer="{ close }">
+        <u-button text @click="close()">关闭</u-button>
+      </template>
+    </u-dialog>
+
+    <u-dialog v-model="secretOpen" title="Webhook" style="width: 560px">
+      <p class="mono">URL: {{ webhookInfo.url }}</p>
+      <p class="mono">Secret: {{ webhookInfo.secret }}</p>
+      <template #footer="{ close }">
+        <u-button text @click="close()">关闭</u-button>
+        <u-button
+          v-if="hasPermission('cicd.build_jobs:update')"
+          type="primary"
+          @click="rotateWebhookSecret"
+        >
+          轮换
+        </u-button>
+      </template>
+    </u-dialog>
   </div>
 </template>
 
@@ -456,6 +597,10 @@ async function trigger(row: BuildJob) {
 .page-head h2 {
   margin: 0;
   font-size: 18px;
+}
+.mono {
+  font-family: ui-monospace, monospace;
+  word-break: break-all;
 }
 .trigger-row {
   display: flex;

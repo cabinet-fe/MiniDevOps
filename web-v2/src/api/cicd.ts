@@ -81,25 +81,6 @@ export async function testRepository(id: number): Promise<{ ok: boolean; branche
   return body;
 }
 
-export async function getWebhookSecret(
-  id: number,
-): Promise<{ webhook_secret: string; webhook_url: string }> {
-  const { body } = await http.get<{ webhook_secret: string; webhook_url: string }>(
-    `/repositories/${id}/webhook-secret`,
-  );
-  return body;
-}
-
-export async function rotateWebhookSecret(
-  id: number,
-): Promise<{ webhook_secret: string; webhook_url: string }> {
-  const { body } = await http.post<{ webhook_secret: string; webhook_url: string }>(
-    `/repositories/${id}/webhook-secret/rotate`,
-    {},
-  );
-  return body;
-}
-
 // —— Servers ——
 export async function listServers(params?: ListQuery): Promise<PageResult<Server>> {
   const { body } = await http.get<PageResult<Server>>("/servers", { query: toQuery(params) });
@@ -148,6 +129,25 @@ export async function updateBuildJob(id: number, body: Record<string, unknown>):
 
 export async function deleteBuildJob(id: number): Promise<void> {
   await http.delete(`/build-jobs/${id}`);
+}
+
+export async function getBuildJobWebhookSecret(
+  id: number,
+): Promise<{ webhook_secret: string; webhook_url: string }> {
+  const { body } = await http.get<{ webhook_secret: string; webhook_url: string }>(
+    `/build-jobs/${id}/webhook-secret`,
+  );
+  return body;
+}
+
+export async function rotateBuildJobWebhookSecret(
+  id: number,
+): Promise<{ webhook_secret: string; webhook_url: string }> {
+  const { body } = await http.post<{ webhook_secret: string; webhook_url: string }>(
+    `/build-jobs/${id}/webhook-secret/rotate`,
+    {},
+  );
+  return body;
 }
 
 export async function enqueueBuildRun(

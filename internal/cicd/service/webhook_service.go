@@ -14,21 +14,19 @@ import (
 	"bedrock/internal/engine"
 )
 
-// WebhookService verifies signatures, dedups deliveries, matches jobs, enqueues runs.
+// WebhookService verifies signatures, dedups deliveries, matches branch policy, enqueues runs.
 type WebhookService struct {
-	repos      *repository.RepositoryRepository
 	jobs       *repository.BuildJobRepository
 	deliveries *repository.WebhookDeliveryRepository
 	runs       *BuildRunService
 }
 
 func NewWebhookService(
-	repos *repository.RepositoryRepository,
 	jobs *repository.BuildJobRepository,
 	deliveries *repository.WebhookDeliveryRepository,
 	runs *BuildRunService,
 ) *WebhookService {
-	return &WebhookService{repos: repos, jobs: jobs, deliveries: deliveries, runs: runs}
+	return &WebhookService{jobs: jobs, deliveries: deliveries, runs: runs}
 }
 
 type WebhookResult struct {
@@ -48,31 +46,37 @@ type webhookEvent struct {
 	DeliveryKey   string
 }
 
-// Receive processes a webhook. URL secret must match. Platform signature preferred when present.
+// Receive processes a build-job webhook. URL secret must match. Platform signature preferred when present.
 // Logs/errors must never include the secret (caller redacts).
 func (s *WebhookService) Receive(
-	repositoryID uint,
+	jobID uint,
 	urlSecret string,
 	headers map[string]string,
 	body []byte,
-	filterJobID uint,
 ) (*WebhookResult, error) {
-	repo, err := s.repos.FindByID(repositoryID)
+	job, err := s.jobs.FindByID(jobID)
 	if err != nil {
-		return nil, NewNotFound("仓库不存在")
+		return nil, NewNotFound("构建任务不存在")
 	}
-	if repo.WebhookSecret == "" || !secureEqual(repo.WebhookSecret, urlSecret) {
+	if job.WebhookSecret == "" || !secureEqual(job.WebhookSecret, urlSecret) {
 		return nil, errUnauthorized("无效的 webhook secret")
 	}
+	if !job.Enabled || !job.TriggerWebhook {
+		return &WebhookResult{
+			Accepted:  true,
+			Triggered: 0,
+			Message:   "webhook trigger disabled",
+		}, nil
+	}
 
-	platform := detectWebhookPlatform(headers, repo)
+	platform := detectWebhookPlatform(headers, job)
 	if hasSignatureHeaders(headers) {
-		if err := verifyPlatformSignature(platform, headers, body, repo.WebhookSecret); err != nil {
+		if err := verifyPlatformSignature(platform, headers, body, job.WebhookSecret); err != nil {
 			return nil, errUnauthorized("签名校验失败")
 		}
 	}
 
-	event, err := parseWebhookPayload(platform, repo, headers, body)
+	event, err := parseWebhookPayload(platform, job, headers, body)
 	if err != nil {
 		return nil, errorsNew(err.Error())
 	}
@@ -82,12 +86,11 @@ func (s *WebhookService) Receive(
 		deliveryKey = headersDeliveryID(headers)
 	}
 	if deliveryKey == "" {
-		// Fallback: hash of body + ref (generic)
 		sum := sha256.Sum256(append([]byte(event.Ref+"|"), body...))
 		deliveryKey = "body:" + hex.EncodeToString(sum[:16])
 	}
 
-	ok, err := s.deliveries.TryInsert(repositoryID, deliveryKey)
+	ok, err := s.deliveries.TryInsert(jobID, deliveryKey)
 	if err != nil {
 		return nil, err
 	}
@@ -96,50 +99,40 @@ func (s *WebhookService) Receive(
 	}
 
 	branch := extractBranchFromRef(event.Ref)
-	jobs, err := s.jobs.ListByRepositoryID(repositoryID)
-	if err != nil {
-		return nil, err
+	if !jobMatchesBranch(*job, branch) {
+		return &WebhookResult{
+			Accepted:  true,
+			Branch:    branch,
+			Triggered: 0,
+			Message:   "branch not matched",
+		}, nil
 	}
 
-	var runIDs, jobIDs []uint
-	for _, job := range jobs {
-		if filterJobID != 0 && job.ID != filterJobID {
-			continue
-		}
-		if !job.Enabled || !job.TriggerWebhook {
-			continue
-		}
-		if !jobMatchesBranch(job, branch) {
-			continue
-		}
-		run, err := s.runs.EnqueueInternal(job.ID, 0, engine.EnqueueParams{
-			Branch:        branch,
-			TriggerType:   "webhook",
-			CommitHash:    event.CommitHash,
-			CommitMessage: event.CommitMessage,
-		})
-		if err != nil {
-			continue
-		}
-		runIDs = append(runIDs, run.ID)
-		jobIDs = append(jobIDs, job.ID)
+	run, err := s.runs.EnqueueInternal(job.ID, 0, engine.EnqueueParams{
+		Branch:        branch,
+		TriggerType:   "webhook",
+		CommitHash:    event.CommitHash,
+		CommitMessage: event.CommitMessage,
+	})
+	if err != nil {
+		return &WebhookResult{
+			Accepted:  true,
+			Branch:    branch,
+			Triggered: 0,
+			Message:   "enqueue failed",
+		}, nil
 	}
 
 	return &WebhookResult{
 		Accepted:  true,
 		Branch:    branch,
-		Triggered: len(runIDs),
-		RunIDs:    runIDs,
-		JobIDs:    jobIDs,
+		Triggered: 1,
+		RunIDs:    []uint{run.ID},
+		JobIDs:    []uint{job.ID},
 	}, nil
 }
 
 func jobMatchesBranch(job model.BuildJob, branch string) bool {
-	policy := strings.ToLower(strings.TrimSpace(job.BranchPolicy))
-	if policy == "param" {
-		// param jobs accept any webhook branch (resolved at enqueue)
-		return true
-	}
 	return job.Branch == branch
 }
 
@@ -196,7 +189,6 @@ func verifyPlatformSignature(platform string, h map[string]string, body []byte, 
 		}
 		return nil
 	default:
-		// Bitbucket / unknown with signature headers: require at least URL secret (already checked).
 		return nil
 	}
 }
@@ -245,7 +237,7 @@ func headersDeliveryID(h map[string]string) string {
 	return ""
 }
 
-func detectWebhookPlatform(h map[string]string, repo *model.Repository) string {
+func detectWebhookPlatform(h map[string]string, job *model.BuildJob) string {
 	switch {
 	case header(h, "X-Gitea-Event") != "":
 		return "gitea"
@@ -257,16 +249,16 @@ func detectWebhookPlatform(h map[string]string, repo *model.Repository) string {
 		return "gitlab"
 	case header(h, "X-Event-Key") != "":
 		return "bitbucket"
-	case repo.WebhookType != "" && repo.WebhookType != "auto":
-		return repo.WebhookType
-	case repo.WebhookRefPath != "":
+	case job.WebhookType != "" && job.WebhookType != "auto":
+		return job.WebhookType
+	case job.WebhookRefPath != "":
 		return "generic"
 	default:
 		return "generic"
 	}
 }
 
-func parseWebhookPayload(platform string, repo *model.Repository, h map[string]string, body []byte) (*webhookEvent, error) {
+func parseWebhookPayload(platform string, job *model.BuildJob, h map[string]string, body []byte) (*webhookEvent, error) {
 	switch platform {
 	case "github", "gitea", "gitee":
 		return parseGitHubLike(h, body, platform)
@@ -275,7 +267,7 @@ func parseWebhookPayload(platform string, repo *model.Repository, h map[string]s
 	case "bitbucket":
 		return parseBitbucket(h, body)
 	default:
-		return parseGeneric(repo, body)
+		return parseGeneric(job, body)
 	}
 }
 
@@ -373,24 +365,23 @@ func parseBitbucket(h map[string]string, body []byte) (*webhookEvent, error) {
 	}, nil
 }
 
-func parseGeneric(repo *model.Repository, body []byte) (*webhookEvent, error) {
-	// Minimal generic: try common fields; optional JSONPath from repo config.
-	if repo.WebhookRefPath != "" {
+func parseGeneric(job *model.BuildJob, body []byte) (*webhookEvent, error) {
+	if job.WebhookRefPath != "" {
 		var payload any
 		if err := json.Unmarshal(body, &payload); err != nil {
 			return nil, fmt.Errorf("无法解析 JSON payload")
 		}
-		ref, err := extractJSONString(payload, repo.WebhookRefPath)
+		ref, err := extractJSONString(payload, job.WebhookRefPath)
 		if err != nil {
 			return nil, fmt.Errorf("读取 ref 失败")
 		}
 		commitHash := ""
-		if repo.WebhookCommitPath != "" {
-			commitHash, _ = extractJSONString(payload, repo.WebhookCommitPath)
+		if job.WebhookCommitPath != "" {
+			commitHash, _ = extractJSONString(payload, job.WebhookCommitPath)
 		}
 		msg := ""
-		if repo.WebhookMessagePath != "" {
-			msg, _ = extractJSONString(payload, repo.WebhookMessagePath)
+		if job.WebhookMessagePath != "" {
+			msg, _ = extractJSONString(payload, job.WebhookMessagePath)
 		}
 		return &webhookEvent{Ref: ref, CommitHash: commitHash, CommitMessage: msg}, nil
 	}
@@ -496,7 +487,7 @@ type unauthorizedError struct{ msg string }
 
 func (e *unauthorizedError) Error() string { return e.msg }
 
-func errUnauthorized(msg string) error { return &unauthorizedError{msg} }
+func errUnauthorized(msg string) error { return &unauthorizedError{msg: msg} }
 
 func IsUnauthorized(err error) bool {
 	_, ok := err.(*unauthorizedError)

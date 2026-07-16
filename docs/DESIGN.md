@@ -270,7 +270,8 @@ flowchart TB
 | 任务 | status | 重启 |
 | --- | --- | --- |
 | AgentRun | pending/queued/running/success/failed/cancelled/interrupted | queued 恢复；running→interrupted；重试建议**新 Run** |
-| DevEnvJob / CliInstallJob | 同上 | running→interrupted/failed，保留日志；人工重试新任务 |
+| DevEnvJob | 同上 | running→interrupted/failed，保留日志；人工重试新任务 |
+| CLI 安装/升级/卸载 | — | **同步**在请求内执行；结果一次性返回（不落库、不保留历史任务） |
 
 构建事件默认：`artifact_ready`（归档成功且制品路径有效）。BuildJob.`agent_trigger_event` 可覆盖为 `distribution_finished`（本轮分发流程结束，无论成功失败）或 `none`。可选 `agent_id` 绑定默认智能体；亦可在 AgentTrigger 中按 Job 过滤。事件**异步**创建独立 AgentRun；Agent 失败**不**修改 BuildRun.status。流水线**禁止**内嵌同步 agent 阶段。
 
@@ -371,7 +372,7 @@ database:
 - Projects / members / requirements / docs（含 generate、publish、diff）
 - AI CLIs / agents / triggers / runs / skills
 
-Webhook 路径（2.0）：`POST /api/v1/webhook/repos/:repository_id/:secret`（可短期双路由兼容旧 path，GA 前文档化弃用）。
+Webhook 路径（2.0）：`POST /api/v1/webhook/jobs/:build_job_id/:secret`。旧仓库级路径 `POST /api/v1/webhook/repos/:repository_id/:secret` 返回 410 Gone。
 
 ---
 
@@ -381,13 +382,13 @@ Webhook 路径（2.0）：`POST /api/v1/webhook/repos/:repository_id/:secret`（
 
 校验顺序：
 
-1. 解析 repository + URL secret（恒需匹配，作为第一道门或与签名并用）。
+1. 解析 BuildJob + URL secret（恒需匹配，作为第一道门或与签名并用）。
 2. 若存在平台签名头（GitHub/GitLab/Gitea/Gitee/Bitbucket 等），**校验签名**；失败 401。
 3. 使用 delivery ID（或平台等价唯一键）做幂等；重复投递返回成功且不重复触发。
 4. 无签名的 generic/手动调用：允许仅 URL secret；必须审计并限流。
 5. 日志与错误信息**脱敏** secret。
 
-分支匹配：与 BuildJob 分支规则一致；可选 `build_job_id` 查询参数收窄范围。
+分支匹配：与 BuildJob 分支规则一致；每个 BuildJob 拥有独立 Webhook URL 与 secret。
 
 ### 8.2 Cron
 

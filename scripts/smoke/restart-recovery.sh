@@ -7,7 +7,7 @@ cd "$ROOT"
 echo "==> BuildRun scheduler recovery (queued / interrupted)"
 go test ./internal/engine/ -run 'TestSchedulerRecovery' -count=1
 
-echo "==> AgentRun / CLI install recovery (package tests covering RecoverOnStartup)"
+echo "==> AgentRun recovery (package tests covering RecoverOnStartup)"
 go test ./internal/ai/service/ -count=1
 
 echo "==> Ops dev-environment install recovery"

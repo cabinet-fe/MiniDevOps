@@ -2,9 +2,10 @@
 import { onMounted, reactive, ref } from "vue";
 import { defineTableColumns, message } from "@veltra/desktop";
 
-import { createToken, listTokens, revokeToken } from "@/api/ai";
+import { createToken, deleteToken, listTokens } from "@/api/ai";
 import type { PersonalAccessToken } from "@/api/types";
 import FormDialog from "@/components/form-dialog";
+import { formatDateTime } from "@/lib/datetime";
 
 const items = ref<PersonalAccessToken[]>([]);
 const loading = ref(false);
@@ -21,8 +22,13 @@ const columns = defineTableColumns([
   { key: "name", name: "名称", minWidth: 120 },
   { key: "token_prefix", name: "前缀", width: 140 },
   { key: "scopes", name: "Scope", minWidth: 160 },
-  { key: "revoked_at", name: "吊销", width: 100 },
-  { key: "created_at", name: "创建时间", minWidth: 160 },
+  { key: "revoked_at", name: "状态", width: 100 },
+  {
+    key: "created_at",
+    name: "创建时间",
+    minWidth: 160,
+    render: ({ val }) => formatDateTime(val),
+  },
   { key: "action", name: "操作", width: 100 },
 ]);
 
@@ -63,12 +69,13 @@ async function save() {
   }
 }
 
-async function revoke(row: PersonalAccessToken) {
+async function remove(row: PersonalAccessToken) {
   try {
-    await revokeToken(row.id);
+    await deleteToken(row.id);
+    message.success("已删除");
     await reload();
   } catch (error) {
-    message.error(error instanceof Error ? error.message : "吊销失败");
+    message.error(error instanceof Error ? error.message : "删除失败");
   }
 }
 
@@ -110,13 +117,11 @@ onMounted(() => {
         </u-tag>
       </template>
       <template #column:action="{ rowData }">
-        <u-action
-          v-if="!(rowData as PersonalAccessToken).revoked_at"
-          type="danger"
-          @run="revoke(rowData as PersonalAccessToken)"
-        >
-          吊销
-        </u-action>
+        <u-action-group :max="2">
+          <u-action need-confirm type="danger" @run="remove(rowData as PersonalAccessToken)">
+            删除
+          </u-action>
+        </u-action-group>
       </template>
     </u-table>
 

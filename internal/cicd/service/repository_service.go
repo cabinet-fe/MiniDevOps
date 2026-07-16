@@ -1,9 +1,6 @@
 package service
 
 import (
-	"crypto/rand"
-	"encoding/hex"
-	"fmt"
 	"strings"
 
 	"bedrock/internal/cicd/model"
@@ -39,32 +36,22 @@ func (s *RepositoryService) SetGitLister(g GitLister) {
 }
 
 type CreateRepositoryInput struct {
-	Name               string `json:"name"`
-	Description        string `json:"description"`
-	Tags               string `json:"tags"`
-	RepoURL            string `json:"repo_url"`
-	DefaultBranch      string `json:"default_branch"`
-	AuthType           string `json:"auth_type"`
-	CredentialID       *uint  `json:"credential_id"`
-	WebhookType        string `json:"webhook_type"`
-	WebhookRefPath     string `json:"webhook_ref_path"`
-	WebhookCommitPath  string `json:"webhook_commit_path"`
-	WebhookMessagePath string `json:"webhook_message_path"`
+	Name         string `json:"name"`
+	Description  string `json:"description"`
+	Tags         string `json:"tags"`
+	RepoURL      string `json:"repo_url"`
+	AuthType     string `json:"auth_type"`
+	CredentialID *uint  `json:"credential_id"`
 }
 
 type UpdateRepositoryInput struct {
-	Name               *string `json:"name"`
-	Description        *string `json:"description"`
-	Tags               *string `json:"tags"`
-	RepoURL            *string `json:"repo_url"`
-	DefaultBranch      *string `json:"default_branch"`
-	AuthType           *string `json:"auth_type"`
-	CredentialID       *uint   `json:"credential_id"`
-	ClearCredential    bool    `json:"clear_credential"`
-	WebhookType        *string `json:"webhook_type"`
-	WebhookRefPath     *string `json:"webhook_ref_path"`
-	WebhookCommitPath  *string `json:"webhook_commit_path"`
-	WebhookMessagePath *string `json:"webhook_message_path"`
+	Name            *string `json:"name"`
+	Description     *string `json:"description"`
+	Tags            *string `json:"tags"`
+	RepoURL         *string `json:"repo_url"`
+	AuthType        *string `json:"auth_type"`
+	CredentialID    *uint   `json:"credential_id"`
+	ClearCredential bool    `json:"clear_credential"`
 }
 
 func (s *RepositoryService) Create(createdBy uint, in CreateRepositoryInput, canUseCredential bool) (*model.Repository, error) {
@@ -87,37 +74,19 @@ func (s *RepositoryService) Create(createdBy uint, in CreateRepositoryInput, can
 	} else {
 		in.CredentialID = nil
 	}
-	secret, err := generateWebhookSecret()
-	if err != nil {
-		return nil, err
-	}
-	branch := strings.TrimSpace(in.DefaultBranch)
-	if branch == "" {
-		branch = "main"
-	}
-	whType := strings.TrimSpace(in.WebhookType)
-	if whType == "" {
-		whType = "auto"
-	}
 	repo := &model.Repository{
-		Name:               name,
-		Description:        strings.TrimSpace(in.Description),
-		Tags:               strings.TrimSpace(in.Tags),
-		RepoURL:            url,
-		DefaultBranch:      branch,
-		AuthType:           authType,
-		CredentialID:       in.CredentialID,
-		WebhookSecret:      secret,
-		WebhookType:        whType,
-		WebhookRefPath:     strings.TrimSpace(in.WebhookRefPath),
-		WebhookCommitPath:  strings.TrimSpace(in.WebhookCommitPath),
-		WebhookMessagePath: strings.TrimSpace(in.WebhookMessagePath),
-		CreatedBy:          createdBy,
+		Name:         name,
+		Description:  strings.TrimSpace(in.Description),
+		Tags:         strings.TrimSpace(in.Tags),
+		RepoURL:      url,
+		AuthType:     authType,
+		CredentialID: in.CredentialID,
+		CreatedBy:    createdBy,
 	}
 	if err := s.repo.Create(repo); err != nil {
 		return nil, err
 	}
-	return publicRepo(repo, false), nil
+	return repo, nil
 }
 
 func (s *RepositoryService) Update(id uint, in UpdateRepositoryInput, canUseCredential bool) (*model.Repository, error) {
@@ -137,21 +106,6 @@ func (s *RepositoryService) Update(id uint, in UpdateRepositoryInput, canUseCred
 	}
 	if in.RepoURL != nil {
 		existing.RepoURL = strings.TrimSpace(*in.RepoURL)
-	}
-	if in.DefaultBranch != nil {
-		existing.DefaultBranch = strings.TrimSpace(*in.DefaultBranch)
-	}
-	if in.WebhookType != nil {
-		existing.WebhookType = strings.TrimSpace(*in.WebhookType)
-	}
-	if in.WebhookRefPath != nil {
-		existing.WebhookRefPath = strings.TrimSpace(*in.WebhookRefPath)
-	}
-	if in.WebhookCommitPath != nil {
-		existing.WebhookCommitPath = strings.TrimSpace(*in.WebhookCommitPath)
-	}
-	if in.WebhookMessagePath != nil {
-		existing.WebhookMessagePath = strings.TrimSpace(*in.WebhookMessagePath)
 	}
 	if in.AuthType != nil {
 		existing.AuthType = normalizeRepoAuth(*in.AuthType)
@@ -184,7 +138,7 @@ func (s *RepositoryService) Update(id uint, in UpdateRepositoryInput, canUseCred
 	if err := s.repo.Update(existing); err != nil {
 		return nil, err
 	}
-	return publicRepo(existing, false), nil
+	return existing, nil
 }
 
 func (s *RepositoryService) Delete(id uint) error {
@@ -201,12 +155,12 @@ func (s *RepositoryService) Delete(id uint) error {
 	return s.repo.Delete(id)
 }
 
-func (s *RepositoryService) Get(id uint, revealSecret bool) (*model.Repository, error) {
+func (s *RepositoryService) Get(id uint) (*model.Repository, error) {
 	repo, err := s.repo.FindByID(id)
 	if err != nil {
 		return nil, NewNotFound("仓库不存在")
 	}
-	return publicRepo(repo, revealSecret), nil
+	return repo, nil
 }
 
 func (s *RepositoryService) List(page, pageSize int, keyword string) ([]model.Repository, int64, error) {
@@ -214,27 +168,7 @@ func (s *RepositoryService) List(page, pageSize int, keyword string) ([]model.Re
 	if err != nil {
 		return nil, 0, err
 	}
-	out := make([]model.Repository, 0, len(items))
-	for i := range items {
-		out = append(out, *publicRepo(&items[i], false))
-	}
-	return out, total, nil
-}
-
-func (s *RepositoryService) RotateWebhookSecret(id uint) (*model.Repository, error) {
-	repo, err := s.repo.FindByID(id)
-	if err != nil {
-		return nil, NewNotFound("仓库不存在")
-	}
-	secret, err := generateWebhookSecret()
-	if err != nil {
-		return nil, err
-	}
-	repo.WebhookSecret = secret
-	if err := s.repo.Update(repo); err != nil {
-		return nil, err
-	}
-	return publicRepo(repo, true), nil
+	return items, total, nil
 }
 
 func (s *RepositoryService) ListBranches(id uint) ([]string, error) {
@@ -271,14 +205,6 @@ func (s *RepositoryService) TestFetch(id uint) (map[string]interface{}, error) {
 	}, nil
 }
 
-func publicRepo(repo *model.Repository, revealSecret bool) *model.Repository {
-	cp := *repo
-	if !revealSecret {
-		cp.WebhookSecret = ""
-	}
-	return &cp
-}
-
 func normalizeRepoAuth(t string) string {
 	switch strings.ToLower(strings.TrimSpace(t)) {
 	case "credential":
@@ -286,14 +212,6 @@ func normalizeRepoAuth(t string) string {
 	default:
 		return "none"
 	}
-}
-
-func generateWebhookSecret() (string, error) {
-	b := make([]byte, 24)
-	if _, err := rand.Read(b); err != nil {
-		return "", fmt.Errorf("generate webhook secret: %w", err)
-	}
-	return hex.EncodeToString(b), nil
 }
 
 func credentialIDEqual(a, b *uint) bool {

@@ -38,10 +38,7 @@ func (c *SimpleRepoCloner) CloneForAgent(ctx context.Context, repositoryID uint,
 	if url == "" {
 		return fmt.Errorf("repository URL empty")
 	}
-	branch := strings.TrimSpace(repo.DefaultBranch)
-	if branch == "" {
-		branch = "main"
-	}
+	branch := "main"
 	if err := os.MkdirAll(filepath.Dir(destDir), 0o755); err != nil {
 		return err
 	}

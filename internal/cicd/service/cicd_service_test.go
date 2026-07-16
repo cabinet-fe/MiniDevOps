@@ -151,13 +151,10 @@ func TestRepository_CRUD_and_deleteProtection(t *testing.T) {
 	_, repoSvc, _, jobSvc, _, _ := setupCICD(t)
 
 	repo, err := repoSvc.Create(1, service.CreateRepositoryInput{
-		Name: "demo", RepoURL: "https://example.com/demo.git", DefaultBranch: "main",
+		Name: "demo", RepoURL: "https://example.com/demo.git",
 	}, false)
 	if err != nil {
 		t.Fatal(err)
-	}
-	if repo.WebhookSecret != "" {
-		t.Fatal("list/create without reveal should hide webhook secret")
 	}
 
 	branches, err := repoSvc.ListBranches(repo.ID)

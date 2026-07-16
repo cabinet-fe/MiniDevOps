@@ -14,12 +14,9 @@ func TestJobMatchesBranch(t *testing.T) {
 		branch string
 		want   bool
 	}{
-		{"fixed hit", model.BuildJob{BranchPolicy: "fixed", Branch: "main"}, "main", true},
-		{"fixed miss", model.BuildJob{BranchPolicy: "fixed", Branch: "main"}, "develop", false},
-		{"empty policy defaults fixed", model.BuildJob{Branch: "main"}, "main", true},
-		{"empty policy miss", model.BuildJob{Branch: "main"}, "other", false},
-		{"param any branch", model.BuildJob{BranchPolicy: "param", Branch: "main"}, "feature/x", true},
-		{"param case insensitive", model.BuildJob{BranchPolicy: "PARAM", Branch: "main"}, "develop", true},
+		{"hit", model.BuildJob{Branch: "main"}, "main", true},
+		{"miss", model.BuildJob{Branch: "main"}, "develop", false},
+		{"empty branch miss", model.BuildJob{Branch: ""}, "main", false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

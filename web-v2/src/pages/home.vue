@@ -17,6 +17,7 @@ import type {
   SystemInfo,
   SystemStatus,
 } from "@/api/types";
+import { formatDateTime } from "@/lib/datetime";
 
 const STATUS_REFRESH_MS = 30_000;
 
@@ -207,7 +208,7 @@ onUnmounted(() => {
             <dt>运行时</dt>
             <dd>{{ systemInfo?.runtime ?? "—" }}</dd>
             <dt>启动时间</dt>
-            <dd>{{ systemInfo?.start_time ?? "—" }}</dd>
+            <dd>{{ formatDateTime(systemInfo?.start_time) || "—" }}</dd>
           </dl>
         </template>
 

@@ -8,10 +8,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
-	"sync"
-	"time"
 
 	"bedrock/internal/ai/model"
 	"bedrock/internal/ai/repository"
@@ -24,63 +23,14 @@ type AuditWriter interface {
 type CLIService struct {
 	repo  *repository.AIRepository
 	audit AuditWriter
-
-	jobs    chan uint
-	stop    chan struct{}
-	wg      sync.WaitGroup
-	startMu sync.Mutex
-	started bool
 }
 
 func NewCLIService(repo *repository.AIRepository, audit ...AuditWriter) *CLIService {
-	svc := &CLIService{
-		repo: repo,
-		jobs: make(chan uint, 128),
-		stop: make(chan struct{}),
-	}
+	svc := &CLIService{repo: repo}
 	if len(audit) > 0 {
 		svc.audit = audit[0]
 	}
 	return svc
-}
-
-func (s *CLIService) Start() {
-	s.startMu.Lock()
-	defer s.startMu.Unlock()
-	if s.started {
-		return
-	}
-	s.started = true
-	s.wg.Add(1)
-	go s.worker()
-}
-
-func (s *CLIService) Shutdown() {
-	s.startMu.Lock()
-	if !s.started {
-		s.startMu.Unlock()
-		return
-	}
-	s.started = false
-	close(s.stop)
-	s.startMu.Unlock()
-	s.wg.Wait()
-}
-
-func (s *CLIService) RecoverOnStartup() error {
-	if _, err := s.repo.MarkRunningInstallJobsInterrupted(); err != nil {
-		return err
-	}
-	queued, err := s.repo.ListInstallJobsByStatuses(model.JobQueued)
-	if err != nil {
-		return err
-	}
-	for _, job := range queued {
-		if err := s.submit(job.ID); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 func (s *CLIService) ListCLIs() ([]model.CliRuntimeDefinition, error) {
@@ -95,11 +45,11 @@ func (s *CLIService) ListCLIs() ([]model.CliRuntimeDefinition, error) {
 }
 
 type DetectResult struct {
-	Detected bool   `json:"detected"`
-	Output   string `json:"output"`
-	Path     string `json:"path"`
-	Version  string `json:"version"`
-	Healthy  bool   `json:"healthy"`
+	Detected   bool   `json:"detected"`
+	Output     string `json:"output"`
+	Path       string `json:"path"`
+	Version    string `json:"version"`
+	Healthy    bool   `json:"healthy"`
 	RiskNotice string `json:"risk_notice"`
 }
 
@@ -114,37 +64,58 @@ func (s *CLIService) Detect(key string) (*DetectResult, error) {
 	}
 	output, runErr := executeShell(context.Background(), cmd)
 	result := &DetectResult{
-		Detected:   runErr == nil,
-		Output:     strings.TrimSpace(output),
 		RiskNotice: model.RiskNoticeSameUID,
+		Output:     strings.TrimSpace(output),
 	}
-	if path, lookErr := exec.LookPath(cli.BinaryName); lookErr == nil {
-		result.Path = path
-		cli.InstalledPath = path
-	}
-	if runErr == nil {
-		cli.InstallStatus = "installed"
-		cli.Healthy = true
-		result.Healthy = true
-		result.Version = firstLine(output)
-		cli.InstalledVersion = result.Version
-	} else {
-		cli.InstallStatus = "missing"
-		cli.Healthy = false
+	if runErr != nil {
+		result.Detected = false
 		result.Healthy = false
+		cli.InstallStatus = "missing"
+		cli.InstalledPath = ""
+		cli.InstalledVersion = ""
+		cli.Healthy = false
 		if result.Output == "" {
 			result.Output = runErr.Error()
 		}
+		_ = s.repo.UpdateCLI(cli)
+		return result, nil
 	}
+	version := extractCLIVersion(output, cli.BinaryName)
+	if version == "" {
+		version = probeCLIVersion(cli.BinaryName)
+	}
+	if isPathLine(version, cli.BinaryName) {
+		version = ""
+	}
+	path := ""
+	if p, lookErr := exec.LookPath(cli.BinaryName); lookErr == nil {
+		path = p
+	} else if p := extractCLIPath(output, cli.BinaryName); p != "" {
+		path = p
+	}
+	result.Detected = true
+	result.Healthy = true
+	result.Path = path
+	result.Version = version
+	cli.InstallStatus = "installed"
+	cli.InstalledPath = path
+	cli.InstalledVersion = version
+	cli.Healthy = true
 	_ = s.repo.UpdateCLI(cli)
 	return result, nil
 }
 
-type JobInput struct {
+type ExecuteInput struct {
 	Version string `json:"version"`
 }
 
-func (s *CLIService) Enqueue(key, operation string, input JobInput, createdBy uint) (*model.CliInstallJob, error) {
+type ExecuteResult struct {
+	Success bool   `json:"success"`
+	Output  string `json:"output"`
+	Error   string `json:"error,omitempty"`
+}
+
+func (s *CLIService) Execute(ctx context.Context, key, operation string, input ExecuteInput, createdBy uint) (*ExecuteResult, error) {
 	cli, err := s.repo.FindCLIByKey(key)
 	if err != nil {
 		return nil, err
@@ -153,18 +124,46 @@ func (s *CLIService) Enqueue(key, operation string, input JobInput, createdBy ui
 	if template == "" {
 		return nil, errors.New("该 CLI 未配置此操作命令")
 	}
-	job := &model.CliInstallJob{
-		CliKey: key, Operation: operation, RequestedVersion: strings.TrimSpace(input.Version),
-		Status: model.JobQueued, CreatedBy: createdBy,
+	version := strings.TrimSpace(input.Version)
+
+	if needsSource(operation, template) {
+		return s.executeWithSources(ctx, key, operation, version, template, createdBy)
 	}
-	if err := s.repo.CreateInstallJob(job); err != nil {
+	command := renderCLICommand(template, version, "")
+	output, runErr := executeShell(ctx, command)
+	if runErr != nil {
+		s.auditExecute(key, operation, createdBy, false)
+		return &ExecuteResult{Success: false, Output: output, Error: runErr.Error()}, nil
+	}
+	s.auditExecute(key, operation, createdBy, true)
+	return &ExecuteResult{Success: true, Output: output}, nil
+}
+
+func (s *CLIService) executeWithSources(ctx context.Context, key, operation, version, template string, createdBy uint) (*ExecuteResult, error) {
+	sources, err := s.repo.ListEnabledSources(key)
+	if err != nil {
 		return nil, err
 	}
-	s.auditJob(job, "cli_job_enqueued")
-	if err := s.submit(job.ID); err != nil {
-		return nil, err
+	if len(sources) == 0 {
+		return nil, errors.New("没有可用安装源")
 	}
-	return job, nil
+	var log strings.Builder
+	for i, source := range sources {
+		command := renderCLICommand(template, version, source.BaseURL)
+		log.WriteString(fmt.Sprintf("trying source %q (priority %d)\n", source.Name, source.Priority))
+		output, runErr := executeShell(ctx, command)
+		log.WriteString(output)
+		if runErr == nil {
+			if i > 0 {
+				log.WriteString("multi-source fallback succeeded after earlier failures\n")
+			}
+			s.auditExecute(key, operation, createdBy, true)
+			return &ExecuteResult{Success: true, Output: log.String()}, nil
+		}
+		log.WriteString(fmt.Sprintf("source %q failed: %v\n", source.Name, runErr))
+	}
+	s.auditExecute(key, operation, createdBy, false)
+	return &ExecuteResult{Success: false, Output: log.String(), Error: "所有安装源均失败"}, nil
 }
 
 func (s *CLIService) ListSources(cliKey string) ([]model.CliInstallSource, error) {
@@ -219,154 +218,16 @@ func (s *CLIService) DeleteSource(id uint) error {
 	return s.repo.DeleteSource(id)
 }
 
-func (s *CLIService) ListJobs(page, pageSize int, cliKey, status string) ([]model.CliInstallJob, int64, error) {
-	return s.repo.ListInstallJobs(page, pageSize, cliKey, status)
-}
-
-func (s *CLIService) GetJob(id uint) (*model.CliInstallJob, error) {
-	return s.repo.FindInstallJob(id)
-}
-
-func (s *CLIService) JobLogs(id uint) (string, error) {
-	job, err := s.repo.FindInstallJob(id)
-	if err != nil {
-		return "", err
-	}
-	return job.LogText, nil
-}
-
-func (s *CLIService) Retry(id uint, createdBy uint) (*model.CliInstallJob, error) {
-	old, err := s.repo.FindInstallJob(id)
-	if err != nil {
-		return nil, err
-	}
-	if old.Status == model.JobQueued || old.Status == model.JobRunning {
-		return nil, errors.New("任务仍在执行")
-	}
-	return s.Enqueue(old.CliKey, old.Operation, JobInput{Version: old.RequestedVersion}, createdBy)
-}
-
-func (s *CLIService) submit(id uint) error {
-	s.startMu.Lock()
-	started := s.started
-	s.startMu.Unlock()
-	if !started {
-		return errors.New("CLI 任务调度器未启动")
-	}
-	select {
-	case s.jobs <- id:
-		return nil
-	default:
-		go func() { s.jobs <- id }()
-		return nil
-	}
-}
-
-func (s *CLIService) worker() {
-	defer s.wg.Done()
-	for {
-		select {
-		case <-s.stop:
-			return
-		case id := <-s.jobs:
-			s.ExecuteJob(context.Background(), id)
-		}
-	}
-}
-
-func (s *CLIService) ExecuteJob(ctx context.Context, id uint) {
-	job, err := s.repo.FindInstallJob(id)
-	if err != nil || job.Status != model.JobQueued {
-		return
-	}
-	now := time.Now().UTC()
-	job.Status, job.StartedAt = model.JobRunning, &now
-	job.LogText += fmt.Sprintf("%s job started: %s (same UID as Bedrock; no sandbox)\n", now.Format(time.RFC3339), job.Operation)
-	if err := s.repo.UpdateInstallJob(job); err != nil {
-		return
-	}
-	cli, err := s.repo.FindCLIByKey(job.CliKey)
-	if err != nil {
-		s.failJob(job, err)
-		return
-	}
-	template := templateFor(cli, job.Operation)
-	if template == "" {
-		s.failJob(job, errors.New("未配置命令模板"))
-		return
-	}
-	if needsSource(job.Operation, template) {
-		sources, err := s.repo.ListEnabledSources(job.CliKey)
-		if err != nil {
-			s.failJob(job, err)
-			return
-		}
-		if len(sources) == 0 {
-			s.failJob(job, errors.New("没有可用安装源"))
-			return
-		}
-		for i, source := range sources {
-			command := renderCLICommand(template, job.RequestedVersion, source.BaseURL)
-			job.CommandSnapshot = command
-			job.LogText += fmt.Sprintf("trying source %q (priority %d)\n", source.Name, source.Priority)
-			output, runErr := executeShell(ctx, command)
-			job.LogText += output
-			if runErr == nil {
-				sid := source.ID
-				job.SourceID = &sid
-				job.LogText += fmt.Sprintf("source %q succeeded\n", source.Name)
-				if i > 0 {
-					job.LogText += "multi-source fallback succeeded after earlier failures\n"
-				}
-				s.succeedJob(job, cli)
-				return
-			}
-			job.LogText += fmt.Sprintf("source %q failed: %v\n", source.Name, runErr)
-		}
-		s.failJob(job, errors.New("所有安装源均失败"))
-		return
-	}
-	command := renderCLICommand(template, job.RequestedVersion, "")
-	job.CommandSnapshot = command
-	output, runErr := executeShell(ctx, command)
-	job.LogText += output
-	if runErr != nil {
-		s.failJob(job, runErr)
-		return
-	}
-	s.succeedJob(job, cli)
-}
-
-func (s *CLIService) succeedJob(job *model.CliInstallJob, cli *model.CliRuntimeDefinition) {
-	finished := time.Now().UTC()
-	job.Status = model.JobSuccess
-	job.FinishedAt = &finished
-	_ = s.repo.UpdateInstallJob(job)
-	cli.InstallStatus = "installed"
-	if path, err := exec.LookPath(cli.BinaryName); err == nil {
-		cli.InstalledPath = path
-	}
-	cli.Healthy = true
-	_ = s.repo.UpdateCLI(cli)
-	s.auditJob(job, "cli_job_success")
-}
-
-func (s *CLIService) failJob(job *model.CliInstallJob, err error) {
-	finished := time.Now().UTC()
-	job.Status = model.JobFailed
-	job.FinishedAt = &finished
-	job.ErrorMessage = err.Error()
-	job.LogText += "error: " + err.Error() + "\n"
-	_ = s.repo.UpdateInstallJob(job)
-	s.auditJob(job, "cli_job_failed")
-}
-
-func (s *CLIService) auditJob(job *model.CliInstallJob, action string) {
+func (s *CLIService) auditExecute(cliKey, operation string, createdBy uint, success bool) {
 	if s.audit == nil {
 		return
 	}
-	_ = s.audit.Write(job.CreatedBy, "", action, "cli_install_job", fmt.Sprintf("%d", job.ID),
-		fmt.Sprintf("cli=%s op=%s status=%s", job.CliKey, job.Operation, job.Status), "")
+	status := "failed"
+	if success {
+		status = "success"
+	}
+	_ = s.audit.Write(createdBy, "", "cli_execute", "cli_runtime", cliKey,
+		fmt.Sprintf("cli=%s op=%s status=%s", cliKey, operation, status), "")
 }
 
 func templateFor(cli *model.CliRuntimeDefinition, operation string) string {
@@ -416,12 +277,63 @@ func executeShell(ctx context.Context, command string) (string, error) {
 	return buf.String(), err
 }
 
-func firstLine(s string) string {
-	s = strings.TrimSpace(s)
-	if i := strings.IndexByte(s, '\n'); i >= 0 {
-		return strings.TrimSpace(s[:i])
+var versionPattern = regexp.MustCompile(`(?i)(?:version\s+)?v?(\d+\.\d+(?:\.\d+)?(?:[-+][\w.]+)?)`)
+
+func probeCLIVersion(binaryName string) string {
+	for _, probe := range []string{
+		binaryName + " --version",
+		binaryName + " -v",
+		binaryName + " version",
+	} {
+		out, err := executeShell(context.Background(), probe)
+		if err != nil {
+			continue
+		}
+		if v := extractCLIVersion(out, binaryName); v != "" && !isPathLine(v, binaryName) {
+			return v
+		}
 	}
-	return s
+	return ""
+}
+
+func extractCLIVersion(output, binaryName string) string {
+	for _, line := range strings.Split(output, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || isPathLine(line, binaryName) {
+			continue
+		}
+		if m := versionPattern.FindStringSubmatch(line); len(m) > 1 {
+			return m[1]
+		}
+		return line
+	}
+	return ""
+}
+
+func extractCLIPath(output, binaryName string) string {
+	for _, line := range strings.Split(output, "\n") {
+		line = strings.TrimSpace(line)
+		if isPathLine(line, binaryName) {
+			return line
+		}
+	}
+	return ""
+}
+
+func isPathLine(line, binaryName string) bool {
+	if strings.HasPrefix(line, "/") {
+		return true
+	}
+	if len(line) >= 2 && line[1] == ':' {
+		return true
+	}
+	if strings.Contains(line, "/") && !strings.Contains(line, " ") {
+		return true
+	}
+	if filepath.Base(line) == binaryName {
+		return true
+	}
+	return false
 }
 
 // ResolveBinary returns absolute path for a CLI binary if installed.
@@ -446,7 +358,6 @@ func BuildRuntimeEnv(cli *model.CliRuntimeDefinition, apiBase string, extra map[
 		}
 		env = append(env, k+"="+v)
 	}
-	// Ensure PATH still finds the binary.
 	if cli.InstalledPath != "" {
 		dir := filepath.Dir(cli.InstalledPath)
 		env = append(env, "PATH="+dir+string(os.PathListSeparator)+os.Getenv("PATH"))

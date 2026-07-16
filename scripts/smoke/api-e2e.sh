@@ -45,7 +45,7 @@ done
 
 echo "==> create local repo + job (build path)"
 REPO="$(curl -fsS -X POST "$BASE/api/v1/repositories" "${AUTH[@]}" \
-  -d '{"name":"smoke-repo","repo_url":"https://example.com/smoke.git","default_branch":"main"}')"
+  -d '{"name":"smoke-repo","repo_url":"https://example.com/smoke.git"}')"
 REPO_ID="$(json_get "$REPO" "o['data']['id']")"
 
 JOB="$(curl -fsS -X POST "$BASE/api/v1/build-jobs" "${AUTH[@]}" \

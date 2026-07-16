@@ -933,34 +933,6 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/SuccessEnvelope"
-  /repositories/{id}/webhook-secret:
-    parameters:
-      - $ref: "#/components/parameters/Id"
-    get:
-      tags: [Repositories]
-      summary: View webhook secret and URL
-      operationId: repositoriesWebhookSecretGet
-      responses:
-        "200":
-          description: OK
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/SuccessEnvelope"
-  /repositories/{id}/webhook-secret/rotate:
-    parameters:
-      - $ref: "#/components/parameters/Id"
-    post:
-      tags: [Repositories]
-      summary: Rotate webhook secret
-      operationId: repositoriesWebhookSecretRotate
-      responses:
-        "200":
-          description: OK
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/SuccessEnvelope"
   /build-jobs:
     get:
       tags: [BuildJobs]
@@ -1054,6 +1026,34 @@ paths:
       tags: [BuildJobs]
       summary: Delete build job
       operationId: buildJobsDelete
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessEnvelope"
+  /build-jobs/{id}/webhook-secret:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    get:
+      tags: [BuildJobs]
+      summary: View build job webhook secret and URL
+      operationId: buildJobsWebhookSecretGet
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessEnvelope"
+  /build-jobs/{id}/webhook-secret/rotate:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    post:
+      tags: [BuildJobs]
+      summary: Rotate build job webhook secret
+      operationId: buildJobsWebhookSecretRotate
       responses:
         "200":
           description: OK
@@ -1447,6 +1447,30 @@ paths:
                 $ref: "#/components/schemas/SuccessEnvelope"
         "409":
           $ref: "#/components/responses/Error"
+  /webhook/jobs/{build_job_id}/{secret}:
+    parameters:
+      - name: build_job_id
+        in: path
+        required: true
+        schema: {type: integer}
+      - name: secret
+        in: path
+        required: true
+        schema: {type: string}
+    post:
+      tags: [Webhook]
+      summary: Receive build job webhook (signature preferred; URL secret fallback; delivery dedup)
+      security: []
+      operationId: webhookReceive
+      responses:
+        "202":
+          description: Accepted (may be duplicate with triggered=0)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessEnvelope"
+        "401":
+          $ref: "#/components/responses/Error"
   /webhook/repos/{repository_id}/{secret}:
     parameters:
       - name: repository_id
@@ -1459,22 +1483,12 @@ paths:
         schema: {type: string}
     post:
       tags: [Webhook]
-      summary: Receive repository webhook (signature preferred; URL secret fallback; delivery dedup)
+      summary: Deprecated repository webhook (returns 410 Gone)
       security: []
-      operationId: webhookReceive
-      parameters:
-        - name: build_job_id
-          in: query
-          schema: {type: integer}
-          description: Optional narrow to a single BuildJob
+      operationId: webhookReceiveDeprecated
+      deprecated: true
       responses:
-        "202":
-          description: Accepted (may be duplicate with triggered=0)
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/SuccessEnvelope"
-        "401":
+        "410":
           $ref: "#/components/responses/Error"
   /dashboard/layout:
     get:
@@ -2493,34 +2507,61 @@ paths:
     parameters: [{name: key, in: path, required: true, schema: {type: string}}]
     post:
       tags: [AICLIs]
-      summary: Enqueue CLI install (multi-source fallback)
+      summary: Install CLI synchronously (multi-source fallback)
       operationId: aiCLIInstall
       requestBody:
         content:
           application/json:
             schema: {type: object, properties: {version: {type: string}}}
       responses:
-        "202": {description: Accepted}
+        "200":
+          description: Execute result
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data: {$ref: "#/components/schemas/CliExecuteResult"}
   /ai/clis/{key}/upgrade:
     parameters: [{name: key, in: path, required: true, schema: {type: string}}]
     post:
       tags: [AICLIs]
-      summary: Enqueue CLI upgrade
+      summary: Upgrade CLI synchronously
       operationId: aiCLIUpgrade
       requestBody:
         content:
           application/json:
             schema: {type: object, properties: {version: {type: string}}}
       responses:
-        "202": {description: Accepted}
+        "200":
+          description: Execute result
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data: {$ref: "#/components/schemas/CliExecuteResult"}
   /ai/clis/{key}/uninstall:
     parameters: [{name: key, in: path, required: true, schema: {type: string}}]
     post:
       tags: [AICLIs]
-      summary: Enqueue CLI uninstall
+      summary: Uninstall CLI synchronously
       operationId: aiCLIUninstall
       responses:
-        "202": {description: Accepted}
+        "200":
+          description: Execute result
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data: {$ref: "#/components/schemas/CliExecuteResult"}
   /ai/cli-sources:
     get:
       tags: [AICLIs]
@@ -2554,38 +2595,6 @@ paths:
       summary: Delete CLI install source
       operationId: aiCLISourcesDelete
       responses: {"200": {description: Deleted}}
-  /ai/cli-install-jobs:
-    get:
-      tags: [AICLIs]
-      summary: List CLI install jobs
-      operationId: aiCLIInstallJobsList
-      parameters:
-        - {$ref: "#/components/parameters/Page"}
-        - {$ref: "#/components/parameters/PageSize"}
-        - {name: cli_key, in: query, schema: {type: string}}
-        - {name: status, in: query, schema: {type: string}}
-      responses: {"200": {description: OK}}
-  /ai/cli-install-jobs/{id}:
-    parameters: [{$ref: "#/components/parameters/ID"}]
-    get:
-      tags: [AICLIs]
-      summary: Get CLI install job
-      operationId: aiCLIInstallJobsGet
-      responses: {"200": {description: OK}}
-  /ai/cli-install-jobs/{id}/logs:
-    parameters: [{$ref: "#/components/parameters/ID"}]
-    get:
-      tags: [AICLIs]
-      summary: Get CLI install job logs
-      operationId: aiCLIInstallJobsLogs
-      responses: {"200": {description: OK}}
-  /ai/cli-install-jobs/{id}/retry:
-    parameters: [{$ref: "#/components/parameters/ID"}]
-    post:
-      tags: [AICLIs]
-      summary: Retry CLI install job (new job)
-      operationId: aiCLIInstallJobsRetry
-      responses: {"202": {description: Accepted}}
   /ai/agents:
     get:
       tags: [Agents]
@@ -2821,9 +2830,9 @@ paths:
     parameters: [{$ref: "#/components/parameters/ID"}]
     delete:
       tags: [Tokens]
-      summary: Revoke PAT
-      operationId: tokensRevoke
-      responses: {"200": {description: Revoked}}
+      summary: Delete PAT
+      operationId: tokensDelete
+      responses: {"200": {description: Deleted}}
 components:
   securitySchemes:
     bearerAuth:
@@ -3315,14 +3324,8 @@ components:
         description: {type: string}
         tags: {type: string}
         repo_url: {type: string}
-        default_branch: {type: string}
         auth_type: {type: string, enum: [none, credential]}
         credential_id: {type: integer, nullable: true}
-        webhook_secret: {type: string, description: "Only present on secret view/rotate"}
-        webhook_type: {type: string}
-        webhook_ref_path: {type: string}
-        webhook_commit_path: {type: string}
-        webhook_message_path: {type: string}
         created_by: {type: integer}
         created_at: {type: string, format: date-time}
         updated_at: {type: string, format: date-time}
@@ -3334,13 +3337,8 @@ components:
         description: {type: string}
         tags: {type: string}
         repo_url: {type: string}
-        default_branch: {type: string}
         auth_type: {type: string}
         credential_id: {type: integer, nullable: true}
-        webhook_type: {type: string}
-        webhook_ref_path: {type: string}
-        webhook_commit_path: {type: string}
-        webhook_message_path: {type: string}
     RepositoryUpdateRequest:
       type: object
       properties:
@@ -3348,14 +3346,9 @@ components:
         description: {type: string}
         tags: {type: string}
         repo_url: {type: string}
-        default_branch: {type: string}
         auth_type: {type: string}
         credential_id: {type: integer, nullable: true}
         clear_credential: {type: boolean}
-        webhook_type: {type: string}
-        webhook_ref_path: {type: string}
-        webhook_commit_path: {type: string}
-        webhook_message_path: {type: string}
     RepositoryPage:
       allOf:
         - $ref: "#/components/schemas/Page"
@@ -3383,7 +3376,6 @@ components:
         name: {type: string}
         description: {type: string}
         enabled: {type: boolean}
-        branch_policy: {type: string}
         branch: {type: string}
         shallow_clone: {type: boolean}
         build_script_type: {type: string}
@@ -3397,6 +3389,11 @@ components:
         trigger_manual: {type: boolean}
         trigger_webhook: {type: boolean}
         trigger_cron: {type: boolean}
+        webhook_secret: {type: string, description: "Only present on secret view/rotate"}
+        webhook_type: {type: string}
+        webhook_ref_path: {type: string}
+        webhook_commit_path: {type: string}
+        webhook_message_path: {type: string}
         cron_expression: {type: string}
         cron_timezone: {type: string}
         max_artifacts: {type: integer}
@@ -3421,7 +3418,6 @@ components:
         name: {type: string}
         description: {type: string}
         enabled: {type: boolean}
-        branch_policy: {type: string}
         branch: {type: string}
         shallow_clone: {type: boolean}
         build_script_type: {type: string}
@@ -3435,6 +3431,11 @@ components:
         trigger_manual: {type: boolean}
         trigger_webhook: {type: boolean}
         trigger_cron: {type: boolean}
+        webhook_secret: {type: string, description: "Only present on secret view/rotate"}
+        webhook_type: {type: string}
+        webhook_ref_path: {type: string}
+        webhook_commit_path: {type: string}
+        webhook_message_path: {type: string}
         cron_expression: {type: string}
         cron_timezone: {type: string}
         max_artifacts: {type: integer}
@@ -3451,7 +3452,6 @@ components:
         name: {type: string}
         description: {type: string}
         enabled: {type: boolean}
-        branch_policy: {type: string}
         branch: {type: string}
         shallow_clone: {type: boolean}
         build_script_type: {type: string}
@@ -3465,6 +3465,11 @@ components:
         trigger_manual: {type: boolean}
         trigger_webhook: {type: boolean}
         trigger_cron: {type: boolean}
+        webhook_secret: {type: string, description: "Only present on secret view/rotate"}
+        webhook_type: {type: string}
+        webhook_ref_path: {type: string}
+        webhook_commit_path: {type: string}
+        webhook_message_path: {type: string}
         cron_expression: {type: string}
         cron_timezone: {type: string}
         max_artifacts: {type: integer}
@@ -4055,6 +4060,12 @@ components:
         version: {type: string}
         healthy: {type: boolean}
         risk_notice: {type: string}
+    CliExecuteResult:
+      type: object
+      properties:
+        success: {type: boolean}
+        output: {type: string}
+        error: {type: string}
     CliInstallSourceInput:
       type: object
       required: [cli_key, name, base_url]

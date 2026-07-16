@@ -89,7 +89,7 @@ func (s *PATService) List(userID uint) ([]model.PersonalAccessToken, error) {
 	return items, nil
 }
 
-func (s *PATService) Revoke(userID uint, id uint) error {
+func (s *PATService) Delete(userID uint, id uint) error {
 	token, err := s.repo.FindPAT(id)
 	if err != nil {
 		return err
@@ -97,16 +97,12 @@ func (s *PATService) Revoke(userID uint, id uint) error {
 	if token.UserID != userID {
 		return ErrPATInvalid
 	}
-	if token.RevokedAt != nil {
-		return nil
-	}
-	now := time.Now().UTC()
-	token.RevokedAt = &now
-	if err := s.repo.UpdatePAT(token); err != nil {
+	if err := s.repo.DeletePAT(id); err != nil {
 		return err
 	}
 	if s.audit != nil {
-		_ = s.audit.Write(userID, "", "pat_revoke", "personal_access_token", fmt.Sprintf("%d", id), "", "")
+		_ = s.audit.Write(userID, "", "pat_delete", "personal_access_token", fmt.Sprintf("%d", id),
+			fmt.Sprintf("name=%s", token.Name), "")
 	}
 	return nil
 }

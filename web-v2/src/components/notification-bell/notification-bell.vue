@@ -6,6 +6,7 @@ import { Bell } from "@veltra/icons/normal";
 import { getAccessToken } from "@/api/http";
 import { notificationWsUrl } from "@/api/system";
 import type { NotificationItem } from "@/api/types";
+import { formatDateTime } from "@/lib/datetime";
 import { useAuthStore } from "@/stores/auth";
 import { useNotificationStore } from "@/stores/notification";
 
@@ -66,12 +67,6 @@ function connectWs(): void {
     clearReconnect();
     reconnectTimer = setTimeout(() => connectWs(), 3000);
   };
-}
-
-function formatTime(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  return d.toLocaleString();
 }
 
 async function onItemClick(n: NotificationItem): Promise<void> {
@@ -160,7 +155,7 @@ onUnmounted(() => {
             >
               <span class="notif-item__title">{{ n.title }}</span>
               <span v-if="n.message" class="notif-item__msg">{{ n.message }}</span>
-              <span class="notif-item__time">{{ formatTime(n.created_at) }}</span>
+              <span class="notif-item__time">{{ formatDateTime(n.created_at) }}</span>
             </button>
           </li>
         </ul>

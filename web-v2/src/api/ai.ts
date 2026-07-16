@@ -3,7 +3,7 @@ import type {
   AgentRun,
   AgentTrigger,
   AiAgent,
-  CliInstallJob,
+  CliExecuteResult,
   CliInstallSource,
   CliRuntimeDefinition,
   PageResult,
@@ -38,12 +38,16 @@ export async function detectCLI(key: string) {
   return body;
 }
 
-export async function enqueueCLI(
+export async function executeCLI(
   key: string,
   operation: "install" | "upgrade" | "uninstall",
   version = "",
-): Promise<CliInstallJob> {
-  const { body } = await http.post<CliInstallJob>(`/ai/clis/${key}/${operation}`, { version });
+): Promise<CliExecuteResult> {
+  const { body } = await http.post<CliExecuteResult>(
+    `/ai/clis/${key}/${operation}`,
+    { version },
+    { timeout: 300_000 },
+  );
   return body;
 }
 
@@ -81,13 +85,6 @@ export async function updateCLISource(
 
 export async function deleteCLISource(id: number): Promise<void> {
   await http.delete(`/ai/cli-sources/${id}`);
-}
-
-export async function listCLIJobs(query?: Query): Promise<PageResult<CliInstallJob>> {
-  const { body } = await http.get<PageResult<CliInstallJob>>("/ai/cli-install-jobs", {
-    query: compactQuery(query),
-  });
-  return body;
 }
 
 export async function listAgents(query?: Query): Promise<PageResult<AiAgent>> {
@@ -191,6 +188,6 @@ export async function createToken(input: {
   return body;
 }
 
-export async function revokeToken(id: number): Promise<void> {
+export async function deleteToken(id: number): Promise<void> {
   await http.delete(`/tokens/${id}`);
 }

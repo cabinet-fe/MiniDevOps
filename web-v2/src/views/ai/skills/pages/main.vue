@@ -42,9 +42,8 @@ function openOverwrite(row: SkillPackage) {
   dialogOpen.value = true;
 }
 
-function onFile(ev: Event) {
-  const input = ev.target as HTMLInputElement;
-  file.value = input.files?.[0] ?? null;
+function onFilePick(files: File[]) {
+  file.value = files[0] ?? null;
 }
 
 async function save() {
@@ -158,7 +157,12 @@ async function remove(row: SkillPackage) {
         :rules="{ required: '必填' }"
       />
       <u-form-item label="ZIP">
-        <input type="file" accept=".zip" @change="onFile" />
+        <div class="zip-field">
+          <u-file-picker accept=".zip,application/zip" @pick="onFilePick">
+            <u-button>{{ file ? "重新选择" : "选择 ZIP" }}</u-button>
+          </u-file-picker>
+          <span v-if="file" class="zip-name">{{ file.name }}</span>
+        </div>
       </u-form-item>
     </FormDialog>
   </div>
@@ -174,5 +178,17 @@ async function remove(row: SkillPackage) {
   margin: 4px 0 12px;
   font-size: 13px;
   color: var(--u-color-text-secondary, #666);
+}
+.zip-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.zip-name {
+  font-size: 13px;
+  color: var(--u-color-text-secondary, #666);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 </style>

@@ -46,10 +46,6 @@ func (h *Handler) RegisterRoutes(rg *gin.RouterGroup, authMW gin.HandlerFunc) {
 	ai.POST("/cli-sources", rbacmw.RequirePermission(h.perm, "ai.clis:create"), h.CreateCLISource)
 	ai.PUT("/cli-sources/:id", rbacmw.RequirePermission(h.perm, "ai.clis:update"), h.UpdateCLISource)
 	ai.DELETE("/cli-sources/:id", rbacmw.RequirePermission(h.perm, "ai.clis:delete"), h.DeleteCLISource)
-	ai.GET("/cli-install-jobs", rbacmw.RequirePermission(h.perm, "ai.clis:view"), h.ListCLIJobs)
-	ai.GET("/cli-install-jobs/:id", rbacmw.RequirePermission(h.perm, "ai.clis:view"), h.GetCLIJob)
-	ai.GET("/cli-install-jobs/:id/logs", rbacmw.RequirePermission(h.perm, "ai.clis:view"), h.CLIJobLogs)
-	ai.POST("/cli-install-jobs/:id/retry", rbacmw.RequirePermission(h.perm, "ai.clis:execute"), h.RetryCLIJob)
 
 	ai.GET("/agents", rbacmw.RequirePermission(h.perm, "ai.agents:view"), h.ListAgents)
 	ai.POST("/agents", rbacmw.RequirePermission(h.perm, "ai.agents:create"), h.CreateAgent)
@@ -79,7 +75,7 @@ func (h *Handler) RegisterRoutes(rg *gin.RouterGroup, authMW gin.HandlerFunc) {
 	tokens := rg.Group("/tokens", authMW)
 	tokens.GET("", h.ListPATs)
 	tokens.POST("", h.CreatePAT)
-	tokens.DELETE("/:id", h.RevokePAT)
+	tokens.DELETE("/:id", h.DeletePAT)
 }
 
 func (h *Handler) ListCLIs(c *gin.Context) {
@@ -101,24 +97,24 @@ func (h *Handler) DetectCLI(c *gin.Context) {
 }
 
 func (h *Handler) InstallCLI(c *gin.Context) {
-	h.enqueueCLI(c, "install")
+	h.executeCLI(c, "install")
 }
 func (h *Handler) UpgradeCLI(c *gin.Context) {
-	h.enqueueCLI(c, "upgrade")
+	h.executeCLI(c, "upgrade")
 }
 func (h *Handler) UninstallCLI(c *gin.Context) {
-	h.enqueueCLI(c, "uninstall")
+	h.executeCLI(c, "uninstall")
 }
 
-func (h *Handler) enqueueCLI(c *gin.Context, op string) {
-	var input service.JobInput
+func (h *Handler) executeCLI(c *gin.Context, op string) {
+	var input service.ExecuteInput
 	_ = c.ShouldBindJSON(&input)
-	job, err := h.cli.Enqueue(c.Param("key"), op, input, authmiddleware.GetUserID(c))
+	result, err := h.cli.Execute(c.Request.Context(), c.Param("key"), op, input, authmiddleware.GetUserID(c))
 	if err != nil {
 		writeErr(c, err)
 		return
 	}
-	c.JSON(http.StatusAccepted, pkg.Response{Code: 0, Message: "accepted", Data: job})
+	pkg.Success(c, result)
 }
 
 func (h *Handler) ListCLISources(c *gin.Context) {
@@ -174,47 +170,6 @@ func (h *Handler) DeleteCLISource(c *gin.Context) {
 		return
 	}
 	pkg.Success(c, gin.H{"deleted": true})
-}
-
-func (h *Handler) ListCLIJobs(c *gin.Context) {
-	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
-	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
-	items, total, err := h.cli.ListJobs(page, pageSize, c.Query("cli_key"), c.Query("status"))
-	if err != nil {
-		pkg.Error(c, http.StatusInternalServerError, err.Error())
-		return
-	}
-	pkg.Paginated(c, items, total, page, pageSize)
-}
-
-func (h *Handler) GetCLIJob(c *gin.Context) {
-	id, _ := strconv.ParseUint(c.Param("id"), 10, 64)
-	job, err := h.cli.GetJob(uint(id))
-	if err != nil {
-		writeErr(c, err)
-		return
-	}
-	pkg.Success(c, job)
-}
-
-func (h *Handler) CLIJobLogs(c *gin.Context) {
-	id, _ := strconv.ParseUint(c.Param("id"), 10, 64)
-	logs, err := h.cli.JobLogs(uint(id))
-	if err != nil {
-		writeErr(c, err)
-		return
-	}
-	pkg.Success(c, gin.H{"logs": logs})
-}
-
-func (h *Handler) RetryCLIJob(c *gin.Context) {
-	id, _ := strconv.ParseUint(c.Param("id"), 10, 64)
-	job, err := h.cli.Retry(uint(id), authmiddleware.GetUserID(c))
-	if err != nil {
-		writeErr(c, err)
-		return
-	}
-	c.JSON(http.StatusAccepted, pkg.Response{Code: 0, Message: "accepted", Data: job})
 }
 
 func (h *Handler) ListAgents(c *gin.Context) {
@@ -508,13 +463,13 @@ func (h *Handler) CreatePAT(c *gin.Context) {
 	pkg.Created(c, result)
 }
 
-func (h *Handler) RevokePAT(c *gin.Context) {
+func (h *Handler) DeletePAT(c *gin.Context) {
 	id, _ := strconv.ParseUint(c.Param("id"), 10, 64)
-	if err := h.pats.Revoke(authmiddleware.GetUserID(c), uint(id)); err != nil {
+	if err := h.pats.Delete(authmiddleware.GetUserID(c), uint(id)); err != nil {
 		writeErr(c, err)
 		return
 	}
-	pkg.Success(c, gin.H{"revoked": true})
+	pkg.Success(c, gin.H{"deleted": true})
 }
 
 func writeErr(c *gin.Context, err error) {

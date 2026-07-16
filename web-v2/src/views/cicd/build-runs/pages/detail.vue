@@ -14,6 +14,8 @@ import { getAccessToken } from "@/api/http";
 import type { BuildRun } from "@/api/types";
 import BuildLogViewer, { resolveBuildLogStatus } from "@/components/build-log-viewer";
 import { usePermission } from "@/composables/use-permission";
+import { formatDateTime } from "@/lib/datetime";
+import { JOB_STATUS_TAG, TRIGGER_TYPE_TAG, tagType, type TagType } from "@/lib/tag";
 
 const route = useRoute();
 const router = useRouter();
@@ -25,6 +27,24 @@ const acting = ref(false);
 const logViewerRef = ref<InstanceType<typeof BuildLogViewer> | null>(null);
 
 let pollTimer: ReturnType<typeof setInterval> | null = null;
+
+const STAGE_TAG: Record<string, TagType> = {
+  pending: undefined,
+  cloning: "primary",
+  building: "primary",
+  archiving: "primary",
+  distributing: "warning",
+  idle: "success",
+};
+
+const DISTRIBUTION_TAG: Record<string, TagType> = {
+  none: undefined,
+  running: "primary",
+  all_success: "success",
+  partial: "warning",
+  all_failed: "danger",
+  cancelled: "warning",
+};
 
 const canExecute = computed(() => hasPermission("cicd.build_jobs:execute"));
 const runId = computed(() => Number(route.params.id));
@@ -57,6 +77,22 @@ const canRetry = computed(
 const canRedeploy = computed(
   () => canExecute.value && run.value?.status === "success" && !!run.value.artifact_path,
 );
+
+const shortCommit = computed(() => {
+  const hash = run.value?.commit_hash?.trim();
+  if (!hash) return "—";
+  return hash.length > 12 ? hash.slice(0, 12) : hash;
+});
+
+const snapshotText = computed(() => {
+  const raw = run.value?.snapshot_json?.trim();
+  if (!raw) return "（空）";
+  try {
+    return JSON.stringify(JSON.parse(raw), null, 2);
+  } catch {
+    return raw;
+  }
+});
 
 async function load() {
   const id = runId.value;
@@ -179,7 +215,12 @@ onUnmounted(() => {
 <template>
   <div class="page">
     <div class="page-head">
-      <h2>执行详情 #{{ run?.build_number ?? route.params.id }}</h2>
+      <div class="page-head__title">
+        <h2>执行详情 #{{ run?.build_number ?? route.params.id }}</h2>
+        <p class="risk-note">
+          构建脚本与 Bedrock 以同一操作系统用户执行，无沙箱隔离；请仅让可信人员编辑脚本。
+        </p>
+      </div>
       <div class="actions">
         <u-button v-if="canCancel" :disabled="acting" variant="outline" @click="onCancel">
           取消
@@ -193,123 +234,262 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <p class="risk-note">
-      构建脚本与 Bedrock 以同一操作系统用户执行，无沙箱隔离；请仅让可信人员编辑脚本。
-    </p>
-
     <div v-if="loading" class="state">加载中…</div>
     <template v-else-if="run">
-      <dl class="meta">
-        <div>
-          <dt>状态</dt>
-          <dd>{{ run.status }}</dd>
+      <section class="panel meta-panel">
+        <div class="meta-grid">
+          <div class="meta-item">
+            <span class="meta-label">状态</span>
+            <u-tag size="small" :type="tagType(run.status, JOB_STATUS_TAG)">{{ run.status }}</u-tag>
+          </div>
+          <div class="meta-item">
+            <span class="meta-label">阶段</span>
+            <u-tag size="small" :type="tagType(run.stage, STAGE_TAG)">
+              {{ run.stage || "—" }}
+            </u-tag>
+          </div>
+          <div class="meta-item">
+            <span class="meta-label">分发汇总</span>
+            <u-tag size="small" :type="tagType(run.distribution_summary, DISTRIBUTION_TAG)">
+              {{ run.distribution_summary || "—" }}
+            </u-tag>
+          </div>
+          <div class="meta-item">
+            <span class="meta-label">触发</span>
+            <u-tag size="small" :type="tagType(run.trigger_type, TRIGGER_TYPE_TAG)">
+              {{ run.trigger_type }}
+            </u-tag>
+          </div>
+          <div class="meta-item">
+            <span class="meta-label">任务 ID</span>
+            <span class="meta-value">{{ run.build_job_id }}</span>
+          </div>
+          <div class="meta-item">
+            <span class="meta-label">分支</span>
+            <span class="meta-value mono">{{ run.branch || "—" }}</span>
+          </div>
+          <div class="meta-item meta-item--wide">
+            <span class="meta-label">Commit</span>
+            <span class="meta-value mono" :title="run.commit_hash || undefined">
+              {{ shortCommit }}
+            </span>
+          </div>
+          <div class="meta-item">
+            <span class="meta-label">创建时间</span>
+            <span class="meta-value">{{ formatDateTime(run.created_at) || "—" }}</span>
+          </div>
         </div>
-        <div>
-          <dt>阶段</dt>
-          <dd>{{ run.stage }}</dd>
-        </div>
-        <div>
-          <dt>分发汇总</dt>
-          <dd>{{ run.distribution_summary }}</dd>
-        </div>
-        <div>
-          <dt>任务 ID</dt>
-          <dd>{{ run.build_job_id }}</dd>
-        </div>
-        <div>
-          <dt>分支</dt>
-          <dd>{{ run.branch || "—" }}</dd>
-        </div>
-        <div>
-          <dt>Commit</dt>
-          <dd>{{ run.commit_hash || "—" }}</dd>
-        </div>
-        <div>
-          <dt>触发</dt>
-          <dd>{{ run.trigger_type }}</dd>
-        </div>
-      </dl>
+        <p v-if="run.commit_message" class="commit-msg">{{ run.commit_message }}</p>
+        <p v-if="run.error_message" class="error-msg">{{ run.error_message }}</p>
+      </section>
 
-      <h3>构建日志</h3>
-      <BuildLogViewer ref="logViewerRef" :run-id="runId" :live="isLive" :status="logViewerStatus" />
+      <section class="section">
+        <h3>构建日志</h3>
+        <BuildLogViewer
+          ref="logViewerRef"
+          :run-id="runId"
+          :live="isLive"
+          :status="logViewerStatus"
+        />
+      </section>
 
-      <h3>部署尝试</h3>
-      <u-empty v-if="!run.deploy_attempts?.length" text="暂无部署尝试" />
-      <ul v-else class="attempts">
-        <li v-for="a in run.deploy_attempts" :key="a.id">
-          batch {{ a.batch_no }} · target {{ a.deploy_target_id ?? "—" }} · {{ a.status }}
-          <span v-if="a.error_message"> — {{ a.error_message }}</span>
-        </li>
-      </ul>
+      <section class="section">
+        <h3>部署尝试</h3>
+        <div class="panel">
+          <u-empty v-if="!run.deploy_attempts?.length" text="暂无部署尝试" />
+          <ul v-else class="attempts">
+            <li v-for="a in run.deploy_attempts" :key="a.id" class="attempt">
+              <div class="attempt__main">
+                <span class="mono">batch {{ a.batch_no }}</span>
+                <span class="attempt__sep">·</span>
+                <span>target {{ a.deploy_target_id ?? "—" }}</span>
+                <u-tag size="small" :type="tagType(a.status, JOB_STATUS_TAG)">{{ a.status }}</u-tag>
+              </div>
+              <p v-if="a.error_message" class="attempt__error">{{ a.error_message }}</p>
+            </li>
+          </ul>
+        </div>
+      </section>
 
-      <h3>配置快照</h3>
-      <pre class="snap">{{ run.snapshot_json || "（空）" }}</pre>
+      <section class="section">
+        <h3>配置快照</h3>
+        <pre class="snap">{{ snapshotText }}</pre>
+      </section>
     </template>
+    <u-empty v-else text="执行记录不存在或无权访问" />
   </div>
 </template>
 
-<style scoped>
-.page {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
+<style scoped lang="scss">
+@use "pkg:@veltra/styles/functions" as fn;
+
 .page-head {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
   flex-wrap: wrap;
 }
+
+.page-head__title {
+  min-width: 0;
+  flex: 1;
+}
+
 .page-head h2 {
   margin: 0;
   font-size: 18px;
+  color: fn.use-var(text-color, title);
 }
+
+.risk-note {
+  margin: 6px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: fn.use-var(text-color, assist);
+}
+
 .actions {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+  flex-shrink: 0;
 }
-.risk-note {
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.section h3 {
   margin: 0;
-  font-size: 12px;
-  opacity: 0.75;
+  font-size: 14px;
+  font-weight: 600;
+  color: fn.use-var(text-color, title);
 }
-.meta {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+
+.panel {
+  min-width: 0;
+  padding: fn.use-var(gap, default);
+  border-radius: fn.use-var(radius, default);
+  background: fn.use-var(bg-color, top);
+}
+
+.meta-panel {
+  display: flex;
+  flex-direction: column;
   gap: 12px;
-  margin: 0;
 }
-.meta div {
+
+.meta-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 12px 16px;
+}
+
+.meta-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  min-width: 0;
+}
+
+@media (min-width: 640px) {
+  .meta-item--wide {
+    grid-column: span 2;
+  }
+}
+
+.meta-label {
+  font-size: 12px;
+  color: fn.use-var(text-color, assist);
+}
+
+.meta-value {
+  font-size: 13px;
+  font-weight: 500;
+  color: fn.use-var(text-color, main);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.commit-msg {
+  margin: 0;
+  padding-top: 12px;
+  border-top: fn.use-var(border, muted);
+  font-size: 13px;
+  line-height: 1.5;
+  color: fn.use-var(text-color, second);
+  overflow-wrap: anywhere;
+}
+
+.error-msg {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: fn.use-var(color, danger);
+  overflow-wrap: anywhere;
+}
+
+.attempts {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.attempt {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  min-width: 0;
 }
-.meta dt {
-  font-size: 12px;
-  opacity: 0.7;
+
+.attempt__main {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
 }
-.meta dd {
+
+.attempt__sep {
+  color: fn.use-var(text-color, assist);
+}
+
+.attempt__error {
   margin: 0;
-  font-weight: 500;
+  font-size: 12px;
+  color: fn.use-var(color, danger);
+  overflow-wrap: anywhere;
 }
+
 .snap {
   margin: 0;
-  padding: 12px;
+  padding: fn.use-var(gap, default);
+  max-height: 280px;
   overflow: auto;
-  max-height: 200px;
   font-size: 12px;
+  line-height: 1.55;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  background: color-mix(in srgb, currentColor 6%, transparent);
-  border-radius: 8px;
+  background: fn.use-var(bg-color, top);
+  border-radius: fn.use-var(radius, default);
   white-space: pre-wrap;
-  word-break: break-all;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
-.attempts {
-  margin: 0;
-  padding-left: 20px;
-}
+
 .state {
   opacity: 0.7;
 }

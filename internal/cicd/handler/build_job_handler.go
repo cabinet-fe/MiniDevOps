@@ -30,6 +30,8 @@ func (h *BuildJobHandler) RegisterRoutes(rg *gin.RouterGroup, authMW gin.Handler
 	g.POST("", rbacmw.RequirePermission(h.perm, "cicd.build_jobs:create"), h.Create)
 	g.PUT("/:id", rbacmw.RequirePermission(h.perm, "cicd.build_jobs:update"), h.Update)
 	g.DELETE("/:id", rbacmw.RequirePermission(h.perm, "cicd.build_jobs:delete"), h.Delete)
+	g.GET("/:id/webhook-secret", rbacmw.RequirePermission(h.perm, "cicd.build_jobs:view"), h.GetWebhookSecret)
+	g.POST("/:id/webhook-secret/rotate", rbacmw.RequirePermission(h.perm, "cicd.build_jobs:update"), h.RotateWebhookSecret)
 	// Execute: only cicd.build_jobs:execute required (not credentials:use) — DESIGN §4.5 / Wave 4 engine.
 	g.POST("/:id/runs", rbacmw.RequirePermission(h.perm, "cicd.build_jobs:execute"), h.EnqueueRun)
 }
@@ -125,4 +127,38 @@ func (h *BuildJobHandler) EnqueueRun(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusAccepted, pkg.Response{Code: 0, Message: "accepted", Data: run})
+}
+
+func (h *BuildJobHandler) GetWebhookSecret(c *gin.Context) {
+	id, err := parseID(c)
+	if err != nil {
+		pkg.Error(c, http.StatusBadRequest, "无效 ID")
+		return
+	}
+	item, err := h.svc.GetWithSecret(id)
+	if err != nil {
+		writeServiceError(c, err)
+		return
+	}
+	pkg.Success(c, gin.H{
+		"webhook_secret": item.WebhookSecret,
+		"webhook_url":    "/api/v1/webhook/jobs/" + strconv.FormatUint(uint64(item.ID), 10) + "/" + item.WebhookSecret,
+	})
+}
+
+func (h *BuildJobHandler) RotateWebhookSecret(c *gin.Context) {
+	id, err := parseID(c)
+	if err != nil {
+		pkg.Error(c, http.StatusBadRequest, "无效 ID")
+		return
+	}
+	item, err := h.svc.RotateWebhookSecret(id)
+	if err != nil {
+		writeServiceError(c, err)
+		return
+	}
+	pkg.Success(c, gin.H{
+		"webhook_secret": item.WebhookSecret,
+		"webhook_url":    "/api/v1/webhook/jobs/" + strconv.FormatUint(uint64(item.ID), 10) + "/" + item.WebhookSecret,
+	})
 }

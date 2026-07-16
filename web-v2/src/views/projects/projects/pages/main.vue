@@ -9,6 +9,7 @@ import type { ProductProject } from "@/api/types";
 import FormDialog from "@/components/form-dialog";
 import ProTable, { defineProTableColumns } from "@/components/pro-table";
 import { usePermission } from "@/composables/use-permission";
+import { formatDateTime } from "@/lib/datetime";
 
 const router = useRouter();
 const { hasPermission } = usePermission();
@@ -28,7 +29,7 @@ const columns = defineProTableColumns([
   { key: "slug", name: "Slug" },
   { key: "status", name: "状态", width: 100 },
   { key: "tags", name: "标签" },
-  { key: "updated_at", name: "更新时间", sortable: true },
+  { key: "updated_at", name: "更新时间", sortable: true, render: ({ val }) => formatDateTime(val) },
   { key: "action", name: "操作", width: 220, align: "center", fixed: "right" },
 ]);
 

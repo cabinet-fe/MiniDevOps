@@ -6,9 +6,7 @@ import { message } from "@veltra/desktop";
 import {
   createRepository,
   deleteRepository,
-  getWebhookSecret,
   listCredentials,
-  rotateWebhookSecret,
   testRepository,
   updateRepository,
 } from "@/api/cicd";
@@ -27,14 +25,11 @@ const { hasPermission } = usePermission();
 const listRef = useTemplateRef("list");
 const query = reactive({ keyword: "" });
 const dialogOpen = ref(false);
-const secretOpen = ref(false);
 const editing = ref<Repository | null>(null);
 const credOptions = ref<{ label: string; value: number }[]>([]);
-const webhookInfo = reactive({ secret: "", url: "" });
 const form = reactive({
   name: "",
   repo_url: "",
-  default_branch: "main",
   description: "",
   tags: "",
   auth_type: "none",
@@ -45,9 +40,8 @@ const columns = defineProTableColumns([
   { key: "id", name: "ID", width: 80 },
   { key: "name", name: "名称" },
   { key: "repo_url", name: "URL" },
-  { key: "default_branch", name: "分支" },
   { key: "auth_type", name: "认证", width: 100 },
-  { key: "action", name: "操作", width: 260, align: "center", fixed: "right" },
+  { key: "action", name: "操作", width: 200, align: "center", fixed: "right" },
 ]);
 
 onMounted(async () => {
@@ -80,7 +74,6 @@ async function save() {
     const body: Record<string, unknown> = {
       name: form.name,
       repo_url: form.repo_url,
-      default_branch: form.default_branch,
       description: form.description,
       tags: form.tags,
       auth_type: form.auth_type,
@@ -121,30 +114,6 @@ async function onTest(row: Repository) {
     message.error(err instanceof Error ? err.message : "测试失败");
   }
 }
-
-async function showSecret(row: Repository) {
-  try {
-    const res = await getWebhookSecret(row.id);
-    webhookInfo.secret = res.webhook_secret;
-    webhookInfo.url = res.webhook_url;
-    editing.value = row;
-    secretOpen.value = true;
-  } catch (err) {
-    message.error(err instanceof Error ? err.message : "获取失败");
-  }
-}
-
-async function rotateSecret() {
-  if (!editing.value) return;
-  try {
-    const res = await rotateWebhookSecret(editing.value.id);
-    webhookInfo.secret = res.webhook_secret;
-    webhookInfo.url = res.webhook_url;
-    message.success("已轮换");
-  } catch (err) {
-    message.error(err instanceof Error ? err.message : "轮换失败");
-  }
-}
 </script>
 
 <template>
@@ -167,7 +136,7 @@ async function rotateSecret() {
         </u-tag>
       </template>
       <template #column:action="{ rowData }">
-        <u-action-group :max="5">
+        <u-action-group :max="4">
           <u-action
             v-if="hasPermission('cicd.repositories:update')"
             @run="openEdit(rowData as Repository)"
@@ -179,12 +148,6 @@ async function rotateSecret() {
             @run="onTest(rowData as Repository)"
           >
             测试
-          </u-action>
-          <u-action
-            v-if="hasPermission('cicd.repositories:view')"
-            @run="showSecret(rowData as Repository)"
-          >
-            Webhook
           </u-action>
           <u-action
             v-if="hasPermission('cicd.repositories:delete')"
@@ -206,7 +169,6 @@ async function rotateSecret() {
     >
       <u-input label="名称" field="name" :rules="{ required: '必填' }" />
       <u-input label="Git URL" field="repo_url" :rules="{ required: '必填' }" />
-      <u-input label="默认分支" field="default_branch" />
       <u-select
         label="认证"
         field="auth_type"
@@ -224,21 +186,6 @@ async function rotateSecret() {
       <u-input label="标签" field="tags" />
       <u-input label="描述" field="description" />
     </FormDialog>
-
-    <u-dialog v-model="secretOpen" title="Webhook Secret" style="width: 560px">
-      <p class="mono">URL: {{ webhookInfo.url }}</p>
-      <p class="mono">Secret: {{ webhookInfo.secret }}</p>
-      <template #footer="{ close }">
-        <u-button text @click="close()">关闭</u-button>
-        <u-button
-          v-if="hasPermission('cicd.repositories:update')"
-          type="primary"
-          @click="rotateSecret"
-        >
-          轮换
-        </u-button>
-      </template>
-    </u-dialog>
   </div>
 </template>
 
@@ -256,9 +203,5 @@ async function rotateSecret() {
 .page-head h2 {
   margin: 0;
   font-size: 18px;
-}
-.mono {
-  font-family: ui-monospace, monospace;
-  word-break: break-all;
 }
 </style>

@@ -141,7 +141,7 @@ func main() {
 	serverSvc := cicdservice.NewServerService(serverRepo, credSvc)
 	jobSvc := cicdservice.NewBuildJobService(jobRepo, repoRepo)
 	runSvc := cicdservice.NewBuildRunService(runRepo, jobRepo)
-	webhookSvc := cicdservice.NewWebhookService(repoRepo, jobRepo, deliveryRepo, runSvc)
+	webhookSvc := cicdservice.NewWebhookService(jobRepo, deliveryRepo, runSvc)
 
 	dashboardRepo := dashboardrepo.NewDashboardRepository(gdb)
 	dashboardSvc := dashboardservice.NewDashboardService(
@@ -260,16 +260,12 @@ func main() {
 
 	sched.Start()
 	devEnvSvc.Start()
-	cliSvc.Start()
 	agentSvc.Start()
 	if err := sched.RecoverOnStartup(); err != nil {
 		logger.Error("scheduler recovery failed", zap.Error(err))
 	}
 	if err := devEnvSvc.RecoverOnStartup(); err != nil {
 		logger.Error("dev environment scheduler recovery failed", zap.Error(err))
-	}
-	if err := cliSvc.RecoverOnStartup(); err != nil {
-		logger.Error("AI CLI scheduler recovery failed", zap.Error(err))
 	}
 	if err := agentSvc.RecoverOnStartup(); err != nil {
 		logger.Error("agent run recovery failed", zap.Error(err))
@@ -297,7 +293,6 @@ func main() {
 	sched.Shutdown()
 	devEnvSvc.Shutdown()
 	agentSvc.Shutdown()
-	cliSvc.Shutdown()
 	hub.Shutdown()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)

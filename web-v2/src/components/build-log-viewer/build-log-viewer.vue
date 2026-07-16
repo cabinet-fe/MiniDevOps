@@ -10,9 +10,9 @@ import {
   Check,
   Close,
   Copy,
-  Maximize,
-  Minimize,
+  Maximum,
   Search,
+  ZoomOut,
 } from "@veltra/icons/normal";
 import {
   computed,
@@ -428,8 +428,8 @@ onBeforeUnmount(() => {
           <Copy v-else />
         </u-button>
         <u-button variant="ghost" size="small" @click="toggleFullscreen">
-          <Minimize v-if="isFullscreen" />
-          <Maximize v-else />
+          <ZoomOut v-if="isFullscreen" />
+          <Maximum v-else />
         </u-button>
       </div>
     </div>

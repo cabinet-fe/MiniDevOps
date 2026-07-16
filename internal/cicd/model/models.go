@@ -21,24 +21,18 @@ type Credential struct {
 
 func (Credential) TableName() string { return "credentials" }
 
-// Repository is a Git source configuration.
+// Repository is a Git source configuration (URL + auth only).
 type Repository struct {
-	ID                 uint      `json:"id" gorm:"primaryKey"`
-	Name               string    `json:"name" gorm:"size:100;not null;uniqueIndex"`
-	Description        string    `json:"description" gorm:"size:500"`
-	Tags               string    `json:"tags" gorm:"size:500"`
-	RepoURL            string    `json:"repo_url" gorm:"size:500;not null"`
-	DefaultBranch      string    `json:"default_branch" gorm:"size:200;default:main"`
-	AuthType           string    `json:"auth_type" gorm:"size:20;not null;default:none"`
-	CredentialID       *uint     `json:"credential_id" gorm:"index"`
-	WebhookSecret      string    `json:"webhook_secret,omitempty" gorm:"size:64"`
-	WebhookType        string    `json:"webhook_type" gorm:"size:20;default:auto"`
-	WebhookRefPath     string    `json:"webhook_ref_path" gorm:"size:300"`
-	WebhookCommitPath  string    `json:"webhook_commit_path" gorm:"size:300"`
-	WebhookMessagePath string    `json:"webhook_message_path" gorm:"size:300"`
-	CreatedBy          uint      `json:"created_by" gorm:"index"`
-	CreatedAt          time.Time `json:"created_at"`
-	UpdatedAt          time.Time `json:"updated_at"`
+	ID           uint      `json:"id" gorm:"primaryKey"`
+	Name         string    `json:"name" gorm:"size:100;not null;uniqueIndex"`
+	Description  string    `json:"description" gorm:"size:500"`
+	Tags         string    `json:"tags" gorm:"size:500"`
+	RepoURL      string    `json:"repo_url" gorm:"size:500;not null"`
+	AuthType     string    `json:"auth_type" gorm:"size:20;not null;default:none"`
+	CredentialID *uint     `json:"credential_id" gorm:"index"`
+	CreatedBy    uint      `json:"created_by" gorm:"index"`
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
 }
 
 func (Repository) TableName() string { return "repositories" }
@@ -72,7 +66,6 @@ type BuildJob struct {
 	Name              string    `json:"name" gorm:"size:100;not null"`
 	Description       string    `json:"description" gorm:"size:500"`
 	Enabled           bool      `json:"enabled" gorm:"not null;default:true"`
-	BranchPolicy      string    `json:"branch_policy" gorm:"size:20;not null;default:fixed"`
 	Branch            string    `json:"branch" gorm:"size:200;default:main"`
 	ShallowClone      bool      `json:"shallow_clone" gorm:"not null;default:true"`
 	BuildScriptType   string    `json:"build_script_type" gorm:"size:20;default:bash"`
@@ -82,9 +75,14 @@ type BuildJob struct {
 	CachePaths        string    `json:"cache_paths" gorm:"type:text"`
 	EnvVarNamesJSON   string    `json:"-" gorm:"type:text"`
 	EnvVarNames       []string  `json:"env_var_names" gorm:"-"`
-	TriggerManual     bool      `json:"trigger_manual" gorm:"not null;default:true"`
-	TriggerWebhook    bool      `json:"trigger_webhook" gorm:"not null;default:false"`
-	TriggerCron       bool      `json:"trigger_cron" gorm:"not null;default:false"`
+	TriggerManual      bool      `json:"trigger_manual" gorm:"not null;default:true"`
+	TriggerWebhook     bool      `json:"trigger_webhook" gorm:"not null;default:false"`
+	TriggerCron        bool      `json:"trigger_cron" gorm:"not null;default:false"`
+	WebhookSecret      string    `json:"webhook_secret,omitempty" gorm:"size:64"`
+	WebhookType        string    `json:"webhook_type" gorm:"size:20;default:auto"`
+	WebhookRefPath     string    `json:"webhook_ref_path" gorm:"size:300"`
+	WebhookCommitPath  string    `json:"webhook_commit_path" gorm:"size:300"`
+	WebhookMessagePath string    `json:"webhook_message_path" gorm:"size:300"`
 	CronExpression    string    `json:"cron_expression" gorm:"size:100"`
 	CronTimezone      string    `json:"cron_timezone" gorm:"size:100;default:UTC"`
 	MaxArtifacts      int       `json:"max_artifacts" gorm:"default:5"`

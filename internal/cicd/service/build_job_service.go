@@ -1,6 +1,8 @@
 package service
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"strings"
 
@@ -39,7 +41,6 @@ type CreateBuildJobInput struct {
 	Name              string              `json:"name"`
 	Description       string              `json:"description"`
 	Enabled           *bool               `json:"enabled"`
-	BranchPolicy      string              `json:"branch_policy"`
 	Branch            string              `json:"branch"`
 	ShallowClone      *bool               `json:"shallow_clone"`
 	BuildScriptType   string              `json:"build_script_type"`
@@ -55,16 +56,19 @@ type CreateBuildJobInput struct {
 	CronTimezone      string              `json:"cron_timezone"`
 	MaxArtifacts      int                 `json:"max_artifacts"`
 	ArtifactFormat    string              `json:"artifact_format"`
-	AgentTriggerEvent string              `json:"agent_trigger_event"`
-	AgentID           *uint               `json:"agent_id"`
-	DeployTargets     []DeployTargetInput `json:"deploy_targets"`
+	AgentTriggerEvent  string              `json:"agent_trigger_event"`
+	AgentID            *uint               `json:"agent_id"`
+	WebhookType        string              `json:"webhook_type"`
+	WebhookRefPath     string              `json:"webhook_ref_path"`
+	WebhookCommitPath  string              `json:"webhook_commit_path"`
+	WebhookMessagePath string              `json:"webhook_message_path"`
+	DeployTargets      []DeployTargetInput `json:"deploy_targets"`
 }
 
 type UpdateBuildJobInput struct {
 	Name              *string              `json:"name"`
 	Description       *string              `json:"description"`
 	Enabled           *bool                `json:"enabled"`
-	BranchPolicy      *string              `json:"branch_policy"`
 	Branch            *string              `json:"branch"`
 	ShallowClone      *bool                `json:"shallow_clone"`
 	BuildScriptType   *string              `json:"build_script_type"`
@@ -80,9 +84,13 @@ type UpdateBuildJobInput struct {
 	CronTimezone      *string              `json:"cron_timezone"`
 	MaxArtifacts      *int                 `json:"max_artifacts"`
 	ArtifactFormat    *string              `json:"artifact_format"`
-	AgentTriggerEvent *string              `json:"agent_trigger_event"`
-	AgentID           *uint                `json:"agent_id"`
-	DeployTargets     *[]DeployTargetInput `json:"deploy_targets"`
+	AgentTriggerEvent  *string              `json:"agent_trigger_event"`
+	AgentID            *uint                `json:"agent_id"`
+	WebhookType        *string              `json:"webhook_type"`
+	WebhookRefPath     *string              `json:"webhook_ref_path"`
+	WebhookCommitPath  *string              `json:"webhook_commit_path"`
+	WebhookMessagePath *string              `json:"webhook_message_path"`
+	DeployTargets      *[]DeployTargetInput `json:"deploy_targets"`
 }
 
 func (s *BuildJobService) Create(createdBy uint, in CreateBuildJobInput) (*model.BuildJob, error) {
@@ -93,29 +101,41 @@ func (s *BuildJobService) Create(createdBy uint, in CreateBuildJobInput) (*model
 	if name == "" {
 		return nil, errorsNew("名称不能为空")
 	}
+	secret, err := generateWebhookSecret()
+	if err != nil {
+		return nil, err
+	}
+	whType := strings.TrimSpace(in.WebhookType)
+	if whType == "" {
+		whType = "auto"
+	}
 	job := &model.BuildJob{
-		RepositoryID:      in.RepositoryID,
-		Name:              name,
-		Description:       strings.TrimSpace(in.Description),
-		Enabled:           boolOr(in.Enabled, true),
-		BranchPolicy:      normalizeBranchPolicy(in.BranchPolicy),
-		Branch:            stringOr(in.Branch, "main"),
-		ShallowClone:      boolOr(in.ShallowClone, true),
-		BuildScriptType:   stringOr(in.BuildScriptType, "bash"),
-		BuildScript:       in.BuildScript,
-		WorkDir:           strings.TrimSpace(in.WorkDir),
-		OutputDir:         strings.TrimSpace(in.OutputDir),
-		CachePaths:        in.CachePaths,
-		TriggerManual:     boolOr(in.TriggerManual, true),
-		TriggerWebhook:    boolOr(in.TriggerWebhook, false),
-		TriggerCron:       boolOr(in.TriggerCron, false),
-		CronExpression:    strings.TrimSpace(in.CronExpression),
-		CronTimezone:      stringOr(in.CronTimezone, "UTC"),
-		MaxArtifacts:      intOr(in.MaxArtifacts, 5),
-		ArtifactFormat:    normalizeArtifactFormat(in.ArtifactFormat),
-		AgentTriggerEvent: normalizeAgentEvent(in.AgentTriggerEvent),
-		AgentID:           in.AgentID,
-		CreatedBy:         createdBy,
+		RepositoryID:       in.RepositoryID,
+		Name:               name,
+		Description:        strings.TrimSpace(in.Description),
+		Enabled:            boolOr(in.Enabled, true),
+		Branch:             stringOr(in.Branch, "main"),
+		ShallowClone:       boolOr(in.ShallowClone, true),
+		BuildScriptType:    stringOr(in.BuildScriptType, "bash"),
+		BuildScript:        in.BuildScript,
+		WorkDir:            strings.TrimSpace(in.WorkDir),
+		OutputDir:          strings.TrimSpace(in.OutputDir),
+		CachePaths:         in.CachePaths,
+		TriggerManual:      boolOr(in.TriggerManual, true),
+		TriggerWebhook:     boolOr(in.TriggerWebhook, false),
+		TriggerCron:        boolOr(in.TriggerCron, false),
+		WebhookSecret:      secret,
+		WebhookType:        whType,
+		WebhookRefPath:     strings.TrimSpace(in.WebhookRefPath),
+		WebhookCommitPath:  strings.TrimSpace(in.WebhookCommitPath),
+		WebhookMessagePath: strings.TrimSpace(in.WebhookMessagePath),
+		CronExpression:     strings.TrimSpace(in.CronExpression),
+		CronTimezone:       stringOr(in.CronTimezone, "UTC"),
+		MaxArtifacts:       intOr(in.MaxArtifacts, 5),
+		ArtifactFormat:     normalizeArtifactFormat(in.ArtifactFormat),
+		AgentTriggerEvent:  normalizeAgentEvent(in.AgentTriggerEvent),
+		AgentID:            in.AgentID,
+		CreatedBy:          createdBy,
 	}
 	if err := encodeEnvNames(job, in.EnvVarNames); err != nil {
 		return nil, err
@@ -154,9 +174,6 @@ func (s *BuildJobService) Update(id uint, in UpdateBuildJobInput) (*model.BuildJ
 	if in.Enabled != nil {
 		job.Enabled = *in.Enabled
 	}
-	if in.BranchPolicy != nil {
-		job.BranchPolicy = normalizeBranchPolicy(*in.BranchPolicy)
-	}
 	if in.Branch != nil {
 		job.Branch = strings.TrimSpace(*in.Branch)
 	}
@@ -191,6 +208,18 @@ func (s *BuildJobService) Update(id uint, in UpdateBuildJobInput) (*model.BuildJ
 	}
 	if in.TriggerCron != nil {
 		job.TriggerCron = *in.TriggerCron
+	}
+	if in.WebhookType != nil {
+		job.WebhookType = strings.TrimSpace(*in.WebhookType)
+	}
+	if in.WebhookRefPath != nil {
+		job.WebhookRefPath = strings.TrimSpace(*in.WebhookRefPath)
+	}
+	if in.WebhookCommitPath != nil {
+		job.WebhookCommitPath = strings.TrimSpace(*in.WebhookCommitPath)
+	}
+	if in.WebhookMessagePath != nil {
+		job.WebhookMessagePath = strings.TrimSpace(*in.WebhookMessagePath)
 	}
 	if in.CronExpression != nil {
 		job.CronExpression = strings.TrimSpace(*in.CronExpression)
@@ -263,7 +292,33 @@ func (s *BuildJobService) Get(id uint) (*model.BuildJob, error) {
 		return nil, NewNotFound("构建任务不存在")
 	}
 	decodeEnvNames(job)
-	return job, nil
+	return publicJob(job, false), nil
+}
+
+func (s *BuildJobService) GetWithSecret(id uint) (*model.BuildJob, error) {
+	job, err := s.jobs.FindByID(id)
+	if err != nil {
+		return nil, NewNotFound("构建任务不存在")
+	}
+	decodeEnvNames(job)
+	return publicJob(job, true), nil
+}
+
+func (s *BuildJobService) RotateWebhookSecret(id uint) (*model.BuildJob, error) {
+	job, err := s.jobs.FindByID(id)
+	if err != nil {
+		return nil, NewNotFound("构建任务不存在")
+	}
+	secret, err := generateWebhookSecret()
+	if err != nil {
+		return nil, err
+	}
+	job.WebhookSecret = secret
+	if err := s.jobs.Update(job); err != nil {
+		return nil, err
+	}
+	decodeEnvNames(job)
+	return publicJob(job, true), nil
 }
 
 func (s *BuildJobService) List(page, pageSize int, repositoryID *uint, keyword string) ([]model.BuildJob, int64, error) {
@@ -273,6 +328,7 @@ func (s *BuildJobService) List(page, pageSize int, repositoryID *uint, keyword s
 	}
 	for i := range items {
 		decodeEnvNames(&items[i])
+		items[i] = *publicJob(&items[i], false)
 	}
 	return items, total, nil
 }
@@ -335,12 +391,6 @@ func decodeEnvNames(job *model.BuildJob) {
 	job.EnvVarNames = names
 }
 
-func normalizeBranchPolicy(p string) string {
-	if strings.ToLower(strings.TrimSpace(p)) == "param" {
-		return "param"
-	}
-	return "fixed"
-}
 
 func normalizeArtifactFormat(f string) string {
 	if strings.ToLower(strings.TrimSpace(f)) == "zip" {
@@ -387,4 +437,20 @@ func intOr(v, def int) int {
 		return def
 	}
 	return v
+}
+
+func publicJob(job *model.BuildJob, revealSecret bool) *model.BuildJob {
+	cp := *job
+	if !revealSecret {
+		cp.WebhookSecret = ""
+	}
+	return &cp
+}
+
+func generateWebhookSecret() (string, error) {
+	b := make([]byte, 24)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(b), nil
 }

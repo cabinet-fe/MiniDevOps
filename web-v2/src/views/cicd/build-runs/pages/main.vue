@@ -1,13 +1,19 @@
 <script setup lang="ts">
-import { reactive } from "vue";
+import { computed, onMounted, reactive, ref } from "vue";
 import { useRouter } from "vue-router";
 
+import { listBuildJobs } from "@/api/cicd";
 import type { BuildRun } from "@/api/types";
 import ProTable, { defineProTableColumns } from "@/components/pro-table";
+import { formatDateTime } from "@/lib/datetime";
 import { JOB_STATUS_TAG, TRIGGER_TYPE_TAG, tagType, type TagType } from "@/lib/tag";
 
 const router = useRouter();
-const query = reactive({ build_job_id: "", status: "" });
+const query = reactive({
+  build_job_id: undefined as number | undefined,
+  status: "",
+});
+const jobNameMap = ref(new Map<number, string>());
 
 const STAGE_TAG: Record<string, TagType> = {
   pending: undefined,
@@ -28,42 +34,63 @@ const DISTRIBUTION_TAG: Record<string, TagType> = {
 };
 
 const columns = defineProTableColumns([
-  { key: "id", name: "ID", width: 80 },
-  { key: "build_job_id", name: "任务", width: 90 },
-  { key: "build_number", name: "#", width: 70 },
-  { key: "status", name: "状态", width: 100 },
-  { key: "stage", name: "阶段", width: 100 },
+  { key: "build_number", name: "#" },
+  { key: "build_job_id", name: "任务" },
+  { key: "status", name: "状态" },
+  { key: "stage", name: "阶段" },
   { key: "distribution_summary", name: "分发" },
   { key: "branch", name: "分支" },
-  { key: "trigger_type", name: "触发", width: 100 },
-  { key: "created_at", name: "创建时间", sortable: true },
+  { key: "trigger_type", name: "触发" },
+  { key: "created_at", name: "创建时间", sortable: true, render: ({ val }) => formatDateTime(val) },
   { key: "action", name: "操作", width: 100, align: "center", fixed: "right" },
 ]);
+
+const jobOptions = computed(() =>
+  [...jobNameMap.value.entries()].map(([value, label]) => ({ label, value })),
+);
+
+function jobLabel(jobId: number): string {
+  return jobNameMap.value.get(jobId) ?? String(jobId);
+}
 
 function openDetail(row: BuildRun) {
   void router.push({ name: "cicd-build-run-detail", params: { id: String(row.id) } });
 }
+
+onMounted(async () => {
+  try {
+    const jobs = await listBuildJobs({ page: 1, page_size: 100 });
+    const map = new Map<number, string>();
+    for (const job of jobs.items ?? []) {
+      map.set(job.id, job.name);
+    }
+    jobNameMap.value = map;
+  } catch {
+    /* ignore */
+  }
+});
 </script>
 
 <template>
   <div class="page">
     <div class="page-head">
-      <h2>构建执行</h2>
+      <h2>构建记录</h2>
     </div>
 
     <ProTable
       url="/build-runs"
       v-model:query="query"
       :columns="columns"
-      :auto-query-fields="['status']"
+      :auto-query-fields="['status', 'build_job_id']"
       pagination
     >
       <template #filters="{ search }">
-        <u-input
+        <u-select
           v-model="query.build_job_id"
-          type="number"
-          placeholder="任务 ID"
-          style="width: 120px"
+          clearable
+          placeholder="任务"
+          style="width: 180px"
+          :options="jobOptions"
         />
         <u-select
           v-model="query.status"
@@ -80,6 +107,9 @@ function openDetail(row: BuildRun) {
           ]"
         />
         <u-button type="primary" @click="search">查询</u-button>
+      </template>
+      <template #column:build_job_id="{ rowData }">
+        {{ jobLabel((rowData as BuildRun).build_job_id) }}
       </template>
       <template #column:status="{ rowData }">
         <u-tag size="small" :type="tagType((rowData as BuildRun).status, JOB_STATUS_TAG)">

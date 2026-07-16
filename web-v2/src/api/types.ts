@@ -140,10 +140,8 @@ export interface Repository {
   description: string;
   tags: string;
   repo_url: string;
-  default_branch: string;
   auth_type: string;
   credential_id?: number | null;
-  webhook_type?: string;
   created_by: number;
   created_at: string;
   updated_at: string;
@@ -184,7 +182,6 @@ export interface BuildJob {
   name: string;
   description: string;
   enabled: boolean;
-  branch_policy: string;
   branch: string;
   shallow_clone: boolean;
   build_script_type: string;
@@ -196,6 +193,10 @@ export interface BuildJob {
   trigger_manual: boolean;
   trigger_webhook: boolean;
   trigger_cron: boolean;
+  webhook_type?: string;
+  webhook_ref_path?: string;
+  webhook_commit_path?: string;
+  webhook_message_path?: string;
   cron_expression: string;
   cron_timezone: string;
   max_artifacts: number;
@@ -469,14 +470,10 @@ export interface CliInstallSource {
   enabled: boolean;
 }
 
-export interface CliInstallJob {
-  id: number;
-  cli_key: string;
-  operation: string;
-  requested_version: string;
-  status: string;
-  error_message?: string;
-  created_at: string;
+export interface CliExecuteResult {
+  success: boolean;
+  output: string;
+  error?: string;
 }
 
 export interface AiAgent {

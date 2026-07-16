@@ -4,6 +4,7 @@ import { useRouter } from "vue-router";
 
 import type { AgentRun } from "@/api/types";
 import ProTable, { defineProTableColumns } from "@/components/pro-table";
+import { formatDateTime } from "@/lib/datetime";
 import { JOB_STATUS_TAG, TRIGGER_TYPE_TAG, tagType } from "@/lib/tag";
 
 const router = useRouter();
@@ -15,7 +16,7 @@ const columns = defineProTableColumns([
   { key: "agent_id", name: "Agent", width: 90 },
   { key: "trigger_type", name: "触发", width: 110 },
   { key: "status", name: "状态", width: 100 },
-  { key: "created_at", name: "创建时间" },
+  { key: "created_at", name: "创建时间", render: ({ val }) => formatDateTime(val) },
   { key: "action", name: "操作", width: 100, align: "center", fixed: "right" },
 ]);
 

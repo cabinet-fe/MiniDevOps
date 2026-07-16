@@ -4,6 +4,7 @@ import { useRoute, useRouter } from "vue-router";
 
 import type { ProductProject } from "@/api/types";
 import ProTable, { defineProTableColumns } from "@/components/pro-table";
+import { formatDateTime } from "@/lib/datetime";
 
 const route = useRoute();
 const router = useRouter();
@@ -32,7 +33,7 @@ const columns = defineProTableColumns([
   { key: "name", name: "项目", sortable: true },
   { key: "slug", name: "Slug" },
   { key: "status", name: "状态", width: 100 },
-  { key: "updated_at", name: "更新时间", sortable: true },
+  { key: "updated_at", name: "更新时间", sortable: true, render: ({ val }) => formatDateTime(val) },
   { key: "action", name: "操作", width: 120, align: "center", fixed: "right" },
 ]);
 

@@ -132,11 +132,10 @@ func runCICDCRUD(t *testing.T, gdb *gorm.DB, driver string) {
 	}
 
 	repo := &model.Repository{
-		Name:          "repo-" + suffix,
-		RepoURL:       "https://example.com/" + suffix + ".git",
-		DefaultBranch: "main",
-		AuthType:      "none",
-		CreatedBy:     1,
+		Name:      "repo-" + suffix,
+		RepoURL:   "https://example.com/" + suffix + ".git",
+		AuthType:  "none",
+		CreatedBy: 1,
 	}
 	if err := repoRepo.Create(repo); err != nil {
 		t.Fatalf("repository create: %v", err)
@@ -150,7 +149,6 @@ func runCICDCRUD(t *testing.T, gdb *gorm.DB, driver string) {
 		RepositoryID:   repo.ID,
 		Name:           "job-" + suffix,
 		Enabled:        true,
-		BranchPolicy:   "fixed",
 		Branch:         "main",
 		BuildScript:    "echo ok",
 		TriggerManual:  true,

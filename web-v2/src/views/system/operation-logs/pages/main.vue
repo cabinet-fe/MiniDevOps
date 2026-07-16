@@ -3,6 +3,7 @@ import { reactive } from "vue";
 
 import type { OperationLog } from "@/api/types";
 import ProTable, { defineProTableColumns } from "@/components/pro-table";
+import { formatDateTime } from "@/lib/datetime";
 import { tagType, type TagType } from "@/lib/tag";
 
 const query = reactive({
@@ -25,7 +26,7 @@ const columns = defineProTableColumns([
   { key: "resource_type", name: "资源" },
   { key: "resource_id", name: "资源ID", width: 90 },
   { key: "ip_address", name: "IP", width: 130 },
-  { key: "created_at", name: "时间", sortable: true },
+  { key: "created_at", name: "时间", sortable: true, render: ({ val }) => formatDateTime(val) },
 ]);
 </script>
 

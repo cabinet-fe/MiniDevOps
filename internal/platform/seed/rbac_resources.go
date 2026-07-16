@@ -36,7 +36,7 @@ func EnsureRBACResources(db *gorm.DB) error {
 			Children: []seedMenu{
 				{Path: "cicd.repositories", Title: "代码仓库", Route: "/cicd/repositories", SortKey: 10},
 				{Path: "cicd.build_jobs", Title: "构建任务", Route: "/cicd/build-jobs", SortKey: 20},
-				{Path: "cicd.build_runs", Title: "构建执行", Route: "/cicd/build-runs", SortKey: 30},
+				{Path: "cicd.build_runs", Title: "构建记录", Route: "/cicd/build-runs", SortKey: 30},
 				{Path: "cicd.servers", Title: "服务器", Route: "/cicd/servers", SortKey: 40},
 				{Path: "cicd.credentials", Title: "凭证", Route: "/cicd/credentials", SortKey: 50},
 			},

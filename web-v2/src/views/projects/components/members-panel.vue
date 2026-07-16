@@ -13,6 +13,7 @@ import {
 import type { ProductProject, ProjectMember, ProjectRole } from "@/api/types";
 import FormDialog from "@/components/form-dialog";
 import { usePermission } from "@/composables/use-permission";
+import { formatDateTime } from "@/lib/datetime";
 import { tagType, type TagType } from "@/lib/tag";
 import { useAuthStore } from "@/stores/auth";
 
@@ -67,7 +68,12 @@ const canTransferOwner = computed(
 const columns = defineTableColumns([
   { key: "user_id", name: "用户 ID", minWidth: 120 },
   { key: "role", name: "项目角色", minWidth: 140 },
-  { key: "created_at", name: "加入时间", minWidth: 180 },
+  {
+    key: "created_at",
+    name: "加入时间",
+    minWidth: 180,
+    render: ({ val }) => formatDateTime(val),
+  },
   { key: "action", name: "操作", width: 220, minWidth: 180 },
 ]);
 
