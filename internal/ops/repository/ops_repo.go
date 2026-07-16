@@ -12,66 +12,87 @@ func NewOpsRepository(db *gorm.DB) *OpsRepository {
 	return &OpsRepository{db: db}
 }
 
-func (r *OpsRepository) ListToolchains() ([]model.ToolchainDefinition, error) {
-	var items []model.ToolchainDefinition
-	err := r.db.Order("kind ASC, name ASC").Find(&items).Error
+func (r *OpsRepository) ListEnvironments() ([]model.DevEnvironment, error) {
+	var items []model.DevEnvironment
+	err := r.db.Preload("Sources", func(db *gorm.DB) *gorm.DB {
+		return db.Order("priority ASC, id ASC")
+	}).Order("kind ASC, name ASC").Find(&items).Error
 	return items, err
 }
 
-func (r *OpsRepository) FindToolchain(id uint) (*model.ToolchainDefinition, error) {
-	var item model.ToolchainDefinition
-	if err := r.db.First(&item, id).Error; err != nil {
+func (r *OpsRepository) FindEnvironment(id uint) (*model.DevEnvironment, error) {
+	var item model.DevEnvironment
+	if err := r.db.Preload("Sources", func(db *gorm.DB) *gorm.DB {
+		return db.Order("priority ASC, id ASC")
+	}).First(&item, id).Error; err != nil {
 		return nil, err
 	}
 	return &item, nil
 }
 
-func (r *OpsRepository) CreateToolchain(item *model.ToolchainDefinition) error {
+func (r *OpsRepository) CreateEnvironment(item *model.DevEnvironment) error {
 	return r.db.Create(item).Error
 }
 
-func (r *OpsRepository) UpdateToolchain(item *model.ToolchainDefinition) error {
+func (r *OpsRepository) UpdateEnvironment(item *model.DevEnvironment) error {
 	return r.db.Save(item).Error
 }
 
-func (r *OpsRepository) DeleteToolchain(id uint) error {
-	return r.db.Delete(&model.ToolchainDefinition{}, id).Error
+func (r *OpsRepository) DeleteEnvironment(id uint) error {
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("environment_id = ?", id).Delete(&model.DevEnvJob{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("environment_id = ?", id).Delete(&model.DevEnvInstallSource{}).Error; err != nil {
+			return err
+		}
+		return tx.Delete(&model.DevEnvironment{}, id).Error
+	})
 }
 
-func (r *OpsRepository) ListSources() ([]model.InstallSource, error) {
-	var items []model.InstallSource
-	err := r.db.Order("priority ASC, id ASC").Find(&items).Error
+func (r *OpsRepository) ListSources(environmentID uint) ([]model.DevEnvInstallSource, error) {
+	var items []model.DevEnvInstallSource
+	err := r.db.Where("environment_id = ?", environmentID).Order("priority ASC, id ASC").Find(&items).Error
 	return items, err
 }
 
-func (r *OpsRepository) FindSource(id uint) (*model.InstallSource, error) {
-	var item model.InstallSource
+func (r *OpsRepository) FindSource(id uint) (*model.DevEnvInstallSource, error) {
+	var item model.DevEnvInstallSource
 	if err := r.db.First(&item, id).Error; err != nil {
 		return nil, err
 	}
 	return &item, nil
 }
 
-func (r *OpsRepository) ListEnabledSources() ([]model.InstallSource, error) {
-	var items []model.InstallSource
-	err := r.db.Where("enabled = ?", true).Order("priority ASC, id ASC").Find(&items).Error
+func (r *OpsRepository) FindSourceInEnvironment(environmentID, sourceID uint) (*model.DevEnvInstallSource, error) {
+	var item model.DevEnvInstallSource
+	if err := r.db.Where("environment_id = ? AND id = ?", environmentID, sourceID).First(&item).Error; err != nil {
+		return nil, err
+	}
+	return &item, nil
+}
+
+func (r *OpsRepository) ListEnabledSources(environmentID uint) ([]model.DevEnvInstallSource, error) {
+	var items []model.DevEnvInstallSource
+	err := r.db.Where("environment_id = ? AND enabled = ?", environmentID, true).
+		Order("priority ASC, id ASC").Find(&items).Error
 	return items, err
 }
 
-func (r *OpsRepository) CreateSource(item *model.InstallSource) error {
+func (r *OpsRepository) CreateSource(item *model.DevEnvInstallSource) error {
 	return r.db.Create(item).Error
 }
 
-func (r *OpsRepository) UpdateSource(item *model.InstallSource) error {
+func (r *OpsRepository) UpdateSource(item *model.DevEnvInstallSource) error {
 	return r.db.Save(item).Error
 }
 
 func (r *OpsRepository) DeleteSource(id uint) error {
-	return r.db.Delete(&model.InstallSource{}, id).Error
+	return r.db.Delete(&model.DevEnvInstallSource{}, id).Error
 }
 
-func (r *OpsRepository) ListJobs(page, pageSize int, status string) ([]model.ToolchainInstallJob, int64, error) {
-	q := r.db.Model(&model.ToolchainInstallJob{})
+func (r *OpsRepository) ListJobs(environmentID uint, page, pageSize int, status string) ([]model.DevEnvJob, int64, error) {
+	q := r.db.Model(&model.DevEnvJob{}).Where("environment_id = ?", environmentID)
 	if status != "" {
 		q = q.Where("status = ?", status)
 	}
@@ -79,30 +100,39 @@ func (r *OpsRepository) ListJobs(page, pageSize int, status string) ([]model.Too
 	if err := q.Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
-	var items []model.ToolchainInstallJob
-	err := q.Preload("ToolchainDefinition").Preload("Source").Order("id DESC").
+	var items []model.DevEnvJob
+	err := q.Preload("Environment").Preload("Source").Order("id DESC").
 		Offset((page - 1) * pageSize).Limit(pageSize).Find(&items).Error
 	return items, total, err
 }
 
-func (r *OpsRepository) FindJob(id uint) (*model.ToolchainInstallJob, error) {
-	var item model.ToolchainInstallJob
-	if err := r.db.Preload("ToolchainDefinition").Preload("Source").First(&item, id).Error; err != nil {
+func (r *OpsRepository) FindJob(id uint) (*model.DevEnvJob, error) {
+	var item model.DevEnvJob
+	if err := r.db.Preload("Environment").Preload("Source").First(&item, id).Error; err != nil {
 		return nil, err
 	}
 	return &item, nil
 }
 
-func (r *OpsRepository) CreateJob(item *model.ToolchainInstallJob) error {
+func (r *OpsRepository) FindJobInEnvironment(environmentID, jobID uint) (*model.DevEnvJob, error) {
+	var item model.DevEnvJob
+	if err := r.db.Preload("Environment").Preload("Source").
+		Where("environment_id = ? AND id = ?", environmentID, jobID).First(&item).Error; err != nil {
+		return nil, err
+	}
+	return &item, nil
+}
+
+func (r *OpsRepository) CreateJob(item *model.DevEnvJob) error {
 	return r.db.Create(item).Error
 }
 
-func (r *OpsRepository) UpdateJob(item *model.ToolchainInstallJob) error {
+func (r *OpsRepository) UpdateJob(item *model.DevEnvJob) error {
 	return r.db.Save(item).Error
 }
 
-func (r *OpsRepository) ListJobsByStatuses(statuses ...string) ([]model.ToolchainInstallJob, error) {
-	var items []model.ToolchainInstallJob
+func (r *OpsRepository) ListJobsByStatuses(statuses ...string) ([]model.DevEnvJob, error) {
+	var items []model.DevEnvJob
 	if len(statuses) == 0 {
 		return items, nil
 	}
@@ -111,7 +141,7 @@ func (r *OpsRepository) ListJobsByStatuses(statuses ...string) ([]model.Toolchai
 }
 
 func (r *OpsRepository) MarkRunningInterrupted() (int64, error) {
-	result := r.db.Model(&model.ToolchainInstallJob{}).Where("status = ?", model.JobRunning).
+	result := r.db.Model(&model.DevEnvJob{}).Where("status = ?", model.JobRunning).
 		Updates(map[string]interface{}{"status": model.JobInterrupted})
 	return result.RowsAffected, result.Error
 }

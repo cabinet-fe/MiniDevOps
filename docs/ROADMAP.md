@@ -16,7 +16,7 @@
 1. **交付方式**：分阶段完成七大域后发布 2.0 GA；阶段顺序固定为 P0→P1→P2→P3→P4→P5。
 2. **升级**：2.0 **只支持全新安装**，不迁移 1.x 数据。
 3. **前端**：旁路新建 `web-v2/`（Vue 3 + Veltra + CatKit + Vite+）；达标后一次切换 embed，旧 `web/` 保留回滚窗口。
-4. **安全边界（已接受风险）**：允许 HTTP + `localStorage` Bearer；构建/AI CLI **同 Bedrock UID** 直接执行。
+4. **安全边界（已接受风险）**：允许 HTTP；`access_token` Web Storage + Bearer，`refresh_token` HttpOnly Cookie（不设 Secure）；构建/AI CLI **同 Bedrock UID** 直接执行。
 5. **CI/CD 状态**：归档成功后 BuildRun 保持 `success`；`distribution_summary` 反映最新分发；重新分发**追加** `BuildDeployAttempt`，不新建 BuildRun。
 6. **ACL**：仅**产品项目**使用对象级成员 ACL；CI/CD / AI / 凭证等依赖全局 RBAC；显式 `view_all` / `manage_all` 绕过成员范围。
 7. **验收**：仅功能 Gate；不设容量与延迟 SLO。
@@ -39,8 +39,8 @@ flowchart LR
 | 阶段 | 名称 | 目标 | 前置 | 不做项（本阶段） |
 | --- | --- | --- | --- | --- |
 | **P0** | 平台底座 + web-v2 骨架 | 多库、migration、OpenAPI 契约、空壳前端可登录 | 无 | 业务域 CRUD、CI/CD 重构、运维/项目/AI |
-| **P1** | RBAC + CI/CD 重构 | 动态权限、菜单下发、仓库/任务/执行/部署闭环 | P0 | 项目管理、AI/Skills、工具链安装、可配置仪表盘卡片 |
-| **P2** | 仪表盘 + 运维 | 三卡片布局、进程、工具链与安装源 | P1 | 产品项目、Agent、Skills |
+| **P1** | RBAC + CI/CD 重构 | 动态权限、菜单下发、仓库/任务/执行/部署闭环 | P0 | 项目管理、AI/Skills、开发环境安装、可配置仪表盘卡片 |
+| **P2** | 仪表盘 + 运维 | 三卡片布局、进程、开发环境与每环境安装源 | P1 | 产品项目、Agent、Skills |
 | **P3** | 项目管理 | 产品项目、成员 ACL、需求、文档树与草稿发布 | P2 | AI CLI 四件套、Skill 安装器（文档生成可先 stub 或依赖 P4 并行接入点） |
 | **P4** | AI + Skills | 四 CLI 并行、智能体、触发器、AgentRun、Skill/PAT | P1（可与 P3 部分并行，GA 依赖两者） | 非功能容量调优、多节点调度 |
 | **P5** | 全域集成与 2.0 GA | 端到端回归、embed 切换、文档与发布包 | P0–P4 全部 Gate | 1.x 数据迁移、远程 Runner、对象存储 |
@@ -67,7 +67,7 @@ flowchart LR
 
 ### 2.3 明确不做
 
-- 动态 RBAC 资源树完整 CRUD、CI/CD 实体拆分、运维工具链、产品项目、AI
+- 动态 RBAC 资源树完整 CRUD、CI/CD 实体拆分、运维开发环境、产品项目、AI
 - 将 `web-v2` 设为默认 embed 源（仍可用旧 `web/` 或空壳并行）
 - 容量/延迟压测
 
@@ -81,7 +81,7 @@ flowchart LR
 
 ### 2.5 风险
 
-- OpenAPI 3.2 工具链不完整 → 依赖投影，禁止手改投影。
+- OpenAPI 3.2 契约不完整 → 依赖投影，禁止手改投影。
 - Makefile / AGENTS 与现网命令漂移 → P0 同步修正目标态命令。
 
 ---
@@ -108,7 +108,7 @@ flowchart LR
 - 产品项目成员 ACL、需求/文档
 - AgentRun、Skill、PAT、四 CLI
 - 可配置仪表盘布局（可保留只读摘要 API stub）
-- 自定义工具链命令模板
+- 自定义开发环境命令脚本
 
 ### 3.4 退出 Gate
 
@@ -130,7 +130,7 @@ flowchart LR
 
 ### 4.1 目标
 
-可配置仪表盘三卡片；超管运维：进程管理 + 开发工具链（含多安装源）。
+可配置仪表盘三卡片；超管运维：进程管理 + 开发环境（含每环境多安装源）。
 
 ### 4.2 交付物
 
@@ -138,9 +138,9 @@ flowchart LR
 | --- | --- |
 | 仪表盘 | DashboardLayout；构建摘要 / 系统信息 / 系统状态卡片；按资源权限过滤；用户排序与显隐持久化 |
 | 系统信息 | 非超管可见**完整只读**系统信息（与超管信息字段一致），但无运维写操作 |
-| 运维 | 进程列表/终止（保护自身与危险进程）；ToolchainDefinition；InstallSource 优先级回退；ToolchainInstallJob（同重启协议） |
-| 自定义工具链 | **仅超管**可创建/修改/执行；命令快照 + 强提示 + 完整审计 |
-| 前端 | 仪表盘编辑；运维进程页；工具链与安装源页；安装任务日志 |
+| 运维 | 进程列表/终止（保护自身与危险进程）；DevEnvironment；每环境 InstallSource 优先级回退；DevEnvJob（同重启协议） |
+| 自定义开发环境 | **仅超管**可创建/修改/执行；脚本快照 + 强提示 + 完整审计 |
+| 前端 | 仪表盘编辑；运维进程页；开发环境卡片（含安装源与任务） |
 | 测试 | 无权限卡片不可见；非超管运维 API 403；源回退可观测 |
 
 ### 4.3 明确不做
@@ -286,7 +286,7 @@ flowchart TB
   end
   subgraph ops [P2]
     Dash[Dashboard]
-    Tool[Toolchain]
+    Tool[DevEnvironment]
   end
   subgraph collab [P3]
     PM[ProductProject_ACL]

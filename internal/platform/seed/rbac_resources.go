@@ -28,7 +28,7 @@ func EnsureRBACResources(db *gorm.DB) error {
 			Path: "ops", Title: "运维", Route: "/ops", SortKey: 20,
 			Children: []seedMenu{
 				{Path: "ops.processes", Title: "进程", Route: "/ops/processes", SortKey: 10},
-				{Path: "ops.toolchains", Title: "工具链", Route: "/ops/toolchains", SortKey: 20},
+				{Path: "ops.dev_environments", Title: "开发环境", Route: "/ops/dev-environments", SortKey: 20},
 			},
 		},
 		{
@@ -80,7 +80,10 @@ func EnsureRBACResources(db *gorm.DB) error {
 		if err := seedDashboardCards(tx, now); err != nil {
 			return err
 		}
-		return seedProjectScopeActions(tx, now)
+		if err := seedProjectScopeActions(tx, now); err != nil {
+			return err
+		}
+		return removeRetiredMenu(tx, "ops.toolchains")
 	})
 }
 
@@ -202,6 +205,27 @@ func seedProjectScopeActions(tx *gorm.DB, now time.Time) error {
 		} else if err != nil {
 			return fmt.Errorf("find project scope action %s: %w", permission, err)
 		}
+	}
+	return nil
+}
+
+func removeRetiredMenu(tx *gorm.DB, path string) error {
+	var res model.RbacResource
+	err := tx.Where("path = ?", path).First(&res).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("find retired resource %s: %w", path, err)
+	}
+	if err := tx.Where("resource_id = ?", res.ID).Delete(&model.MenuMetadata{}).Error; err != nil {
+		return fmt.Errorf("delete menu metadata %s: %w", path, err)
+	}
+	if err := tx.Where("permission LIKE ?", path+":%").Delete(&model.RolePermission{}).Error; err != nil {
+		return fmt.Errorf("delete role permissions %s: %w", path, err)
+	}
+	if err := tx.Delete(&res).Error; err != nil {
+		return fmt.Errorf("delete retired resource %s: %w", path, err)
 	}
 	return nil
 }

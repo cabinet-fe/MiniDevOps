@@ -1,26 +1,24 @@
+import { storage, storageKey } from "@cat-kit/fe";
 import { HTTPClient, TokenPlugin, type HTTPClientPlugin } from "@cat-kit/http";
 
-import type { ApiEnvelope, TokenPair } from "./types";
+import type { ApiEnvelope } from "./types";
 
-const ACCESS_KEY = "access_token";
-const REFRESH_KEY = "refresh_token";
+const ACCESS_KEY = storageKey<string>("access_token");
+/** Legacy keys cleaned on set/clear (refresh is HttpOnly cookie from server). */
+const LEGACY_REFRESH_KEY = storageKey<string>("refresh_token");
 
 export function getAccessToken(): string | null {
-  return localStorage.getItem(ACCESS_KEY);
+  return storage.local.get(ACCESS_KEY);
 }
 
-export function getRefreshToken(): string | null {
-  return localStorage.getItem(REFRESH_KEY);
-}
-
-export function setTokens(access: string, refresh: string): void {
-  localStorage.setItem(ACCESS_KEY, access);
-  localStorage.setItem(REFRESH_KEY, refresh);
+export function setAccessToken(access: string): void {
+  storage.local.set(ACCESS_KEY, access);
+  storage.local.remove(LEGACY_REFRESH_KEY);
 }
 
 export function clearTokens(): void {
-  localStorage.removeItem(ACCESS_KEY);
-  localStorage.removeItem(REFRESH_KEY);
+  storage.local.remove(ACCESS_KEY);
+  storage.local.remove(LEGACY_REFRESH_KEY);
 }
 
 function isApiEnvelope(body: unknown): body is ApiEnvelope {
@@ -67,10 +65,10 @@ function BedrockEnvelopePlugin(): HTTPClientPlugin {
 
 const envelopePlugin = BedrockEnvelopePlugin();
 
-/** Bare client for login/refresh (no Bearer injection). */
+/** Bare client for login/refresh (no Bearer injection). credentials so Set-Cookie / Cookie work. */
 export const bareHttp = new HTTPClient("/api/v1", {
   timeout: 30_000,
-  credentials: false,
+  credentials: true,
   plugins: [envelopePlugin],
 });
 
@@ -80,23 +78,28 @@ export function setOnAuthExpired(cb: (() => void) | null): void {
   onAuthExpired = cb;
 }
 
+function expireSession(): void {
+  clearTokens();
+  onAuthExpired?.();
+}
+
+/** 401 → POST /auth/refresh (cookie) → write new access_token; TokenPlugin retries the request. */
 async function refreshAccessToken(): Promise<void> {
-  const refresh = getRefreshToken();
-  if (!refresh) {
-    throw new Error("missing refresh token");
+  try {
+    const { body } = await bareHttp.post<{ access_token: string }>("/auth/refresh", {});
+    if (!body?.access_token) {
+      throw new Error("refresh failed");
+    }
+    setAccessToken(body.access_token);
+  } catch (err) {
+    expireSession();
+    throw err;
   }
-  const { body } = await bareHttp.post<TokenPair>("/auth/refresh", {
-    refresh_token: refresh,
-  });
-  if (!body?.access_token || !body?.refresh_token) {
-    throw new Error("refresh failed");
-  }
-  setTokens(body.access_token, body.refresh_token);
 }
 
 export const http = new HTTPClient("/api/v1", {
   timeout: 30_000,
-  credentials: false,
+  credentials: true,
   plugins: [
     TokenPlugin({
       getter: () => getAccessToken(),
@@ -104,11 +107,6 @@ export const http = new HTTPClient("/api/v1", {
       maxRetries: 1,
       onRefresh: refreshAccessToken,
       shouldRefresh: (response) => response.code === 401,
-      onRefreshExpired: () => {
-        clearTokens();
-        onAuthExpired?.();
-      },
-      isRefreshExpired: () => !getRefreshToken(),
     }),
     envelopePlugin,
   ],

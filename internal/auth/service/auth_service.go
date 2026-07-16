@@ -73,6 +73,11 @@ func NewAuthService(cfg *config.Config, users *repository.UserRepository, perm *
 	}, nil
 }
 
+// RefreshTTL is the refresh token lifetime (also used as cookie Max-Age).
+func (s *AuthService) RefreshTTL() time.Duration {
+	return s.refreshTTL
+}
+
 func (s *AuthService) GenerateTokenPair(user *model.User) (accessToken, refreshToken string, err error) {
 	now := time.Now()
 

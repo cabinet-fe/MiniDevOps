@@ -376,3 +376,50 @@ func TestCronReloadAppliesTimezone(t *testing.T) {
 		t.Fatalf("Shanghai noon should be 04:00 UTC, got hour=%d (%s)", next.UTC().Hour(), next.UTC())
 	}
 }
+
+func TestAgentRunRecovery_QueuedAndInterrupted(t *testing.T) {
+	gdb, _, agents, _, _, _ := setupAI(t)
+	repo := repository.NewAIRepository(gdb)
+	cliDef := &model.CliRuntimeDefinition{
+		Key: "claude_code", Name: "Claude", BinaryName: "claude",
+	}
+	if err := gdb.Where(model.CliRuntimeDefinition{Key: "claude_code"}).
+		Attrs(model.CliRuntimeDefinition{Name: "Claude", BinaryName: "claude"}).
+		FirstOrCreate(cliDef).Error; err != nil {
+		t.Fatal(err)
+	}
+	agent := &model.AiAgent{
+		Name: "recover", CliKey: "claude_code", Enabled: true, SystemPrompt: "x", TimeoutSec: 30, CreatedBy: 1,
+	}
+	if err := repo.CreateAgent(agent); err != nil {
+		t.Fatal(err)
+	}
+	running := &model.AgentRun{AgentID: agent.ID, Status: model.JobRunning, TriggerType: "manual"}
+	queued := &model.AgentRun{AgentID: agent.ID, Status: model.JobQueued, TriggerType: "manual"}
+	if err := gdb.Create(running).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := gdb.Create(queued).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := agents.RecoverOnStartup(); err != nil {
+		t.Fatal(err)
+	}
+	gotRunning, err := repo.FindRun(running.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gotRunning.Status != model.JobInterrupted {
+		t.Fatalf("running→interrupted got %s", gotRunning.Status)
+	}
+	gotQueued, err := repo.FindRun(queued.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	switch gotQueued.Status {
+	case model.JobQueued, model.JobRunning, model.JobPending, model.JobFailed, model.JobSuccess, model.JobInterrupted:
+		// ok — re-submit may advance or fail without a real CLI binary
+	default:
+		t.Fatalf("unexpected queued recovery status %s", gotQueued.Status)
+	}
+}

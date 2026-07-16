@@ -51,7 +51,7 @@ func TestContract_MigrationsAndCICDTables(t *testing.T) {
 			for _, table := range []string{
 				"repositories", "build_jobs", "build_runs", "credentials",
 				"deploy_targets", "build_deploy_attempts", "dashboard_layouts",
-				"toolchain_definitions", "install_sources", "toolchain_install_jobs", "schema_migrations",
+				"dev_environments", "dev_env_install_sources", "dev_env_jobs", "schema_migrations",
 				"storage_objects", "product_projects", "project_members", "requirements",
 				"requirement_comments", "requirement_attachments", "api_doc_nodes",
 			} {
@@ -82,20 +82,21 @@ func TestContract_MigrationsAndCICDTables(t *testing.T) {
 			if err := dashboardRepo.CreateLayout(layout); err != nil {
 				t.Fatalf("create dashboard layout: %v", err)
 			}
-			source := &opsmodel.InstallSource{
-				Name: "db-contract-source-" + suffix, BaseURL: "https://example.com", Priority: 999, Enabled: true,
+			env := &opsmodel.DevEnvironment{
+				Name: "db-contract-env-" + suffix, Kind: "custom", Executable: "true", CreatedBy: 99,
+			}
+			if err := opsRepo.CreateEnvironment(env); err != nil {
+				t.Fatalf("create dev environment: %v", err)
+			}
+			source := &opsmodel.DevEnvInstallSource{
+				EnvironmentID: env.ID, Name: "db-contract-source-" + suffix,
+				BaseURL: "https://example.com", Priority: 999, Enabled: true,
 			}
 			if err := opsRepo.CreateSource(source); err != nil {
 				t.Fatalf("create install source: %v", err)
 			}
-			toolchain := &opsmodel.ToolchainDefinition{
-				Name: "db-contract-toolchain-" + suffix, Kind: "custom", Executable: "true", CreatedBy: 99,
-			}
-			if err := opsRepo.CreateToolchain(toolchain); err != nil {
-				t.Fatalf("create toolchain: %v", err)
-			}
-			job := &opsmodel.ToolchainInstallJob{
-				ToolchainID: toolchain.ID, Operation: "install", Status: "queued", CreatedBy: 99,
+			job := &opsmodel.DevEnvJob{
+				EnvironmentID: env.ID, Operation: "install", Status: "queued", CreatedBy: 99,
 			}
 			if err := opsRepo.CreateJob(job); err != nil {
 				t.Fatalf("create install job: %v", err)

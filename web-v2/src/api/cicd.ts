@@ -51,6 +51,11 @@ export async function getRepository(id: number): Promise<Repository> {
   return body;
 }
 
+export async function listRepositoryBranches(id: number): Promise<string[]> {
+  const { body } = await http.get<{ items: string[] }>(`/repositories/${id}/branches`);
+  return body.items ?? [];
+}
+
 export async function createRepository(body: Record<string, unknown>): Promise<Repository> {
   const { body: data } = await http.post<Repository>("/repositories", body);
   return data;

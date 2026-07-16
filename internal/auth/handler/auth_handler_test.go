@@ -130,6 +130,48 @@ func TestLogin_passwordCipher(t *testing.T) {
 		t.Fatalf("super-admin should have menus")
 	}
 
+	var refreshCookie *http.Cookie
+	for _, c := range w.Result().Cookies() {
+		if c.Name == "refresh_token" {
+			refreshCookie = c
+			break
+		}
+	}
+	if refreshCookie == nil || refreshCookie.Value == "" {
+		t.Fatalf("expected Set-Cookie refresh_token, got %v", w.Header().Values("Set-Cookie"))
+	}
+	if !refreshCookie.HttpOnly {
+		t.Fatalf("refresh_token cookie must be HttpOnly")
+	}
+	if refreshCookie.Secure {
+		t.Fatalf("refresh_token cookie must not set Secure (HTTP deployments)")
+	}
+
+	wRefresh := httptest.NewRecorder()
+	reqRefresh := httptest.NewRequest(http.MethodPost, "/api/v1/auth/refresh", bytes.NewReader([]byte("{}")))
+	reqRefresh.Header.Set("Content-Type", "application/json")
+	reqRefresh.AddCookie(refreshCookie)
+	r.ServeHTTP(wRefresh, reqRefresh)
+	if wRefresh.Code != http.StatusOK {
+		t.Fatalf("refresh status=%d body=%s", wRefresh.Code, wRefresh.Body.String())
+	}
+	var refreshResp struct {
+		Code int `json:"code"`
+		Data struct {
+			AccessToken  string `json:"access_token"`
+			RefreshToken string `json:"refresh_token"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(wRefresh.Body.Bytes(), &refreshResp); err != nil {
+		t.Fatal(err)
+	}
+	if refreshResp.Code != 0 || refreshResp.Data.AccessToken == "" {
+		t.Fatalf("refresh response: %s", wRefresh.Body.String())
+	}
+	if refreshResp.Data.RefreshToken != "" {
+		t.Fatalf("refresh_token must not appear in JSON body")
+	}
+
 	w2 := httptest.NewRecorder()
 	req2 := httptest.NewRequest(http.MethodGet, "/api/v1/auth/me", nil)
 	req2.Header.Set("Authorization", "Bearer "+resp.Data.AccessToken)

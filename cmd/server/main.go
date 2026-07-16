@@ -152,8 +152,8 @@ func main() {
 
 	opsRepo := opsrepo.NewOpsRepository(gdb)
 	processSvc := opsservice.NewProcessService()
-	toolchainSvc := opsservice.NewToolchainService(opsRepo, auditSvc)
-	opsHandler := opshandler.NewOpsHandler(processSvc, toolchainSvc, permSvc)
+	devEnvSvc := opsservice.NewDevEnvironmentService(opsRepo, auditSvc)
+	opsHandler := opshandler.NewOpsHandler(processSvc, devEnvSvc, permSvc)
 
 	storageRepo := storagerepo.NewStorageRepository(gdb)
 	storageSvc, err := storageservice.NewStorageService(storageRepo, cfg.Storage.Root, storageservice.Limits{
@@ -173,6 +173,10 @@ func main() {
 	patSvc := aiservice.NewPATService(aiRepo, auditSvc)
 
 	hub := ws.NewHub()
+	notifRepo := systemrepo.NewNotificationRepository(gdb)
+	notifSvc := systemservice.NewNotificationService(notifRepo, hub)
+	notifHandler := systemhandler.NewNotificationHandler(notifSvc)
+
 	agentWorkDir := cfg.Build.WorkspaceDir
 	if agentWorkDir == "" {
 		agentWorkDir = "./data/workspace"
@@ -180,6 +184,7 @@ func main() {
 	agentSvc := aiservice.NewAgentService(aiRepo, cliSvc, skillSvc, hub, logger, agentWorkDir, cfg.Build.LogDir, auditSvc)
 	agentSvc.SetDocDraftWriter(projectSvc)
 	agentSvc.SetRepoCloner(aiservice.NewSimpleRepoCloner(repoRepo))
+	agentSvc.SetTerminalNotifier(notifSvc)
 	docsBridge := aiservice.NewDocsBridge(agentSvc)
 	projectSvc.SetDocsAIBridge(docsBridge)
 	aiHandler := aihandler.NewHandler(cliSvc, agentSvc, skillSvc, patSvc, permSvc)
@@ -191,6 +196,7 @@ func main() {
 		cfg.Build.WorkspaceDir, cfg.Build.ArtifactDir, cfg.Build.LogDir, cfg.Build.CacheDir,
 	)
 	pipeline.SetAgentEventHook(agentSvc)
+	pipeline.SetTerminalNotifier(notifSvc)
 	sched := engine.NewScheduler(cfg.Build.MaxConcurrent, pipeline, runRepo, logger)
 	runSvc.SetScheduler(sched)
 	cronSched := engine.NewCronScheduler(jobRepo, runRepo, runSvc, sched, logger)
@@ -227,6 +233,7 @@ func main() {
 	opsHandler.RegisterRoutes(api, authMW)
 	projectHandler.RegisterRoutes(api, authMW)
 	aiHandler.RegisterRoutes(api, authMW)
+	notifHandler.RegisterRoutes(api, authMW)
 
 	api.GET("/health", func(c *gin.Context) {
 		pkg.Success(c, gin.H{
@@ -240,6 +247,8 @@ func main() {
 	wsHandler.RegisterRoutes(r)
 	aiWSHandler := aihandler.NewWSHandler(authSvc, permSvc, agentSvc, hub, corsCfg)
 	aiWSHandler.RegisterRoutes(r)
+	notifWSHandler := systemhandler.NewNotificationWSHandler(authSvc, hub, corsCfg)
+	notifWSHandler.RegisterRoutes(r)
 
 	serveSPA(r, cfg.Encryption.Key)
 
@@ -250,14 +259,14 @@ func main() {
 	}
 
 	sched.Start()
-	toolchainSvc.Start()
+	devEnvSvc.Start()
 	cliSvc.Start()
 	agentSvc.Start()
 	if err := sched.RecoverOnStartup(); err != nil {
 		logger.Error("scheduler recovery failed", zap.Error(err))
 	}
-	if err := toolchainSvc.RecoverOnStartup(); err != nil {
-		logger.Error("toolchain scheduler recovery failed", zap.Error(err))
+	if err := devEnvSvc.RecoverOnStartup(); err != nil {
+		logger.Error("dev environment scheduler recovery failed", zap.Error(err))
 	}
 	if err := cliSvc.RecoverOnStartup(); err != nil {
 		logger.Error("AI CLI scheduler recovery failed", zap.Error(err))
@@ -286,7 +295,7 @@ func main() {
 
 	cronSched.Stop()
 	sched.Shutdown()
-	toolchainSvc.Shutdown()
+	devEnvSvc.Shutdown()
 	agentSvc.Shutdown()
 	cliSvc.Shutdown()
 	hub.Shutdown()

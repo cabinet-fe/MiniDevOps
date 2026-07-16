@@ -24,6 +24,11 @@ type AgentEventHook interface {
 	OnBuildEvent(event string, job *model.BuildJob, run *model.BuildRun)
 }
 
+// TerminalNotifier persists + pushes per-user inbox notifications on BuildRun terminal.
+type TerminalNotifier interface {
+	NotifyBuildRun(userID uint, buildRunID uint, buildNumber int, status, message string)
+}
+
 // Pipeline executes BuildRun: clone → build → archive → success → distribute.
 // Distribution failure never sets status=failed (DESIGN §5.2).
 // Sync AI Agent stage is intentionally absent (P4 async AgentRun only).
@@ -40,11 +45,17 @@ type Pipeline struct {
 	logDir    string
 	cacheDir  string
 	agentHook AgentEventHook
+	notifier  TerminalNotifier
 }
 
 // SetAgentEventHook wires P4 async AgentRun creation from build events.
 func (p *Pipeline) SetAgentEventHook(h AgentEventHook) {
 	p.agentHook = h
+}
+
+// SetTerminalNotifier wires DESIGN §12 in-app notifications for build terminal states.
+func (p *Pipeline) SetTerminalNotifier(n TerminalNotifier) {
+	p.notifier = n
 }
 
 func NewPipeline(
@@ -469,7 +480,15 @@ func (p *Pipeline) markArtifactSuccess(run *model.BuildRun, writeLine func(strin
 }
 
 func (p *Pipeline) notifyTerminal(run *model.BuildRun, status, message string) {
-	if p.hub == nil || run.TriggeredBy == 0 {
+	if run == nil || run.TriggeredBy == 0 {
+		return
+	}
+	if p.notifier != nil {
+		p.notifier.NotifyBuildRun(run.TriggeredBy, run.ID, run.BuildNumber, status, message)
+		return
+	}
+	// Fallback for tests without a notifier: push raw JSON on notifications channel only.
+	if p.hub == nil {
 		return
 	}
 	payload, _ := json.Marshal(map[string]interface{}{
@@ -480,7 +499,7 @@ func (p *Pipeline) notifyTerminal(run *model.BuildRun, status, message string) {
 		"status":       status,
 		"message":      message,
 	})
-	p.hub.BroadcastToUser(run.TriggeredBy, payload)
+	p.hub.BroadcastToChannel(fmt.Sprintf("notifications:%d", run.TriggeredBy), payload)
 }
 
 func (p *Pipeline) cleanupArtifacts(job *model.BuildJob) {

@@ -11,15 +11,19 @@ export {}
 /* prettier-ignore */
 declare module 'vue' {
   export interface GlobalComponents {
-    FormDialog: typeof import('./src/components/form-dialog.vue')['default']
-    ProTable: typeof import('./src/components/pro-table.vue')['default']
+    BuildLogViewer: typeof import('./src/components/build-log-viewer/build-log-viewer.vue')['default']
+    FormDialog: typeof import('./src/components/form-dialog/form-dialog.vue')['default']
+    NotificationBell: typeof import('./src/components/notification-bell/notification-bell.vue')['default']
+    ProTable: typeof import('./src/components/pro-table/pro-table.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
     UAction: typeof import('@veltra/desktop')['UAction']
     UActionGroup: typeof import('@veltra/desktop')['UActionGroup']
+    UBadge: typeof import('@veltra/desktop')['UBadge']
     UButton: typeof import('@veltra/desktop')['UButton']
     UCheckbox: typeof import('@veltra/desktop')['UCheckbox']
     UDialog: typeof import('@veltra/desktop')['UDialog']
+    UDropdown: typeof import('@veltra/desktop')['UDropdown']
     UDualNav: typeof import('@veltra/desktop')['UDualNav']
     UEmpty: typeof import('@veltra/desktop')['UEmpty']
     UFilePicker: typeof import('@veltra/desktop')['UFilePicker']
@@ -27,13 +31,16 @@ declare module 'vue' {
     UFormItem: typeof import('@veltra/desktop')['UFormItem']
     UInput: typeof import('@veltra/desktop')['UInput']
     UMultiSelect: typeof import('@veltra/desktop')['UMultiSelect']
+    UNav: typeof import('@veltra/desktop')['UNav']
     UNumberInput: typeof import('@veltra/desktop')['UNumberInput']
     UPaginator: typeof import('@veltra/desktop')['UPaginator']
     UPasswordInput: typeof import('@veltra/desktop')['UPasswordInput']
     USelect: typeof import('@veltra/desktop')['USelect']
     USwitch: typeof import('@veltra/desktop')['USwitch']
     UTable: typeof import('@veltra/desktop')['UTable']
+    UTabs: typeof import('@veltra/desktop')['UTabs']
     UTag: typeof import('@veltra/desktop')['UTag']
     UTextarea: typeof import('@veltra/desktop')['UTextarea']
+    UTree: typeof import('@veltra/desktop')['UTree']
   }
 }

@@ -1,0 +1,47 @@
+# Example configuration for Bedrock 2.0 (fresh install only — no 1.x data migration).
+# Copy to config.yaml and change secrets before production use.
+
+server:
+  port: 8080
+  host: "0.0.0.0"
+
+# driver: sqlite | postgres | mysql
+# Changing driver does NOT migrate data (2.0 fresh install only).
+database:
+  driver: sqlite
+  path: "./data/bedrock.sqlite"
+  # host: 127.0.0.1
+  # port: 5432
+  # name: bedrock
+  # user: bedrock
+  # password: ""
+  # ssl_mode: disable
+  max_open_conns: 25
+  max_idle_conns: 5
+  conn_max_lifetime: 1h
+
+jwt:
+  secret: "change-me-in-production"
+  access_ttl: "2h"
+  refresh_ttl: "168h"
+
+build:
+  max_concurrent: 3
+  workspace_dir: "./data/workspaces"
+  artifact_dir: "./data/artifacts"
+  log_dir: "./data/logs"
+  cache_dir: "./data/caches"
+
+storage:
+  root: "./data/storage"
+  attachment_max_bytes: 20971520 # 20MB
+  doc_import_max_bytes: 104857600 # 100MB
+
+encryption:
+  # 64 hex chars (32 bytes). Must match frontend inject / VITE_BEDROCK_ENCRYPTION_KEY in dev.
+  key: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+
+admin:
+  username: "admin"
+  password: "change-me-on-first-login"
+  display_name: "管理员"

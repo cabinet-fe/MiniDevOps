@@ -1,5 +1,13 @@
 import { http } from "./http";
-import type { Dictionary, OperationLog, PageResult, RbacResource, Role, User } from "./types";
+import type {
+  Dictionary,
+  NotificationItem,
+  OperationLog,
+  PageResult,
+  RbacResource,
+  Role,
+  User,
+} from "./types";
 
 export type ListQuery = Record<string, string | number | boolean | undefined | null>;
 
@@ -146,4 +154,24 @@ export async function listOperationLogs(params?: ListQuery): Promise<PageResult<
     query: toQuery(params),
   });
   return body;
+}
+
+export async function listNotifications(params?: ListQuery): Promise<PageResult<NotificationItem>> {
+  const { body } = await http.get<PageResult<NotificationItem>>("/notifications", {
+    query: toQuery(params),
+  });
+  return body;
+}
+
+export async function markNotificationRead(id: number): Promise<void> {
+  await http.put(`/notifications/${id}/read`);
+}
+
+export async function markAllNotificationsRead(): Promise<void> {
+  await http.put("/notifications/read-all");
+}
+
+export function notificationWsUrl(token: string): string {
+  const proto = location.protocol === "https:" ? "wss:" : "ws:";
+  return `${proto}//${location.host}/ws/notifications?token=${encodeURIComponent(token)}`;
 }

@@ -1,7 +1,7 @@
 import { createApp } from "vue";
 import { createPinia } from "pinia";
 import UltraUI from "@veltra/desktop/install";
-import { loadTheme } from "@veltra/styles/theme";
+import { loadTheme, heroLightTheme } from "@veltra/styles/theme";
 import "@veltra/styles/normalize";
 import "@veltra/styles/transitions";
 
@@ -11,7 +11,7 @@ import { setOnAuthExpired } from "./api/http";
 import { useAuthStore } from "./stores/auth";
 
 // Inject --u-* design tokens before mount (required for Veltra component look).
-loadTheme();
+loadTheme(heroLightTheme);
 
 const app = createApp(App);
 const pinia = createPinia();

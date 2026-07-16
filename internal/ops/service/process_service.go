@@ -68,7 +68,7 @@ func (s *ProcessService) ListProcesses(opts model.ProcessListOptions) ([]model.P
 		}
 	}
 	items = filterProcesses(items, opts)
-	sortProcesses(items, opts.Sort, opts.Order)
+	sortProcesses(items, opts.Sort)
 	return items, nil
 }
 
@@ -116,8 +116,17 @@ func (s *ProcessService) collect(proc *process.Process) (model.ProcessInfo, bool
 	if username, err := proc.Username(); err == nil {
 		item.Username = username
 	}
+	if threads, err := proc.NumThreads(); err == nil {
+		item.NumThreads = threads
+	}
+	if statuses, err := proc.Status(); err == nil && len(statuses) > 0 {
+		item.Status = statuses[0]
+	}
 	if createTime, err := proc.CreateTime(); err == nil {
 		item.StartTime = createTime
+	}
+	if cmdline, err := proc.Cmdline(); err == nil {
+		item.Cmdline = cmdline
 	}
 	item.CPUPercent = s.cpuPercent(proc)
 	return item, true
@@ -196,8 +205,11 @@ func filterProcesses(items []model.ProcessInfo, opts model.ProcessListOptions) [
 		if opts.PID != nil && item.PID != *opts.PID {
 			continue
 		}
-		if keyword != "" && !strings.Contains(strings.ToLower(item.Name), keyword) {
-			continue
+		if keyword != "" {
+			haystack := strings.ToLower(item.Name + " " + item.Cmdline)
+			if !strings.Contains(haystack, keyword) {
+				continue
+			}
 		}
 		if opts.Port != nil {
 			found := false
@@ -216,16 +228,16 @@ func filterProcesses(items []model.ProcessInfo, opts model.ProcessListOptions) [
 	return out
 }
 
-func sortProcesses(items []model.ProcessInfo, field, order string) {
-	ascending := strings.EqualFold(order, "asc")
+func sortProcesses(items []model.ProcessInfo, sortSpec string) {
+	field, ascending := parseProcessSort(sortSpec)
 	sort.SliceStable(items, func(i, j int) bool {
 		switch field {
-		case "cpu":
+		case "cpu_percent":
 			if ascending {
 				return items[i].CPUPercent < items[j].CPUPercent
 			}
 			return items[i].CPUPercent > items[j].CPUPercent
-		case "memory":
+		case "memory_bytes":
 			if ascending {
 				return items[i].MemoryBytes < items[j].MemoryBytes
 			}
@@ -239,4 +251,32 @@ func sortProcesses(items []model.ProcessInfo, field, order string) {
 			return items[i].PID < items[j].PID
 		}
 	})
+}
+
+// parseProcessSort accepts ProTable "field@asc|desc", plus legacy aliases cpu/memory.
+func parseProcessSort(sortSpec string) (field string, ascending bool) {
+	sortSpec = strings.TrimSpace(sortSpec)
+	if sortSpec == "" {
+		return "", false
+	}
+	at := strings.LastIndex(sortSpec, "@")
+	if at <= 0 {
+		return "", false
+	}
+	field = strings.ToLower(sortSpec[:at])
+	order := strings.ToLower(sortSpec[at+1:])
+	switch field {
+	case "cpu":
+		field = "cpu_percent"
+	case "memory":
+		field = "memory_bytes"
+	case "cpu_percent", "memory_bytes", "name":
+		// ok
+	default:
+		return "", false
+	}
+	if order != "asc" && order != "desc" {
+		return "", false
+	}
+	return field, order == "asc"
 }

@@ -28,13 +28,14 @@
 
 - 路径别名 `@` → `web-v2/src/`。
 - **组件与工具必须优先 `@veltra/*` 与 `@cat-kit/*`**。仅确认库内无合适能力后才自研或引入第三方。
+- 本地组件目录：`web-v2/src/components/<name>/`，必须含 `index.ts` + `<name>.vue`；类型 / `defineXxx` 等放可选 `helper.ts`。调用方从 `@/components/<name>` 导入（勿写 `.vue` 路径）。
 - 字段与交互形态对齐 `@veltra/desktop` 契约（查 `components/<name>/types.d.ts` 与 `api.md`）。例如：
   - 侧栏：`UNav` / `UDualNav` 的 `NavItem`（`title` / `path` / `icon` / `children` 等）
-  - 表格列：`defineTableColumns`；分页：`UPaginator`；表单：`UForm` / `UFormItem`
+  - 表格列：裸 `UTable` 用 `defineTableColumns`；`ProTable` 用 `defineProTableColumns`；分页：`UPaginator`；表单：`UForm` / `UFormItem`
 - API/DTO 可与后端 `snake_case` 并存；映射到组件 props 时保持类型兼容。
 - HTTP **只走** `@cat-kit/http` 封装客户端（含 refresh）；禁止页面内散落 `fetch`（除非 DESIGN 标明的特例并抽 helper）。
 - 状态：Pinia；权限辅助：composables。
-- Token：`localStorage` + Bearer（已接受风险；勿擅自改称「安全 Cookie 方案」除非产品决策变更）。
+- Token：`access_token` → `@cat-kit/fe` `storage.local` + Bearer；`refresh_token` → 服务端 `Set-Cookie`（HttpOnly，默认跟随 `jwt.refresh_ttl` / 7 天，**不设 Secure**）。HTTP 客户端 `credentials: true`；401 时 POST `/auth/refresh`（带 Cookie）换发 access 并重试原请求。
 - 枚举与后端 `snake_case` JSON 字段保持一致。
 - **禁止**硬编码全量菜单/权限表作为真源；菜单由后端裁剪下发（见 DESIGN）。
 
@@ -46,10 +47,15 @@
 
 ## 列表与分页（ProTable）
 
-封装：`web-v2/src/components/pro-table.vue`。页面勿各自复制请求 + 表格 + 分页样板。
+封装：`web-v2/src/components/pro-table/`（`index.ts` + `pro-table.vue` + `helper.ts`）。页面勿各自复制请求 + 表格 + 分页样板。
+
+```ts
+import ProTable, { defineProTableColumns } from "@/components/pro-table";
+```
 
 调用方传入：
 
+- **列**：`defineProTableColumns`（支持 `sortable`；勿对 ProTable 再用 Veltra `defineTableColumns`）
 - **API**：`url`（相对 `/api/v1`，经 `@cat-kit/http`；信封由 envelope 插件解包）+ `v-model:query`；`dataPath` 默认 `items`（`o(body).get`）
 - **filters 插槽**：过滤表单；`autoQueryFields` 控制哪些字段变更自动查询（文本框走查询按钮 / Enter）
 - **模式**：`pagination` / `tree` 互斥，或二者皆无（纯列表）；列/行基于 `UTable`
@@ -67,7 +73,8 @@
 
 ## 测试
 
-- 关键路径优先 Playwright 冒烟（登录、菜单、构建日志等）
+- 关键路径优先 Playwright 冒烟（登录、菜单、构建日志等）：`web-v2/e2e/`，`bunx playwright test`
+- API 级冒烟：`make smoke-api-e2e`
 - 不做容量/延迟 SLO 验收（见 ROADMAP）
 
 ## 禁止事项（前端）

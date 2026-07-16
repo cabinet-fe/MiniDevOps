@@ -25,7 +25,7 @@ func newBuildScriptCommand(ctx context.Context, workDir, scriptType, script stri
 	case "python":
 		return exec.CommandContext(ctx, "python3", "-c", script), cleanup, nil
 	case "powershell", "pwsh":
-		return newPowerShellBuildCommand(ctx, workDir, script)
+		return newPowerShellBuildCommand(ctx, workDir, st, script)
 	case "cmd", "batch":
 		return newCmdBuildCommand(ctx, workDir, script)
 	default:
@@ -46,15 +46,21 @@ func newPOSIXShellBuildCommand(ctx context.Context, script string) (*exec.Cmd, f
 	return exec.CommandContext(ctx, "sh", "-c", script), func() {}, nil
 }
 
-func findPowerShell() (string, error) {
-	// 优先 PowerShell 7+（pwsh），支持 && 链式命令且 UTF-8 输出更一致。
-	for _, name := range []string{"pwsh", "powershell"} {
-		path, err := exec.LookPath(name)
-		if err == nil {
-			return path, nil
-		}
+func findPowerShellByType(scriptType string) (string, error) {
+	var name string
+	switch scriptType {
+	case "powershell":
+		name = "powershell"
+	case "pwsh":
+		name = "pwsh"
+	default:
+		return "", fmt.Errorf("未知 PowerShell 脚本类型 %q", scriptType)
 	}
-	return "", fmt.Errorf("未找到 powershell 或 pwsh")
+	path, err := exec.LookPath(name)
+	if err != nil {
+		return "", fmt.Errorf("未找到 %s", name)
+	}
+	return path, nil
 }
 
 func isLegacyWindowsPowerShell(psPath string) bool {
@@ -68,8 +74,8 @@ const (
 	cmdUTF8Preamble = "@echo off\r\nchcp 65001 >nul\r\n"
 )
 
-func newPowerShellBuildCommand(ctx context.Context, workDir, script string) (*exec.Cmd, func(), error) {
-	ps, err := findPowerShell()
+func newPowerShellBuildCommand(ctx context.Context, workDir, scriptType, script string) (*exec.Cmd, func(), error) {
+	ps, err := findPowerShellByType(scriptType)
 	if err != nil {
 		return nil, func() {}, err
 	}

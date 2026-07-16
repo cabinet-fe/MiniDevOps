@@ -63,6 +63,7 @@
 - 涉及 schema：三驱动合同测试（`go test ./internal/platform/db/... -tags=contract`）或明确标注驱动差异
 - 涉及 API：对照 OpenAPI
 - 涉及状态机 / 权限 / Webhook / 存储路径：必须有单测或集成测
+- GA 冒烟：`make smoke` / `scripts/smoke/*`；投影：`make openapi-check`（禁止手改投影）
 - 不做容量/延迟 SLO 验收（见 ROADMAP）
 
 ## 安全表述（工程卫生）
@@ -73,7 +74,8 @@
 
 1. 跨层调用，或在 handler 中直接操作 DB。
 2. 用 GORM AutoMigrate **替代**版本化 migration。
-3. 手改 `openapi.3.1.projection.yaml`。
+3. **禁止**手改 `openapi.3.1.projection.yaml`（CI：`make openapi-check`）。
 4. 绕过 OpenAPI 契约私自加字段（先改 `openapi.yaml` 再投影）。
+5. 把 1.x→2.0 数据迁移脚本当作正式支持路径（CI：`make ga-guardrails`）。
 
 领域级禁止项（如分发失败不得标 BuildRun `failed`、流水线内不同步跑 AI、非项目域对象 ACL 等）以 [docs/DESIGN.md](../docs/DESIGN.md) 为准，不在此展开。

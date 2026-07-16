@@ -1,7 +1,7 @@
 import { defineStore } from "pinia";
 import { computed, ref } from "vue";
 
-import { clearTokens, loginApi, logoutApi, meApi, setTokens } from "@/api/auth";
+import { clearTokens, loginApi, logoutApi, meApi, setAccessToken } from "@/api/auth";
 import { getAccessToken } from "@/api/http";
 import type { MenuNode, User } from "@/api/types";
 import { encryptLoginPassword } from "@/lib/login-crypto";
@@ -23,14 +23,14 @@ export const useAuthStore = defineStore("auth", () => {
   async function login(username: string, password: string): Promise<void> {
     const passwordCipher = await encryptLoginPassword(password);
     const data = await loginApi(username, passwordCipher);
-    setTokens(data.access_token, data.refresh_token);
+    setAccessToken(data.access_token);
     token.value = data.access_token;
     user.value = data.user;
     permissions.value = data.permissions ?? [];
     menus.value = data.menus ?? [];
     lastMeAt.value = Date.now();
-    // Always hydrate from me so sidebar matches server-trimmed tree.
-    await fetchMe();
+    // Hydrate from me; keep login payload if me fails (e.g. transient network).
+    await fetchMe({ clearOnError: false });
   }
 
   async function logout(): Promise<void> {
@@ -49,7 +49,8 @@ export const useAuthStore = defineStore("auth", () => {
     lastMeAt.value = 0;
   }
 
-  async function fetchMe(): Promise<void> {
+  async function fetchMe(opts?: { clearOnError?: boolean }): Promise<void> {
+    const clearOnError = opts?.clearOnError !== false;
     if (!getAccessToken()) {
       token.value = null;
       user.value = null;
@@ -65,12 +66,14 @@ export const useAuthStore = defineStore("auth", () => {
         token.value = getAccessToken();
         lastMeAt.value = Date.now();
       } catch {
-        clearTokens();
-        token.value = null;
-        user.value = null;
-        permissions.value = [];
-        menus.value = [];
-        lastMeAt.value = 0;
+        if (clearOnError) {
+          clearTokens();
+          token.value = null;
+          user.value = null;
+          permissions.value = [];
+          menus.value = [];
+          lastMeAt.value = 0;
+        }
       } finally {
         meInflight = null;
       }

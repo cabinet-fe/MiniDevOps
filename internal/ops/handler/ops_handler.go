@@ -17,13 +17,13 @@ import (
 )
 
 type OpsHandler struct {
-	processes  *service.ProcessService
-	toolchains *service.ToolchainService
-	perm       *rbacservice.PermissionService
+	processes *service.ProcessService
+	devEnvs   *service.DevEnvironmentService
+	perm      *rbacservice.PermissionService
 }
 
-func NewOpsHandler(processes *service.ProcessService, toolchains *service.ToolchainService, perm *rbacservice.PermissionService) *OpsHandler {
-	return &OpsHandler{processes: processes, toolchains: toolchains, perm: perm}
+func NewOpsHandler(processes *service.ProcessService, devEnvs *service.DevEnvironmentService, perm *rbacservice.PermissionService) *OpsHandler {
+	return &OpsHandler{processes: processes, devEnvs: devEnvs, perm: perm}
 }
 
 func (h *OpsHandler) RegisterRoutes(rg *gin.RouterGroup, authMW gin.HandlerFunc) {
@@ -32,31 +32,31 @@ func (h *OpsHandler) RegisterRoutes(rg *gin.RouterGroup, authMW gin.HandlerFunc)
 	g.GET("/processes", rbacmw.RequirePermission(h.perm, "ops.processes:view"), h.ListProcesses)
 	g.POST("/processes/:pid/kill", rbacmw.RequirePermission(h.perm, "ops.processes:execute"), h.KillProcess)
 
-	g.GET("/toolchains", rbacmw.RequirePermission(h.perm, "ops.toolchains:view"), h.ListToolchains)
-	g.POST("/toolchains", rbacmw.RequirePermission(h.perm, "ops.toolchains:create"), h.CreateToolchain)
-	g.PUT("/toolchains/:id", rbacmw.RequirePermission(h.perm, "ops.toolchains:update"), h.UpdateToolchain)
-	g.DELETE("/toolchains/:id", rbacmw.RequirePermission(h.perm, "ops.toolchains:delete"), h.DeleteToolchain)
-	g.POST("/toolchains/:id/detect", rbacmw.RequirePermission(h.perm, "ops.toolchains:execute"), h.DetectToolchain)
-	g.POST("/toolchains/:id/install", rbacmw.RequirePermission(h.perm, "ops.toolchains:execute"), h.EnqueueInstall)
-	g.POST("/toolchains/:id/upgrade", rbacmw.RequirePermission(h.perm, "ops.toolchains:execute"), h.EnqueueUpgrade)
-	g.POST("/toolchains/:id/uninstall", rbacmw.RequirePermission(h.perm, "ops.toolchains:execute"), h.EnqueueUninstall)
-	g.POST("/toolchains/:id/switch", rbacmw.RequirePermission(h.perm, "ops.toolchains:execute"), h.EnqueueSwitch)
+	g.GET("/dev-environments", rbacmw.RequirePermission(h.perm, "ops.dev_environments:view"), h.ListEnvironments)
+	g.POST("/dev-environments", rbacmw.RequirePermission(h.perm, "ops.dev_environments:create"), h.CreateEnvironment)
+	g.PUT("/dev-environments/:id", rbacmw.RequirePermission(h.perm, "ops.dev_environments:update"), h.UpdateEnvironment)
+	g.DELETE("/dev-environments/:id", rbacmw.RequirePermission(h.perm, "ops.dev_environments:delete"), h.DeleteEnvironment)
+	g.POST("/dev-environments/:id/detect", rbacmw.RequirePermission(h.perm, "ops.dev_environments:execute"), h.DetectEnvironment)
+	g.POST("/dev-environments/:id/install", rbacmw.RequirePermission(h.perm, "ops.dev_environments:execute"), h.EnqueueInstall)
+	g.POST("/dev-environments/:id/upgrade", rbacmw.RequirePermission(h.perm, "ops.dev_environments:execute"), h.EnqueueUpgrade)
+	g.POST("/dev-environments/:id/uninstall", rbacmw.RequirePermission(h.perm, "ops.dev_environments:execute"), h.EnqueueUninstall)
+	g.POST("/dev-environments/:id/switch", rbacmw.RequirePermission(h.perm, "ops.dev_environments:execute"), h.EnqueueSwitch)
 
-	g.GET("/install-sources", rbacmw.RequirePermission(h.perm, "ops.toolchains:view"), h.ListSources)
-	g.POST("/install-sources", rbacmw.RequirePermission(h.perm, "ops.toolchains:create"), h.CreateSource)
-	g.PUT("/install-sources/:id", rbacmw.RequirePermission(h.perm, "ops.toolchains:update"), h.UpdateSource)
-	g.DELETE("/install-sources/:id", rbacmw.RequirePermission(h.perm, "ops.toolchains:delete"), h.DeleteSource)
-	g.POST("/install-sources/:id/ping", rbacmw.RequirePermission(h.perm, "ops.toolchains:execute"), h.PingSource)
+	g.GET("/dev-environments/:id/sources", rbacmw.RequirePermission(h.perm, "ops.dev_environments:view"), h.ListSources)
+	g.POST("/dev-environments/:id/sources", rbacmw.RequirePermission(h.perm, "ops.dev_environments:create"), h.CreateSource)
+	g.PUT("/dev-environments/:id/sources/:sourceId", rbacmw.RequirePermission(h.perm, "ops.dev_environments:update"), h.UpdateSource)
+	g.DELETE("/dev-environments/:id/sources/:sourceId", rbacmw.RequirePermission(h.perm, "ops.dev_environments:delete"), h.DeleteSource)
+	g.POST("/dev-environments/:id/sources/:sourceId/ping", rbacmw.RequirePermission(h.perm, "ops.dev_environments:execute"), h.PingSource)
 
-	g.GET("/install-jobs", rbacmw.RequirePermission(h.perm, "ops.toolchains:view"), h.ListJobs)
-	g.GET("/install-jobs/:id", rbacmw.RequirePermission(h.perm, "ops.toolchains:view"), h.GetJob)
-	g.GET("/install-jobs/:id/logs", rbacmw.RequirePermission(h.perm, "ops.toolchains:view"), h.JobLogs)
-	g.POST("/install-jobs/:id/retry", rbacmw.RequirePermission(h.perm, "ops.toolchains:execute"), h.RetryJob)
+	g.GET("/dev-environments/:id/jobs", rbacmw.RequirePermission(h.perm, "ops.dev_environments:view"), h.ListJobs)
+	g.GET("/dev-environments/:id/jobs/:jobId", rbacmw.RequirePermission(h.perm, "ops.dev_environments:view"), h.GetJob)
+	g.GET("/dev-environments/:id/jobs/:jobId/logs", rbacmw.RequirePermission(h.perm, "ops.dev_environments:view"), h.JobLogs)
+	g.POST("/dev-environments/:id/jobs/:jobId/retry", rbacmw.RequirePermission(h.perm, "ops.dev_environments:execute"), h.RetryJob)
 }
 
 func (h *OpsHandler) ListProcesses(c *gin.Context) {
 	opts := model.ProcessListOptions{
-		Keyword: c.Query("keyword"), Sort: c.Query("sort"), Order: c.Query("order"),
+		Keyword: c.Query("keyword"), Sort: c.Query("sort"),
 	}
 	if raw := c.Query("pid"); raw != "" {
 		pid, err := strconv.ParseInt(raw, 10, 32)
@@ -102,22 +102,22 @@ func (h *OpsHandler) KillProcess(c *gin.Context) {
 	pkg.Success(c, gin.H{"pid": pid, "name": name, "status": "terminated"})
 }
 
-func (h *OpsHandler) ListToolchains(c *gin.Context) {
-	items, err := h.toolchains.ListToolchains()
+func (h *OpsHandler) ListEnvironments(c *gin.Context) {
+	items, err := h.devEnvs.ListEnvironments()
 	if err != nil {
-		pkg.Error(c, http.StatusInternalServerError, "查询工具链失败")
+		pkg.Error(c, http.StatusInternalServerError, "查询开发环境失败")
 		return
 	}
 	pkg.Success(c, gin.H{"items": items})
 }
 
-func (h *OpsHandler) CreateToolchain(c *gin.Context) {
-	var input service.ToolchainInput
+func (h *OpsHandler) CreateEnvironment(c *gin.Context) {
+	var input service.DevEnvironmentInput
 	if err := c.ShouldBindJSON(&input); err != nil {
-		pkg.Error(c, http.StatusBadRequest, "无效工具链定义")
+		pkg.Error(c, http.StatusBadRequest, "无效开发环境定义")
 		return
 	}
-	item, err := h.toolchains.CreateCustom(input, authmiddleware.GetUserID(c))
+	item, err := h.devEnvs.CreateCustom(input, authmiddleware.GetUserID(c))
 	if err != nil {
 		pkg.Error(c, http.StatusBadRequest, err.Error())
 		return
@@ -125,17 +125,17 @@ func (h *OpsHandler) CreateToolchain(c *gin.Context) {
 	pkg.Created(c, item)
 }
 
-func (h *OpsHandler) UpdateToolchain(c *gin.Context) {
-	id, ok := parseID(c)
+func (h *OpsHandler) UpdateEnvironment(c *gin.Context) {
+	id, ok := parseID(c, "id")
 	if !ok {
 		return
 	}
-	var input service.ToolchainInput
+	var input service.DevEnvironmentInput
 	if err := c.ShouldBindJSON(&input); err != nil {
-		pkg.Error(c, http.StatusBadRequest, "无效工具链定义")
+		pkg.Error(c, http.StatusBadRequest, "无效开发环境定义")
 		return
 	}
-	item, err := h.toolchains.UpdateCustom(id, input)
+	item, err := h.devEnvs.UpdateCustom(id, input)
 	if err != nil {
 		writeServiceError(c, err)
 		return
@@ -143,24 +143,24 @@ func (h *OpsHandler) UpdateToolchain(c *gin.Context) {
 	pkg.Success(c, item)
 }
 
-func (h *OpsHandler) DeleteToolchain(c *gin.Context) {
-	id, ok := parseID(c)
+func (h *OpsHandler) DeleteEnvironment(c *gin.Context) {
+	id, ok := parseID(c, "id")
 	if !ok {
 		return
 	}
-	if err := h.toolchains.DeleteCustom(id); err != nil {
+	if err := h.devEnvs.DeleteCustom(id); err != nil {
 		writeServiceError(c, err)
 		return
 	}
 	pkg.Success(c, gin.H{"id": id})
 }
 
-func (h *OpsHandler) DetectToolchain(c *gin.Context) {
-	id, ok := parseID(c)
+func (h *OpsHandler) DetectEnvironment(c *gin.Context) {
+	id, ok := parseID(c, "id")
 	if !ok {
 		return
 	}
-	result, err := h.toolchains.Detect(id)
+	result, err := h.devEnvs.Detect(id)
 	if err != nil {
 		writeServiceError(c, err)
 		return
@@ -174,7 +174,7 @@ func (h *OpsHandler) EnqueueUninstall(c *gin.Context) { h.enqueue(c, "uninstall"
 func (h *OpsHandler) EnqueueSwitch(c *gin.Context)    { h.enqueue(c, "switch") }
 
 func (h *OpsHandler) enqueue(c *gin.Context, operation string) {
-	id, ok := parseID(c)
+	id, ok := parseID(c, "id")
 	if !ok {
 		return
 	}
@@ -183,7 +183,7 @@ func (h *OpsHandler) enqueue(c *gin.Context, operation string) {
 		pkg.Error(c, http.StatusBadRequest, "无效任务参数")
 		return
 	}
-	job, err := h.toolchains.Enqueue(id, operation, input, authmiddleware.GetUserID(c))
+	job, err := h.devEnvs.Enqueue(id, operation, input, authmiddleware.GetUserID(c))
 	if err != nil {
 		writeServiceError(c, err)
 		return
@@ -192,30 +192,20 @@ func (h *OpsHandler) enqueue(c *gin.Context, operation string) {
 }
 
 func (h *OpsHandler) ListSources(c *gin.Context) {
-	items, err := h.toolchains.ListSources()
+	envID, ok := parseID(c, "id")
+	if !ok {
+		return
+	}
+	items, err := h.devEnvs.ListSources(envID)
 	if err != nil {
-		pkg.Error(c, http.StatusInternalServerError, "查询安装源失败")
+		writeServiceError(c, err)
 		return
 	}
 	pkg.Success(c, gin.H{"items": items})
 }
 
 func (h *OpsHandler) CreateSource(c *gin.Context) {
-	var input service.SourceInput
-	if err := c.ShouldBindJSON(&input); err != nil {
-		pkg.Error(c, http.StatusBadRequest, "无效安装源")
-		return
-	}
-	item, err := h.toolchains.CreateSource(input)
-	if err != nil {
-		pkg.Error(c, http.StatusBadRequest, err.Error())
-		return
-	}
-	pkg.Created(c, item)
-}
-
-func (h *OpsHandler) UpdateSource(c *gin.Context) {
-	id, ok := parseID(c)
+	envID, ok := parseID(c, "id")
 	if !ok {
 		return
 	}
@@ -224,7 +214,29 @@ func (h *OpsHandler) UpdateSource(c *gin.Context) {
 		pkg.Error(c, http.StatusBadRequest, "无效安装源")
 		return
 	}
-	item, err := h.toolchains.UpdateSource(id, input)
+	item, err := h.devEnvs.CreateSource(envID, input)
+	if err != nil {
+		writeServiceError(c, err)
+		return
+	}
+	pkg.Created(c, item)
+}
+
+func (h *OpsHandler) UpdateSource(c *gin.Context) {
+	envID, ok := parseID(c, "id")
+	if !ok {
+		return
+	}
+	sourceID, ok := parseID(c, "sourceId")
+	if !ok {
+		return
+	}
+	var input service.SourceInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		pkg.Error(c, http.StatusBadRequest, "无效安装源")
+		return
+	}
+	item, err := h.devEnvs.UpdateSource(envID, sourceID, input)
 	if err != nil {
 		writeServiceError(c, err)
 		return
@@ -233,23 +245,31 @@ func (h *OpsHandler) UpdateSource(c *gin.Context) {
 }
 
 func (h *OpsHandler) DeleteSource(c *gin.Context) {
-	id, ok := parseID(c)
+	envID, ok := parseID(c, "id")
 	if !ok {
 		return
 	}
-	if err := h.toolchains.DeleteSource(id); err != nil {
+	sourceID, ok := parseID(c, "sourceId")
+	if !ok {
+		return
+	}
+	if err := h.devEnvs.DeleteSource(envID, sourceID); err != nil {
 		writeServiceError(c, err)
 		return
 	}
-	pkg.Success(c, gin.H{"id": id})
+	pkg.Success(c, gin.H{"id": sourceID})
 }
 
 func (h *OpsHandler) PingSource(c *gin.Context) {
-	id, ok := parseID(c)
+	envID, ok := parseID(c, "id")
 	if !ok {
 		return
 	}
-	okResult, detail, err := h.toolchains.PingSource(id)
+	sourceID, ok := parseID(c, "sourceId")
+	if !ok {
+		return
+	}
+	okResult, detail, err := h.devEnvs.PingSource(envID, sourceID)
 	if err != nil {
 		writeServiceError(c, err)
 		return
@@ -258,21 +278,29 @@ func (h *OpsHandler) PingSource(c *gin.Context) {
 }
 
 func (h *OpsHandler) ListJobs(c *gin.Context) {
+	envID, ok := parseID(c, "id")
+	if !ok {
+		return
+	}
 	page := pkg.ParsePage(c)
-	items, total, err := h.toolchains.ListJobs(page.Page, page.PageSize, c.Query("status"))
+	items, total, err := h.devEnvs.ListJobs(envID, page.Page, page.PageSize, c.Query("status"))
 	if err != nil {
-		pkg.Error(c, http.StatusInternalServerError, "查询安装任务失败")
+		writeServiceError(c, err)
 		return
 	}
 	pkg.PageSuccess(c, items, total, page)
 }
 
 func (h *OpsHandler) GetJob(c *gin.Context) {
-	id, ok := parseID(c)
+	envID, ok := parseID(c, "id")
 	if !ok {
 		return
 	}
-	item, err := h.toolchains.GetJob(id)
+	jobID, ok := parseID(c, "jobId")
+	if !ok {
+		return
+	}
+	item, err := h.devEnvs.GetJob(envID, jobID)
 	if err != nil {
 		writeServiceError(c, err)
 		return
@@ -281,11 +309,15 @@ func (h *OpsHandler) GetJob(c *gin.Context) {
 }
 
 func (h *OpsHandler) JobLogs(c *gin.Context) {
-	id, ok := parseID(c)
+	envID, ok := parseID(c, "id")
 	if !ok {
 		return
 	}
-	logs, err := h.toolchains.JobLogs(id)
+	jobID, ok := parseID(c, "jobId")
+	if !ok {
+		return
+	}
+	logs, err := h.devEnvs.JobLogs(envID, jobID)
 	if err != nil {
 		writeServiceError(c, err)
 		return
@@ -294,11 +326,15 @@ func (h *OpsHandler) JobLogs(c *gin.Context) {
 }
 
 func (h *OpsHandler) RetryJob(c *gin.Context) {
-	id, ok := parseID(c)
+	envID, ok := parseID(c, "id")
 	if !ok {
 		return
 	}
-	job, err := h.toolchains.Retry(id, authmiddleware.GetUserID(c))
+	jobID, ok := parseID(c, "jobId")
+	if !ok {
+		return
+	}
+	job, err := h.devEnvs.Retry(envID, jobID, authmiddleware.GetUserID(c))
 	if err != nil {
 		writeServiceError(c, err)
 		return
@@ -306,8 +342,8 @@ func (h *OpsHandler) RetryJob(c *gin.Context) {
 	c.JSON(http.StatusAccepted, pkg.Response{Code: 0, Message: "accepted", Data: job})
 }
 
-func parseID(c *gin.Context) (uint, bool) {
-	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+func parseID(c *gin.Context, name string) (uint, bool) {
+	id, err := strconv.ParseUint(c.Param(name), 10, 64)
 	if err != nil || id == 0 {
 		pkg.Error(c, http.StatusBadRequest, "无效 ID")
 		return 0, false
@@ -320,7 +356,7 @@ func writeServiceError(c *gin.Context, err error) {
 		pkg.Error(c, http.StatusNotFound, "资源不存在")
 		return
 	}
-	if errors.Is(err, service.ErrBuiltinImmutable) || errors.Is(err, service.ErrMissingTemplate) ||
+	if errors.Is(err, service.ErrBuiltinImmutable) || errors.Is(err, service.ErrMissingScript) ||
 		errors.Is(err, service.ErrInvalidOperation) {
 		pkg.Error(c, http.StatusBadRequest, err.Error())
 		return

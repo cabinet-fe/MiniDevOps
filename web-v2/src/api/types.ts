@@ -25,9 +25,8 @@ export interface MenuNode {
   children?: MenuNode[];
 }
 
-export interface TokenPair {
+export interface LoginResponse {
   access_token: string;
-  refresh_token: string;
   user: User;
   permissions?: string[];
   menus?: MenuNode[];
@@ -107,6 +106,18 @@ export interface OperationLog {
   resource_id: string;
   details: string;
   ip_address: string;
+  created_at: string;
+}
+
+export interface NotificationItem {
+  id: number;
+  user_id: number;
+  type: string;
+  title: string;
+  message: string;
+  build_run_id?: number | null;
+  agent_run_id?: number | null;
+  is_read: boolean;
   created_at: string;
 }
 
@@ -287,36 +298,41 @@ export interface ProcessInfo {
   cpu_percent: number;
   memory_bytes: number;
   username: string;
+  num_threads: number;
+  status: string;
   start_time: number;
+  cmdline: string;
   ports: number[];
 }
 
-export interface ToolchainDefinition {
+export interface DevEnvironment {
   id: number;
   name: string;
   kind: "builtin" | "custom";
   executable: string;
   description: string;
-  detect_command: string;
-  install_template: string;
-  upgrade_template: string;
-  uninstall_template: string;
-  versions_command: string;
-  switch_template: string;
+  detect_script: string;
+  install_script: string;
+  upgrade_script: string;
+  uninstall_script: string;
+  versions_script: string;
+  switch_script: string;
   default_version: string;
+  sources?: DevEnvInstallSource[];
 }
 
-export interface InstallSource {
+export interface DevEnvInstallSource {
   id: number;
+  environment_id: number;
   name: string;
   base_url: string;
   priority: number;
   enabled: boolean;
 }
 
-export interface ToolchainInstallJob {
+export interface DevEnvJob {
   id: number;
-  toolchain_id: number;
+  environment_id: number;
   operation: "install" | "upgrade" | "uninstall" | "switch";
   requested_version: string;
   status: string;
@@ -324,8 +340,8 @@ export interface ToolchainInstallJob {
   command_snapshot: string;
   error_message: string;
   created_at: string;
-  toolchain?: ToolchainDefinition;
-  source?: InstallSource;
+  environment?: DevEnvironment;
+  source?: DevEnvInstallSource;
 }
 
 export type ProjectRole = "owner" | "admin" | "member" | "readonly";

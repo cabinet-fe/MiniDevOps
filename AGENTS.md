@@ -29,46 +29,54 @@ make dev                 # 后端 :8080（-tags dev）+ 前端 Vite 代理
 make dev-backend         # 仅后端
 make dev-frontend        # 仅前端（web-v2）
 
-# 构建
+# 构建（web-v2 → cmd/server/dist → go build embed）
 make build               # 前端 → cmd/server/dist → Go 二进制
 make build-frontend      # 仅前端（FRONTEND_DIR）
 make build-backend       # 仅后端
-make build-linux         # Linux amd64
-make build-linux-arm64   # Linux arm64
-make build-agent-linux   # Deploy Agent
+make build-linux         # Linux amd64 Server
+make build-linux-arm64   # Linux arm64 Server
+make build-agent-linux   # Deploy Agent amd64
+make build-agent-linux-arm64
+make checksums           # 对已构建 linux 产物输出 SHA256
 
 # 契约与检查
-# OpenAPI 3.2 源：api/openapi.yaml
+# OpenAPI 3.2 源：api/openapi.yaml（唯一手改）
 # 生成 3.1 投影（禁止手改）：api/openapi.3.1.projection.yaml
 make openapi-projection
 make openapi-check
+make ga-guardrails       # 禁止把 1.x 数据迁移当作支持路径
 
-# 测试
+# 测试 / GA 冒烟
 go test ./...
 go test ./internal/cicd/...
 go test -run TestXxx ./internal/...
-# 三数据库合同测试（需本地或 CI 服务）
-go test ./internal/platform/db/... -tags=contract
+go test ./internal/platform/db/... -tags=contract   # 三库合同（需 DSN）
+make smoke               # fresh-install + api-e2e + recovery + 3db + linux 包
+make smoke-fresh-install
+make smoke-api-e2e
+make smoke-three-db
+make smoke-linux-package
+make smoke-restart-recovery
 
 # 前端（web-v2；推荐 Vite+ 工作流）
 cd web-v2 && vp install
 cd web-v2 && vp dev
 cd web-v2 && vp check    # format + lint + typecheck
 cd web-v2 && vp build
-# package.json scripts 亦映射到 vp（需全局安装 vp）
+# Playwright 冒烟（需后端已启动）：cd web-v2 && bunx playwright test
 
 # 清理
 make clean
 ```
 
-> Makefile 目标以实现仓库为准逐步对齐；新增脚本时同步更新本文。
+> Makefile 目标以实现仓库为准。发布检查单：[docs/release-checklist.md](docs/release-checklist.md)；操作手册：[docs/ops-handbook.md](docs/ops-handbook.md)。
 
-## 目录结构（目标态）
+## 目录结构（GA）
 
 ```text
 .
 ├── cmd/
-│   ├── server/                 # 入口、DI、embed dist
+│   ├── server/                 # 入口、DI、embed dist（web-v2 产物）
 │   └── agent/                  # Deploy Agent
 ├── internal/
 │   ├── platform/               # config、db、migration、健康检查
@@ -88,25 +96,25 @@ make clean
 ├── api/
 │   ├── openapi.yaml            # OpenAPI 3.2（唯一手改）
 │   └── openapi.3.1.projection.yaml
-├── web-v2/                     # Vue 3 前端 → 约定见 .agents/fe.md
+├── web-v2/                     # Vue 3 默认前端 → .agents/fe.md
 │   └── src/
-│       ├── api/
-│       ├── stores/
-│       ├── router/
-│       ├── composables/
-│       ├── layouts/
-│       ├── components/
-│       ├── views/
-│       └── lib/
+├── web/                        # 旧前端；保留一个发布周期供回滚
+├── scripts/
+│   ├── check-ga-guardrails.sh
+│   └── smoke/                  # fresh-install / api-e2e / 3db / linux-package
 ├── docs/
 │   ├── PRD.md
 │   ├── DESIGN.md
-│   └── ROADMAP.md
+│   ├── ROADMAP.md
+│   ├── ops-handbook.md
+│   ├── release-checklist.md
+│   ├── known-issues.md
+│   └── roadmap/
 ├── .agents/
-│   ├── fe.md                   # 前端 agent 约定
-│   ├── be.md                   # 后端 agent 约定
+│   ├── fe.md
+│   ├── be.md
 │   └── skills/
-├── config.yaml
+├── config.yaml / config.example.yaml
 ├── Makefile
 └── data/                       # gitignore（db、工作区、制品等）
 ```
@@ -116,3 +124,4 @@ make clean
 - **不要**把业务规则、权限/流水线/AI 等领域设计写进本文件；权威在 DESIGN。
 - FE / BE 具体禁止项与编码约定分别见 fe.md / be.md。
 - 契约：只改 `api/openapi.yaml`，投影用 `make openapi-projection` 生成。
+- **不提供** 1.x → 2.0 数据迁移；已接受风险（HTTP + access Web Storage / refresh HttpOnly Cookie 不设 Secure、同 UID、自定义超管命令）见 DESIGN §1.4。

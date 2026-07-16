@@ -24,11 +24,18 @@ import (
 func TestGetJobRedactsCommandAndSourceSecrets(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	repo := newTestOpsRepository(t)
-	svc := opsservice.NewToolchainService(repo)
+	svc := opsservice.NewDevEnvironmentService(repo)
 	svc.Start()
 	t.Cleanup(svc.Shutdown)
 
-	sources, err := repo.ListSources()
+	env, err := svc.CreateCustom(opsservice.DevEnvironmentInput{
+		Name:       "redaction-test",
+		Executable: "sh",
+	}, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sources, err := repo.ListSources(env.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -50,37 +57,34 @@ func TestGetJobRedactsCommandAndSourceSecrets(t *testing.T) {
 	const cliShortTokenSecret = "cli-short-token-secret"
 	const headerTokenSecret = "header-token-secret"
 	const logTokenSecret = "log-token-secret"
-	source := &model.InstallSource{
-		Name:     "redaction-source",
-		BaseURL:  "https://operator:source-password@packages.example/simple?api_key=" + sourceSecret,
-		Priority: 1,
-		Enabled:  true,
+	source := &model.DevEnvInstallSource{
+		EnvironmentID: env.ID,
+		Name:          "redaction-source",
+		BaseURL:       "https://operator:source-password@packages.example/simple?api_key=" + sourceSecret,
+		Priority:      1,
+		Enabled:       true,
 	}
 	if err := repo.CreateSource(source); err != nil {
 		t.Fatal(err)
 	}
-	toolchain, err := svc.CreateCustom(opsservice.ToolchainInput{
-		Name:       "redaction-test",
-		Executable: "sh",
-		InstallTemplate: "TOKEN=" + templateSecret + `; : --token ` + cliTokenSecret +
-			` --password ` + cliPasswordSecret +
-			` --api-key ` + cliAPIKeySecret +
-			` --secret ` + cliSecretSecret +
-			` --access-token ` + cliAccessTokenSecret +
-			` --auth ` + cliAuthSecret +
-			` --credential ` + cliCredentialSecret +
-			` -t ` + cliShortTokenSecret +
-			` --header "Authorization: Bearer ` + headerTokenSecret +
-			`"; printf '%s\n' '--token ` + logTokenSecret + `' '{{source_url}}'`,
-	}, 1)
+	env.InstallScript = "TOKEN=" + templateSecret + `; : --token ` + cliTokenSecret +
+		` --password ` + cliPasswordSecret +
+		` --api-key ` + cliAPIKeySecret +
+		` --secret ` + cliSecretSecret +
+		` --access-token ` + cliAccessTokenSecret +
+		` --auth ` + cliAuthSecret +
+		` --credential ` + cliCredentialSecret +
+		` -t ` + cliShortTokenSecret +
+		` --header "Authorization: Bearer ` + headerTokenSecret +
+		`"; printf '%s\n' '--token ` + logTokenSecret + `' '{{source_url}}'`
+	if err := repo.UpdateEnvironment(env); err != nil {
+		t.Fatal(err)
+	}
+	job, err := svc.Enqueue(env.ID, "install", opsservice.JobInput{}, 1)
 	if err != nil {
 		t.Fatal(err)
 	}
-	job, err := svc.Enqueue(toolchain.ID, "install", opsservice.JobInput{}, 1)
-	if err != nil {
-		t.Fatal(err)
-	}
-	awaitCompletedJob(t, svc, job.ID)
+	awaitCompletedJob(t, svc, env.ID, job.ID)
 
 	persisted, err := repo.FindJob(job.ID)
 	if err != nil {
@@ -110,9 +114,13 @@ func TestGetJobRedactsCommandAndSourceSecrets(t *testing.T) {
 	}
 
 	router := gin.New()
-	router.GET("/jobs/:id", NewOpsHandler(nil, svc, nil).GetJob)
+	router.GET("/dev-environments/:id/jobs/:jobId", NewOpsHandler(nil, svc, nil).GetJob)
 	recorder := httptest.NewRecorder()
-	request := httptest.NewRequest(http.MethodGet, "/jobs/"+strconv.FormatUint(uint64(job.ID), 10), nil)
+	request := httptest.NewRequest(
+		http.MethodGet,
+		"/dev-environments/"+strconv.FormatUint(uint64(env.ID), 10)+"/jobs/"+strconv.FormatUint(uint64(job.ID), 10),
+		nil,
+	)
 	router.ServeHTTP(recorder, request)
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("GET job status = %d, body = %s", recorder.Code, recorder.Body.String())
@@ -143,11 +151,11 @@ func TestGetJobRedactsCommandAndSourceSecrets(t *testing.T) {
 	}
 }
 
-func awaitCompletedJob(t *testing.T, svc *opsservice.ToolchainService, id uint) {
+func awaitCompletedJob(t *testing.T, svc *opsservice.DevEnvironmentService, envID, id uint) {
 	t.Helper()
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
-		job, err := svc.GetJob(id)
+		job, err := svc.GetJob(envID, id)
 		if err != nil {
 			t.Fatal(err)
 		}

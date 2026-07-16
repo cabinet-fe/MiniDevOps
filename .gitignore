@@ -10,3 +10,4 @@ web-v2/dist/
 bedrock
 bedrock-*
 server
+.tmp/

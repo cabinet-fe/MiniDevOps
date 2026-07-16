@@ -27,14 +27,14 @@
 | D8 | 构建事件触发 Agent | 默认 `artifact_ready`；BuildJob 可覆盖为 `distribution_finished` |
 | D9 | 父菜单可见性 | 至少一个可见后代 → 自动补齐父级分组；叶子仍需自身 `:view` |
 | D10 | 系统信息 | 非超管可看与超管相同的**只读**系统信息；运维写操作仍仅超管 |
-| D11 | 自定义命令 | 自定义工具链/CLI 命令模板：**仅超管**可维护与执行；快照 + 强提示 + 审计 |
+| D11 | 自定义命令 | 自定义开发环境/CLI 命令脚本：**仅超管**可维护与执行；快照 + 强提示 + 审计 |
 
 ### 1.2 运行与安全
 
 | # | 主题 | 决策 |
 | --- | --- | --- |
 | D12 | 命令执行 | 构建与 AI CLI **同 Bedrock 进程 UID** 直接运行；**无 OS/容器沙箱**；产品不得声称沙箱安全 |
-| D13 | Web 会话 | 允许 HTTP；`access_token` / `refresh_token` 存 **localStorage** + Bearer |
+| D13 | Web 会话 | 允许 HTTP；`access_token` 存 **Web Storage** + Bearer；`refresh_token` 仅服务端 **Set-Cookie**（HttpOnly，不设 Secure） |
 | D14 | 凭证授权时点 | **绑定/修改**时校验 `credential:use`；之后执行仅需任务 `execute` |
 | D15 | Webhook | 优先平台签名头 + delivery ID 去重；保留 URL secret 兼容；日志脱敏 |
 | D16 | Cron | 每任务 IANA 时区；禁止同任务重叠；停机错过的触发**跳过** |
@@ -61,9 +61,9 @@
 ### 1.4 已接受风险（必须对外声明）
 
 1. **同 UID 执行**：获得脚本/Agent/自定义命令执行权的用户，可触及 Bedrock 进程可见的文件、环境变量与已注入凭证。RBAC/ACL **不能**替代 OS 隔离。
-2. **HTTP + localStorage**：Token 与响应可能被窃听或被同机恶意脚本读取；`password_cipher` **不替代** TLS。
+2. **HTTP + 浏览器会话存储**：`access_token`（Web Storage）与响应可能被窃听或被同机恶意脚本读取；`refresh_token` 为 HttpOnly Cookie（不设 Secure，HTTP 下仍可能被网络窃听）；`password_cipher` **不替代** TLS。
 
-补偿控制：超管门控运维与自定义命令；脚本/工具链编辑权限收紧；审计；生产强烈建议 HTTPS；文档与 UI 风险提示。
+补偿控制：超管门控运维与自定义命令；脚本/开发环境编辑权限收紧；审计；生产强烈建议 HTTPS；登录页与文档说明风险边界。
 
 ---
 
@@ -87,7 +87,7 @@
 | 组件 | 支持 |
 | --- | --- |
 | Server 生产 | Linux amd64、Linux arm64 |
-| Server 开发 | macOS（不承诺生产特性如全部工具链安装路径） |
+| Server 开发 | macOS（不承诺生产特性如全部开发环境安装路径） |
 | Deploy Agent / 远程目标 | Linux、Windows（沿用现有部署器能力） |
 | 数据库 | sqlite（默认）、postgres/postgresql、mysql |
 | 前端发布 | embed 进 Server；开发态 Vite 代理 |
@@ -110,7 +110,7 @@ internal/
   cicd/                   # Repository、BuildJob、BuildRun、Server、Credential
   engine/                 # Pipeline、Scheduler、Cron、Git（依赖 cicd 接口）
   deployer/               # rsync/sftp/scp/agent/local
-  ops/                    # Process、Toolchain
+  ops/                    # Process、DevEnvironment
   project/                # ProductProject、Requirement、ApiDoc
   ai/                     # CliRuntime、AiAgent、AgentRun、Skill
   dashboard/              # Layout + 卡片数据源
@@ -207,9 +207,9 @@ RbacResource (type=menu|page|action|card, path, parent, enabled, sort_key)
 
 | 机制 | 规则 |
 | --- | --- |
-| Web JWT | access 短 TTL + refresh 长 TTL；均存 localStorage；Bearer |
+| Web JWT | access 短 TTL（Web Storage + Bearer）；refresh 长 TTL（HttpOnly Cookie，不设 Secure）；401 → `/auth/refresh` → 重试 |
 | 登录 | 仅接受 `password_cipher`（前端）；服务端亦可兼容明文 `password` 供调试，但 web-v2 **禁止**提交明文 |
-| Refresh | `/auth/refresh`；失败清本地并跳转登录 |
+| Refresh | `/auth/refresh` 读 Cookie（可选 body 兜底）；失败清会话并跳转登录 |
 | PAT | `Authorization: Bearer <pat>`；与 JWT 分流校验；按 scope 映射端点 |
 | Webhook | 无 Bearer；见 §8 |
 | WS | query `token`（JWT）；生产建议 HTTPS 以降低日志泄露面 |
@@ -270,7 +270,7 @@ flowchart TB
 | 任务 | status | 重启 |
 | --- | --- | --- |
 | AgentRun | pending/queued/running/success/failed/cancelled/interrupted | queued 恢复；running→interrupted；重试建议**新 Run** |
-| ToolchainInstallJob / CliInstallJob | 同上 | running→interrupted/failed，保留日志；人工重试新任务 |
+| DevEnvJob / CliInstallJob | 同上 | running→interrupted/failed，保留日志；人工重试新任务 |
 
 构建事件默认：`artifact_ready`（归档成功且制品路径有效）。BuildJob.`agent_trigger_event` 可覆盖为 `distribution_finished`（本轮分发流程结束，无论成功失败）或 `none`。可选 `agent_id` 绑定默认智能体；亦可在 AgentTrigger 中按 Job 过滤。事件**异步**创建独立 AgentRun；Agent 失败**不**修改 BuildRun.status。流水线**禁止**内嵌同步 agent 阶段。
 
@@ -366,7 +366,7 @@ database:
 
 - Auth / Users / Roles / RBAC resources / Menus / Dictionaries / Operation logs / Tokens
 - Dashboard layout + card data
-- Ops processes / toolchains / sources
+- Ops processes / dev-environments / per-environment sources
 - Repositories / webhook / build-jobs / build-runs / servers / credentials
 - Projects / members / requirements / docs（含 generate、publish、diff）
 - AI CLIs / agents / triggers / runs / skills
@@ -504,9 +504,11 @@ web-v2/src/
 
 ### 11.4 切换
 
-- Makefile `FRONTEND_DIR ?= web-v2`。
+- Makefile `FRONTEND_DIR ?= web-v2`（CI/Release 默认相同）。
 - Go embed **只认** `cmd/server/dist`，不关心来源。
-- 切换 Gate 见 ROADMAP P5。
+- Release：构建 `web-v2/dist` → 拷贝至 `cmd/server/dist` → `go build` embed。
+- 旧 `web/`（或上一版产物）保留**至少一个发布周期**；回滚改 `FRONTEND_DIR` 或替换 `cmd/server/dist` 后重打包。
+- 切换 Gate 证据：[roadmap/P5-switch-gate.md](./roadmap/P5-switch-gate.md)；Gate 条文见 ROADMAP P5。
 
 ---
 
@@ -536,11 +538,12 @@ web-v2/src/
 
 ## 14. 发布、备份与回滚
 
-1. **发布物**：`bedrock` Server 单二进制（embed 前端）+ `bedrock-agent`。
-2. **全新安装**：空数据目录 + 配置 + 启动（migration + 种子超管）。
-3. **备份**：SQLite 可用文件复制/专用备份命令；Postgres/MySQL 使用各自工具——平台可提供「备份指引」，不假装统一物理备份。
-4. **前端回滚**：保留上一版 `web/` 或旧 `web-v2` 产物 tag；改 `FRONTEND_DIR` / CI 拷贝源重新打包。
-5. **无** 1.x 升级通道；文档显著位置声明。
+1. **发布物**：`bedrock` Server 单二进制（embed 前端）+ `bedrock-agent`；Linux amd64/arm64 命名 `bedrock-linux-amd64` / `bedrock-linux-arm64` 与对应 `bedrock-agent-*`；附带 SHA256。
+2. **全新安装**：空数据目录 + 配置 + 启动（migration + 种子超管）。见 [ops-handbook.md](./ops-handbook.md)。
+3. **备份**：SQLite 可用文件复制/专用备份命令；Postgres/MySQL 使用各自工具——平台可提供「备份指引」，**不假装统一物理备份**。
+4. **前端回滚**：保留上一版 `web/` 或旧 `web-v2` 产物 tag；改 `FRONTEND_DIR` / CI 拷贝源重新打包。见 [release-checklist.md](./release-checklist.md)。
+5. **无** 1.x 升级通道；文档与登录页显著位置声明。
+6. **检查单**：[release-checklist.md](./release-checklist.md)；冒烟：`make smoke*`。
 
 ---
 
@@ -567,6 +570,9 @@ web-v2/src/
 | ROADMAP.md | 分期、依赖、Gate |
 | DESIGN.md | 技术真源（本文） |
 | AGENTS.md | 命令、目录与读写指引；FE/BE 约定见 `.agents/fe.md` / `.agents/be.md` |
+| ops-handbook.md | 安装、多库、备份、风险、回滚 |
+| release-checklist.md | 发版检查与 checksum |
+| known-issues.md | 非阻塞已知问题 |
 | api/openapi.yaml | API 真源 |
 
 冲突时：实现与 OpenAPI/DESIGN 对齐；需求争议回退 PRD，并开变更同步三份文档。

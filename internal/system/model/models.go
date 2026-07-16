@@ -43,3 +43,18 @@ type OperationLog struct {
 }
 
 func (OperationLog) TableName() string { return "operation_logs" }
+
+// Notification is a per-user in-app inbox item (DESIGN §12).
+type Notification struct {
+	ID         uint      `json:"id" gorm:"primaryKey"`
+	UserID     uint      `json:"user_id" gorm:"index;not null"`
+	Type       string    `json:"type" gorm:"size:50;not null"`
+	Title      string    `json:"title" gorm:"size:200;not null"`
+	Message    string    `json:"message" gorm:"size:500"`
+	BuildRunID *uint     `json:"build_run_id" gorm:"index"`
+	AgentRunID *uint     `json:"agent_run_id" gorm:"index"`
+	IsRead     bool      `json:"is_read" gorm:"not null;default:false;index"`
+	CreatedAt  time.Time `json:"created_at" gorm:"index"`
+}
+
+func (Notification) TableName() string { return "notifications" }

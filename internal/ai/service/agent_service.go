@@ -33,6 +33,11 @@ type RepoCloner interface {
 	CloneForAgent(ctx context.Context, repositoryID uint, destDir string) error
 }
 
+// TerminalNotifier persists + pushes per-user inbox notifications on AgentRun terminal.
+type TerminalNotifier interface {
+	NotifyAgentRun(userID uint, agentRunID, agentID uint, status string)
+}
+
 type AgentService struct {
 	repo     *repository.AIRepository
 	cli      *CLIService
@@ -44,6 +49,7 @@ type AgentService struct {
 	docs     DocDraftWriter
 	cloner   RepoCloner
 	audit    AuditWriter
+	notifier TerminalNotifier
 
 	runs    chan uint
 	stop    chan struct{}
@@ -54,6 +60,11 @@ type AgentService struct {
 	cronMu   sync.Mutex
 	cron     *cron.Cron
 	cronIDs  map[uint]cron.EntryID
+}
+
+// SetTerminalNotifier wires DESIGN §12 in-app notifications for agent terminal states.
+func (s *AgentService) SetTerminalNotifier(n TerminalNotifier) {
+	s.notifier = n
 }
 
 // locSchedule interprets cron fields in loc (equivalent to cron.WithLocation per trigger).
@@ -673,14 +684,20 @@ func (s *AgentService) failRun(run *model.AgentRun, err error) {
 }
 
 func (s *AgentService) notifyTerminal(run *model.AgentRun, status string) {
-	if s.hub == nil || run.TriggeredBy == 0 {
+	if run == nil {
 		return
 	}
-	payload, _ := json.Marshal(map[string]any{
-		"type": "agent_run_" + status, "agent_run_id": run.ID, "agent_id": run.AgentID, "status": status,
-	})
-	s.hub.BroadcastToUser(run.TriggeredBy, payload)
-	s.hub.BroadcastToChannel(fmt.Sprintf("ai-run:%d", run.ID), []byte("__TERMINAL__:"+status))
+	if s.notifier != nil && run.TriggeredBy != 0 {
+		s.notifier.NotifyAgentRun(run.TriggeredBy, run.ID, run.AgentID, status)
+	} else if s.hub != nil && run.TriggeredBy != 0 {
+		payload, _ := json.Marshal(map[string]any{
+			"type": "agent_run_" + status, "agent_run_id": run.ID, "agent_id": run.AgentID, "status": status,
+		})
+		s.hub.BroadcastToChannel(fmt.Sprintf("notifications:%d", run.TriggeredBy), payload)
+	}
+	if s.hub != nil {
+		s.hub.BroadcastToChannel(fmt.Sprintf("ai-run:%d", run.ID), []byte("__TERMINAL__:"+status))
+	}
 }
 
 func (s *AgentService) ReloadCron() error {

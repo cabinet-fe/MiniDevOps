@@ -29,7 +29,7 @@
 ### 1.3 设计原则
 
 1. **域独立，松耦合关联**：项目管理与 CI/CD 各自一等公民，不强制绑定。
-2. **配置驱动扩展**：数据库驱动、安装源、工具链、CLI 等通过配置扩展，默认零依赖。
+2. **配置驱动扩展**：数据库驱动、安装源、开发环境、CLI 等通过配置扩展，默认零依赖。
 3. **权限即可见性**：菜单、页面、API、仪表盘卡片均受 RBAC 资源控制；侧栏菜单由登录下发，一级菜单支持自定义图标。
 4. **命名消歧**：避免「Agent / Environment / Project / Proxy / Resource」多义混用。
 5. **沿用成熟交付语义**：构建成功可下载制品；分发失败不推翻构建成功状态。
@@ -40,7 +40,7 @@
 - 提供可配置 RBAC，替代固定三角色字符串模型。
 - 引入独立智能体运行域与开放 Agent Skills 资产管理。
 - 引入独立产品项目、需求与 Markdown 接口文档树。
-- 强化宿主机运维：进程管理 + 开发工具链管理（含安装源）。
+- 强化宿主机运维：进程管理 + 开发环境管理（含每环境安装源）。
 
 ---
 
@@ -56,7 +56,7 @@
 | **服务器（Server）**            | SSH 或部署 Agent 可达的部署主机                                                                            | Bedrock 服务进程                      |
 | **部署 Agent（Deploy Agent）**  | 目标机上独立二进制，用于 HTTP 上传与远程执行                                                               | AI 智能体                             |
 | **凭证（Credential）**          | 通用密钥库条目（Git/SSH/Token/API Key 等），受 RBAC 控制                                                   | 仅 Git 仓库密码                       |
-| **开发工具链（Toolchain）**     | 宿主机上的 Go/Node/Java/Python 等运行时与包管理器                                                          | CI「环境」                            |
+| **开发环境（DevEnvironment）**   | 宿主机上的 Go/Node/Java/Python 等运行时与包管理器                                                          | CI「环境」                            |
 | **AI CLI / CLI 运行时**         | Claude Code、OpenCode、Reasonix、Codex 等 AI 命令行工具                                                    | 网络代理                              |
 | **AI 智能体（AI Agent）**       | 平台托管的智能体定义：提示词、CLI、Skill、触发器、上下文                                                   | 部署 Agent                            |
 | **智能体运行（Agent Run）**     | 一次智能体异步执行及交互记录                                                                               | 构建执行                              |
@@ -199,7 +199,7 @@ level1.level2.level3:action
 | `ops:view`                     | 运维一级菜单（仅超管实际生效）              |
 | `ops.processes:view`           | 查看进程                                    |
 | `ops.processes:delete`         | 终止进程                                    |
-| `ops.toolchains:execute`       | 执行安装/升级/卸载/切版本                   |
+| `ops.dev_environments:execute` | 执行安装/升级/卸载/切版本                   |
 | `project:view`                 | 项目管理一级菜单                            |
 | `project.projects:view`        | 查看产品项目                                |
 | `project.requirements:create`  | 创建需求                                    |
@@ -244,7 +244,7 @@ level1.level2.level3:action
 
 | 能力                                 | 超级管理员 | 具备对应资源的自定义角色 | 无权限用户             |
 | ------------------------------------ | ---------- | ------------------------ | ---------------------- |
-| 运维（进程/工具链）                  | ✓          | ✗（强制）                | ✗                      |
+| 运维（进程/开发环境）                | ✓          | ✗（强制）                | ✗                      |
 | 系统管理（用户/角色/资源/字典/日志） | ✓          | 按资源                   | ✗                      |
 | CI/CD                                | ✓          | 按资源                   | ✗                      |
 | 项目管理                             | ✓          | 按资源 + 项目成员        | ✗                      |
@@ -253,13 +253,13 @@ level1.level2.level3:action
 
 ### 4.4 认证
 
-- Web：JWT `access_token` + `refresh_token`（可沿用现有时效语义，如 access 较短、refresh 较长）。
-- **Token 存储（前端）：** 因本系统**可能部署在非 HTTPS 环境**（内网 HTTP、IP 直访等），`refresh_token`（以及用于请求的 `access_token`）须存放在浏览器 **`localStorage`** 中，通过 `Authorization: Bearer` 传递；**不以**依赖 Secure / SameSite Cookie 作为会话主方案（非 HTTPS 下 Cookie 安全属性与可用性受限）。
+- Web：JWT `access_token` + `refresh_token`（可沿用现有时效语义，如 access 较短、refresh 较长；refresh 默认 7 天）。
+- **Token 存储（前端）：** 因本系统**可能部署在非 HTTPS 环境**（内网 HTTP、IP 直访等），`access_token` 存 **Web Storage** 并以 `Authorization: Bearer` 传递；`refresh_token` 仅由服务端通过 **`Set-Cookie`** 下发（HttpOnly，**不设 Secure**）。前端不读写 refresh_token。
 - 登录：支持加密传输密码（沿用 `password_cipher` 思路）。
 - Skill 安装器：用户 **个人访问令牌（PAT）**。
 - 智能体外部触发 API：用户 JWT 或 PAT（至少一种；若同时支持，PAT 需可限定 scope）。
 - Webhook 触发构建：公开路径 + 仓库/任务级 secret（沿用现有公开 webhook 思路）。
-- 刷新：access 过期时用 `localStorage` 中的 `refresh_token` 调用 `/auth/refresh` 换发新 token，并写回 `localStorage`；refresh 失效则清理本地 token 并跳转登录页。
+- 刷新：access 过期（HTTP 401）时调用 `/auth/refresh`（自动携带 Cookie）换发 `access_token` 并重试原请求；refresh 失效则清理会话并跳转登录页。
 
 ---
 
@@ -274,7 +274,7 @@ level1.level2.level3:action
 | 一级菜单 path | 标题示例 | 典型子菜单 path                                                                                                    |
 | ------------- | -------- | ------------------------------------------------------------------------------------------------------------------ |
 | `dashboard`   | 仪表盘   | （可无子菜单；卡片权限见 `dashboard.system_info` 等）                                                              |
-| `ops`         | 运维     | `ops.processes`、`ops.toolchains`                                                                                  |
+| `ops`         | 运维     | `ops.processes`、`ops.dev_environments`                                                                            |
 | `cicd`        | CI/CD    | `cicd.repositories`、`cicd.build_jobs`、`cicd.build_runs`、`cicd.servers`、`cicd.credentials`                      |
 | `project`     | 项目管理 | `project.projects`、`project.requirements`、`project.docs`                                                         |
 | `ai`          | AI       | `ai.clis`、`ai.agents`、`ai.skills`                                                                                |
@@ -293,7 +293,7 @@ level1.level2.level3:action
 
 1. 列表页：筛选、分页、排序；危险操作二次确认。
 2. 敏感字段：密文不回显；编辑时留空表示不修改。
-3. 长任务：构建执行、智能体运行、工具链安装均异步；提供状态、日志、取消（如适用）。
+3. 长任务：构建执行、智能体运行、开发环境安装均异步；提供状态、日志、取消（如适用）。
 4. 审计：写操作写入操作日志。
 5. 通知：构建/智能体终态可推送站内通知（可复用现有通知通道）。
 
@@ -352,11 +352,11 @@ level1.level2.level3:action
 2. 尝试终止自身服务进程被拒绝。
 3. 非超管调用 API 返回 403。
 
-### 7.3 开发环境管理（宿主机工具链）
+### 7.3 开发环境管理
 
-**目标：** 管理 Bedrock 宿主机上的开发工具链，而非 CI 构建配置。
+**目标：** 管理 Bedrock 宿主机上的开发环境（语言运行时），而非 CI 构建配置。
 
-**内置工具链（首期）：**
+**内置开发环境（首期）：**
 
 | 工具族  | 示例组件                                                        |
 | ------- | --------------------------------------------------------------- |
@@ -364,7 +364,7 @@ level1.level2.level3:action
 | Node.js | node + npm / bun / pnpm（可检测已安装包管理器）                 |
 | Java    | JDK + Maven / Gradle（可检测）                                  |
 | Python  | python + pip / uv（可检测）                                     |
-| 自定义  | 管理员定义 name、检测命令、安装/升级/卸载命令模板、版本列表来源 |
+| 自定义  | 管理员定义 name、检测脚本、安装/升级/卸载命令行脚本、版本列表脚本 |
 
 **操作：**
 
@@ -378,13 +378,13 @@ level1.level2.level3:action
 - 每种工具可配置**多个有优先级的源**（官方、国内镜像、自定义 URL）。
 - 安装时按优先级尝试；失败自动下一源；记录失败原因。
 - 支持源连通性检测。
-- 自定义工具可使用命令模板变量（版本、架构、源 URL 等）。
+- 自定义环境可使用命令行脚本变量（版本、可执行文件、源 URL 等）。
 
 **验收：**
 
 1. 未安装工具可按源优先级完成安装并检测通过。
 2. 第一源失败、第二源成功时任务成功且日志可见失败回退。
-3. 自定义工具定义可被检测与安装流程复用。
+3. 自定义开发环境定义可被检测与安装流程复用。
 4. 非超管不可访问。
 
 ---
@@ -517,7 +517,7 @@ level1.level2.level3:action
 - 目录列表：名称、key、二进制、版本、安装状态、路径、健康。
 - 安装 / 升级 / 卸载。
 - 全局配置（如 API Base、环境变量模板、默认参数）——不强制覆盖 CLI 自身登录态文件，但平台可管理「运行时注入配置」。
-- **安装源**：多源优先级、连通性检测、失败回退（与工具链同源策略）。
+- **安装源**：多源优先级、连通性检测、失败回退（与开发环境同源策略）。
 
 ### 10.2 智能体定义
 
@@ -661,7 +661,7 @@ flowchart TB
   end
   subgraph ops [Ops_SuperAdminOnly]
     Proc[Processes]
-    Tool[Toolchains]
+    Tool[DevEnvironments]
   end
   subgraph cicd [CICD]
     Repo[Repository]
@@ -732,8 +732,8 @@ flowchart TB
 | Server                                             | 配置      | 服务器                                                                |
 | BuildJob / DeployTarget                            | 配置      | 任务与部署目标                                                        |
 | BuildRun / BuildDeployRun                          | 运行      | 执行与分发行                                                          |
-| ToolchainDefinition / InstallSource                | 配置      | 工具链与源                                                            |
-| ToolchainInstallJob                                | 运行      | 安装任务                                                              |
+| DevEnvironment / DevEnvInstallSource               | 配置      | 开发环境与每环境安装源                                                |
+| DevEnvJob                                           | 运行      | 安装任务                                                              |
 | CliRuntimeDefinition / CliInstallSource            | 配置      | AI CLI                                                                |
 | AiAgent / AgentTrigger                             | 配置      | 智能体与触发器                                                        |
 | AgentRun                                           | 运行      | 智能体执行与交互记录                                                  |
@@ -796,13 +796,14 @@ flowchart TB
 | ------ | ------------------------------- | ------------ |
 | GET    | `/ops/processes`                | 进程列表     |
 | DELETE | `/ops/processes/:pid`           | 终止进程     |
-| GET    | `/ops/toolchains`               | 工具链列表   |
-| POST   | `/ops/toolchains/:id/detect`    | 检测         |
-| POST   | `/ops/toolchains/:id/install`   | 安装/升级    |
-| POST   | `/ops/toolchains/:id/uninstall` | 卸载         |
-| POST   | `/ops/toolchains/:id/switch`    | 切换默认版本 |
-| CRUD   | `/ops/toolchains/:id/sources`   | 安装源       |
-| POST   | `/ops/sources/:id/ping`         | 源连通性     |
+| GET    | `/ops/dev-environments`                      | 开发环境列表 |
+| POST   | `/ops/dev-environments/:id/detect`           | 检测         |
+| POST   | `/ops/dev-environments/:id/install`          | 安装/升级    |
+| POST   | `/ops/dev-environments/:id/uninstall`        | 卸载         |
+| POST   | `/ops/dev-environments/:id/switch`           | 切换默认版本 |
+| CRUD   | `/ops/dev-environments/:id/sources`          | 每环境安装源 |
+| POST   | `/ops/dev-environments/:id/sources/:sid/ping`| 源连通性     |
+| GET    | `/ops/dev-environments/:id/jobs`             | 环境内任务   |
 
 #### CI/CD
 
@@ -871,7 +872,7 @@ flowchart TB
 | 固定 admin/ops/dev                    | **替换为**超管 + 自定义角色 + 资源                 |
 | Dictionary / AuditLog / User          | **复用演进**                                       |
 | 需求 / 接口文档 / Skills 平台         | **新增**                                           |
-| 工具链管理                            | **新增**                                           |
+| 开发环境管理                          | **新增**                                           |
 | 多数据库驱动配置                      | **新增**（默认 SQLite）                            |
 
 ---
@@ -880,7 +881,7 @@ flowchart TB
 
 | 类别   | 要求                                                            |
 | ------ | --------------------------------------------------------------- |
-| 安全   | 敏感字段加密存储；密钥不落日志；PAT 仅显示一次；RBAC 服务端强制；会话 token（含 `refresh_token`）存 `localStorage` + Bearer，以支持非 HTTPS 部署 |
+| 安全   | 敏感字段加密存储；密钥不落日志；PAT 仅显示一次；RBAC 服务端强制；`access_token` 存 Web Storage + Bearer，`refresh_token` 仅 Set-Cookie（HttpOnly、不设 Secure），以支持非 HTTPS 部署 |
 | 可靠性 | 服务重启后非终态 Build Run / Agent Run 标记失败或恢复策略明确   |
 | 可观测 | 构建与智能体日志可检索；安装任务可追踪                          |
 | 性能   | 列表分页；仪表盘刷新节流；并发构建可配置上限                    |
@@ -894,7 +895,7 @@ flowchart TB
 - 部署形态沿用；数据库驱动配置（sqlite/postgres/mysql）
 - RBAC：用户、角色、资源（含菜单）、操作日志、字典；一级菜单图标上传；登录按角色下发菜单
 - 仪表盘三卡片 + 用户布局 + 权限过滤
-- 运维：进程、工具链（Go/Node/Java/Python/自定义）+ 多安装源
+- 运维：进程、开发环境（Go/Node/Java/Python/自定义）+ 每环境多安装源
 - CI/CD：仓库、任务、执行、服务器、凭证、部署
 - 项目管理：项目成员角色、需求列表、文档树上传与智能体生成
 - AI：四类 CLI、智能体定义/触发/运行记录
@@ -907,24 +908,28 @@ flowchart TB
 1. 全局「项目管理」权限用户是否默认可管理所有项目成员，或仍需加入项目。——首期建议：全局管理权限可管理全部项目。
 2. 构建事件触发智能体的默认阶段（成功后 / 分发前 / 分发后）及是否允许任务级覆盖。
 3. PAT 的 scope 模型细度（skills:read / agents:run / all）。
-4. 自定义工具链与自定义 CLI 的安全审核策略（任意命令执行风险提示与审计）。
+4. 自定义开发环境与自定义 CLI 的安全审核策略（任意命令执行风险提示与审计）。
 5. 系统信息卡片对非超管展示字段白名单。
 
 ---
 
 ## 20. 模块验收清单（汇总）
 
-| 模块    | 关键验收                                                                                                                        |
-| ------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| 部署/DB | SQLite 默认可用；改配置切 Postgres/MySQL 并重启即可；错误配置启动失败                                                           |
-| 权限    | 编码为 `{path}:action`；含菜单资源；登录下发菜单树；一级菜单图标 Base64 存储且 ≤ 32KB；运维仅超管；项目角色与全局 RBAC 同时生效 |
-| 仪表盘  | 可排序显隐；权限过滤                                                                                                            |
-| 运维    | 进程查询终止；工具链检测安装升级卸载切版本；源优先级回退                                                                        |
-| CI/CD   | 一仓多任务多执行；部署失败不改构建成功；凭证 RBAC                                                                               |
-| 项目    | 成员角色；需求 CRUD；文档树上传；智能体生成                                                                                     |
-| AI      | 独立运行；手动/API/定时/构建事件；上下文=提示词+仓库；记录输入输出日志                                                          |
-| Skills  | 开放规范 ZIP；公私；覆盖更新；PAT 下载                                                                                          |
-| 系统    | 用户角色资源字典操作日志                                                                                                        |
+行为冲突处以 [DESIGN.md](./DESIGN.md) 为准。P5 GA 勾选见 [roadmap/P5.md](./roadmap/P5.md) §5.2。
+
+| 模块 | 关键验收 | DESIGN 对齐要点 |
+| --- | --- | --- |
+| 部署/DB | SQLite 默认可用；改配置切 Postgres/MySQL 并重启即可；错误配置启动失败 | 改 driver ≠ 搬迁数据；仅全新安装 |
+| 权限 | 编码为 `{path}:action`；含菜单资源；登录下发菜单树；一级菜单图标 Base64 ≤32KB；运维仅超管；项目角色与全局 RBAC 同时生效 | 项目域为唯一对象 ACL；无显式 deny |
+| 仪表盘 | 可排序显隐；权限过滤 | — |
+| 运维 | 进程查询终止；开发环境检测安装升级卸载切版本；每环境源优先级回退 | 自定义脚本仅超管；同 UID 风险提示 |
+| CI/CD | 一仓多任务多执行；部署失败不改构建成功；凭证 RBAC | `distribution_summary`；禁止流水线内同步 Agent |
+| 项目 | 成员角色；需求 CRUD；文档树上传；智能体生成 | 生成只写 draft；publish + `expected_version` |
+| AI | 独立运行；手动/API/定时/构建事件；上下文=提示词+仓库；记录输入输出日志 | AgentRun 独立状态机；失败不改 BuildRun |
+| Skills | 开放规范 ZIP；公私；覆盖更新；PAT 下载 | 无私有对象 ACL 外的非项目 ACL |
+| 系统 | 用户角色资源字典操作日志 | — |
+
+**升级**：不提供 1.x → 2.0 数据迁移。
 
 ---
 

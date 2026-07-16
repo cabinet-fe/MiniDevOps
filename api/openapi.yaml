@@ -31,6 +31,10 @@ tags:
   - name: Agents
   - name: Skills
   - name: Tokens
+  - name: Notifications
+    description: |
+      Per-user in-app inbox. Live push via WebSocket `GET /ws/notifications?token=<JWT>`
+      (channel `notifications:{userId}`; DESIGN §12).
 paths:
   /auth/login:
     post:
@@ -47,6 +51,11 @@ paths:
       responses:
         "200":
           description: OK
+          headers:
+            Set-Cookie:
+              description: HttpOnly refresh_token cookie (Max-Age from jwt.refresh_ttl, no Secure; Path=/api/v1/auth)
+              schema:
+                type: string
           content:
             application/json:
               schema:
@@ -63,22 +72,38 @@ paths:
   /auth/refresh:
     post:
       tags: [Auth]
-      summary: Refresh tokens
+      summary: Refresh access token (HttpOnly refresh_token cookie)
+      description: >
+        Reads `refresh_token` from cookie (Set-Cookie on login/refresh).
+        Optional JSON body `refresh_token` is accepted for non-browser clients.
+        Rotates the cookie; response body only returns a new `access_token`.
       security: []
       operationId: authRefresh
+      parameters:
+        - name: Cookie
+          in: cookie
+          required: false
+          schema:
+            type: string
+            description: "refresh_token=<jwt>"
       requestBody:
-        required: true
+        required: false
         content:
           application/json:
             schema:
               type: object
-              required: [refresh_token]
               properties:
                 refresh_token:
                   type: string
+                  description: Optional fallback when Cookie is absent
       responses:
         "200":
           description: OK
+          headers:
+            Set-Cookie:
+              description: Rotated HttpOnly refresh_token cookie (no Secure; Path=/api/v1/auth)
+              schema:
+                type: string
           content:
             application/json:
               schema:
@@ -87,7 +112,7 @@ paths:
                   - type: object
                     properties:
                       data:
-                        $ref: "#/components/schemas/TokenPair"
+                        $ref: "#/components/schemas/AccessTokenResponse"
         "401":
           $ref: "#/components/responses/Error"
   /auth/logout:
@@ -98,6 +123,11 @@ paths:
       responses:
         "200":
           description: OK
+          headers:
+            Set-Cookie:
+              description: Clears refresh_token cookie
+              schema:
+                type: string
           content:
             application/json:
               schema:
@@ -700,6 +730,63 @@ paths:
                       data:
                         $ref: "#/components/schemas/OperationLogPage"
         "403":
+          $ref: "#/components/responses/Error"
+
+  /notifications:
+    get:
+      tags: [Notifications]
+      summary: List current user notifications
+      operationId: notificationsList
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/NotificationPage"
+        "401":
+          $ref: "#/components/responses/Error"
+  /notifications/read-all:
+    put:
+      tags: [Notifications]
+      summary: Mark all notifications as read
+      operationId: notificationsMarkAllRead
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessEnvelope"
+        "401":
+          $ref: "#/components/responses/Error"
+  /notifications/{id}/read:
+    put:
+      tags: [Notifications]
+      summary: Mark one notification as read
+      operationId: notificationsMarkRead
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessEnvelope"
+        "401":
           $ref: "#/components/responses/Error"
 
   /repositories:
@@ -1489,8 +1576,7 @@ paths:
         - { name: keyword, in: query, schema: { type: string } }
         - { name: pid, in: query, schema: { type: integer } }
         - { name: port, in: query, schema: { type: integer } }
-        - { name: sort, in: query, schema: { type: string, enum: [cpu, memory, name] } }
-        - { name: order, in: query, schema: { type: string, enum: [asc, desc] } }
+        - { name: sort, in: query, schema: { type: string, example: "cpu_percent@desc", description: "ProTable sort: field@asc|desc (cpu_percent|memory_bytes|name)" } }
       responses:
         "200":
           description: OK
@@ -1525,11 +1611,11 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/SuccessEnvelope" }
         "403": { $ref: "#/components/responses/Error" }
-  /ops/toolchains:
+  /ops/dev-environments:
     get:
       tags: [Ops]
-      summary: List toolchain definitions
-      operationId: opsToolchainsList
+      summary: List development environments
+      operationId: opsDevEnvironmentsList
       responses:
         "200":
           description: OK
@@ -1545,18 +1631,18 @@ paths:
                         properties:
                           items:
                             type: array
-                            items: { $ref: "#/components/schemas/ToolchainDefinition" }
+                            items: { $ref: "#/components/schemas/DevEnvironment" }
         "403": { $ref: "#/components/responses/Error" }
     post:
       tags: [Ops]
-      summary: Create a custom toolchain definition
-      description: Custom commands run under the Bedrock process UID and are not sandboxed.
-      operationId: opsToolchainsCreate
+      summary: Create a custom development environment
+      description: Custom scripts run under the Bedrock process UID and are not sandboxed.
+      operationId: opsDevEnvironmentsCreate
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: "#/components/schemas/ToolchainInput" }
+            schema: { $ref: "#/components/schemas/DevEnvironmentInput" }
       responses:
         "201":
           description: Created
@@ -1564,18 +1650,18 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/SuccessEnvelope" }
         "403": { $ref: "#/components/responses/Error" }
-  /ops/toolchains/{id}:
+  /ops/dev-environments/{id}:
     parameters:
       - $ref: "#/components/parameters/ID"
     put:
       tags: [Ops]
-      summary: Update a custom toolchain definition
-      operationId: opsToolchainsUpdate
+      summary: Update a custom development environment
+      operationId: opsDevEnvironmentsUpdate
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: "#/components/schemas/ToolchainInput" }
+            schema: { $ref: "#/components/schemas/DevEnvironmentInput" }
       responses:
         "200":
           description: OK
@@ -1586,12 +1672,12 @@ paths:
                   - $ref: "#/components/schemas/SuccessEnvelope"
                   - type: object
                     properties:
-                      data: { $ref: "#/components/schemas/ToolchainDefinition" }
+                      data: { $ref: "#/components/schemas/DevEnvironment" }
         "403": { $ref: "#/components/responses/Error" }
     delete:
       tags: [Ops]
-      summary: Delete a custom toolchain definition
-      operationId: opsToolchainsDelete
+      summary: Delete a custom development environment
+      operationId: opsDevEnvironmentsDelete
       responses:
         "200":
           description: OK
@@ -1599,12 +1685,12 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/SuccessEnvelope" }
         "403": { $ref: "#/components/responses/Error" }
-  /ops/toolchains/{id}/detect:
+  /ops/dev-environments/{id}/detect:
     parameters: [ { $ref: "#/components/parameters/ID" } ]
     post:
       tags: [Ops]
-      summary: Detect a toolchain executable
-      operationId: opsToolchainsDetect
+      summary: Detect a development environment executable
+      operationId: opsDevEnvironmentsDetect
       responses:
         "200":
           description: OK
@@ -1615,18 +1701,18 @@ paths:
                   - $ref: "#/components/schemas/SuccessEnvelope"
                   - type: object
                     properties:
-                      data: { $ref: "#/components/schemas/ToolchainDetectResult" }
+                      data: { $ref: "#/components/schemas/DevEnvironmentDetectResult" }
         "403": { $ref: "#/components/responses/Error" }
-  /ops/toolchains/{id}/install:
+  /ops/dev-environments/{id}/install:
     parameters: [ { $ref: "#/components/parameters/ID" } ]
     post:
       tags: [Ops]
-      summary: Queue a toolchain installation
-      operationId: opsToolchainsInstall
+      summary: Queue a development environment installation
+      operationId: opsDevEnvironmentsInstall
       requestBody:
         content:
           application/json:
-            schema: { $ref: "#/components/schemas/ToolchainJobInput" }
+            schema: { $ref: "#/components/schemas/DevEnvironmentJobInput" }
       responses:
         "202":
           description: Accepted
@@ -1637,18 +1723,18 @@ paths:
                   - $ref: "#/components/schemas/SuccessEnvelope"
                   - type: object
                     properties:
-                      data: { $ref: "#/components/schemas/ToolchainInstallJob" }
+                      data: { $ref: "#/components/schemas/DevEnvJob" }
         "403": { $ref: "#/components/responses/Error" }
-  /ops/toolchains/{id}/upgrade:
+  /ops/dev-environments/{id}/upgrade:
     parameters: [ { $ref: "#/components/parameters/ID" } ]
     post:
       tags: [Ops]
-      summary: Queue a toolchain upgrade
-      operationId: opsToolchainsUpgrade
+      summary: Queue a development environment upgrade
+      operationId: opsDevEnvironmentsUpgrade
       requestBody:
         content:
           application/json:
-            schema: { $ref: "#/components/schemas/ToolchainJobInput" }
+            schema: { $ref: "#/components/schemas/DevEnvironmentJobInput" }
       responses:
         "202":
           description: Accepted
@@ -1659,18 +1745,18 @@ paths:
                   - $ref: "#/components/schemas/SuccessEnvelope"
                   - type: object
                     properties:
-                      data: { $ref: "#/components/schemas/ToolchainInstallJob" }
+                      data: { $ref: "#/components/schemas/DevEnvJob" }
         "403": { $ref: "#/components/responses/Error" }
-  /ops/toolchains/{id}/uninstall:
+  /ops/dev-environments/{id}/uninstall:
     parameters: [ { $ref: "#/components/parameters/ID" } ]
     post:
       tags: [Ops]
-      summary: Queue a toolchain uninstall
-      operationId: opsToolchainsUninstall
+      summary: Queue a development environment uninstall
+      operationId: opsDevEnvironmentsUninstall
       requestBody:
         content:
           application/json:
-            schema: { $ref: "#/components/schemas/ToolchainJobInput" }
+            schema: { $ref: "#/components/schemas/DevEnvironmentJobInput" }
       responses:
         "202":
           description: Accepted
@@ -1681,19 +1767,19 @@ paths:
                   - $ref: "#/components/schemas/SuccessEnvelope"
                   - type: object
                     properties:
-                      data: { $ref: "#/components/schemas/ToolchainInstallJob" }
+                      data: { $ref: "#/components/schemas/DevEnvJob" }
         "403": { $ref: "#/components/responses/Error" }
-  /ops/toolchains/{id}/switch:
+  /ops/dev-environments/{id}/switch:
     parameters: [ { $ref: "#/components/parameters/ID" } ]
     post:
       tags: [Ops]
-      summary: Queue a default toolchain version switch
-      operationId: opsToolchainsSwitch
+      summary: Queue a default development environment version switch
+      operationId: opsDevEnvironmentsSwitch
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: "#/components/schemas/ToolchainJobInput" }
+            schema: { $ref: "#/components/schemas/DevEnvironmentJobInput" }
       responses:
         "202":
           description: Accepted
@@ -1704,13 +1790,14 @@ paths:
                   - $ref: "#/components/schemas/SuccessEnvelope"
                   - type: object
                     properties:
-                      data: { $ref: "#/components/schemas/ToolchainInstallJob" }
+                      data: { $ref: "#/components/schemas/DevEnvJob" }
         "403": { $ref: "#/components/responses/Error" }
-  /ops/install-sources:
+  /ops/dev-environments/{id}/sources:
+    parameters: [ { $ref: "#/components/parameters/ID" } ]
     get:
       tags: [Ops]
-      summary: List installation sources ordered by priority
-      operationId: opsInstallSourcesList
+      summary: List install sources for a development environment
+      operationId: opsDevEnvironmentSourcesList
       responses:
         "200":
           description: OK
@@ -1721,17 +1808,17 @@ paths:
                   - $ref: "#/components/schemas/SuccessEnvelope"
                   - type: object
                     properties:
-                      data: { $ref: "#/components/schemas/InstallSourceList" }
+                      data: { $ref: "#/components/schemas/DevEnvInstallSourceList" }
         "403": { $ref: "#/components/responses/Error" }
     post:
       tags: [Ops]
-      summary: Create an installation source
-      operationId: opsInstallSourcesCreate
+      summary: Create an install source for a development environment
+      operationId: opsDevEnvironmentSourcesCreate
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: "#/components/schemas/InstallSourceInput" }
+            schema: { $ref: "#/components/schemas/DevEnvInstallSourceInput" }
       responses:
         "201":
           description: Created
@@ -1742,19 +1829,21 @@ paths:
                   - $ref: "#/components/schemas/SuccessEnvelope"
                   - type: object
                     properties:
-                      data: { $ref: "#/components/schemas/InstallSource" }
+                      data: { $ref: "#/components/schemas/DevEnvInstallSource" }
         "403": { $ref: "#/components/responses/Error" }
-  /ops/install-sources/{id}:
-    parameters: [ { $ref: "#/components/parameters/ID" } ]
+  /ops/dev-environments/{id}/sources/{sourceId}:
+    parameters:
+      - $ref: "#/components/parameters/ID"
+      - { name: sourceId, in: path, required: true, schema: { type: integer } }
     put:
       tags: [Ops]
-      summary: Update an installation source
-      operationId: opsInstallSourcesUpdate
+      summary: Update an install source for a development environment
+      operationId: opsDevEnvironmentSourcesUpdate
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: "#/components/schemas/InstallSourceInput" }
+            schema: { $ref: "#/components/schemas/DevEnvInstallSourceInput" }
       responses:
         "200":
           description: OK
@@ -1765,12 +1854,12 @@ paths:
                   - $ref: "#/components/schemas/SuccessEnvelope"
                   - type: object
                     properties:
-                      data: { $ref: "#/components/schemas/InstallSource" }
+                      data: { $ref: "#/components/schemas/DevEnvInstallSource" }
         "403": { $ref: "#/components/responses/Error" }
     delete:
       tags: [Ops]
-      summary: Delete an installation source
-      operationId: opsInstallSourcesDelete
+      summary: Delete an install source for a development environment
+      operationId: opsDevEnvironmentSourcesDelete
       responses:
         "200":
           description: OK
@@ -1778,12 +1867,14 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/SuccessEnvelope" }
         "403": { $ref: "#/components/responses/Error" }
-  /ops/install-sources/{id}/ping:
-    parameters: [ { $ref: "#/components/parameters/ID" } ]
+  /ops/dev-environments/{id}/sources/{sourceId}/ping:
+    parameters:
+      - $ref: "#/components/parameters/ID"
+      - { name: sourceId, in: path, required: true, schema: { type: integer } }
     post:
       tags: [Ops]
-      summary: Check installation source connectivity
-      operationId: opsInstallSourcesPing
+      summary: Check install source connectivity
+      operationId: opsDevEnvironmentSourcesPing
       responses:
         "200":
           description: OK
@@ -1794,13 +1885,14 @@ paths:
                   - $ref: "#/components/schemas/SuccessEnvelope"
                   - type: object
                     properties:
-                      data: { $ref: "#/components/schemas/InstallSourcePingResult" }
+                      data: { $ref: "#/components/schemas/DevEnvInstallSourcePingResult" }
         "403": { $ref: "#/components/responses/Error" }
-  /ops/install-jobs:
+  /ops/dev-environments/{id}/jobs:
+    parameters: [ { $ref: "#/components/parameters/ID" } ]
     get:
       tags: [Ops]
-      summary: List persisted toolchain install jobs
-      operationId: opsInstallJobsList
+      summary: List jobs for a development environment
+      operationId: opsDevEnvironmentJobsList
       parameters:
         - $ref: "#/components/parameters/Page"
         - $ref: "#/components/parameters/PageSize"
@@ -1815,14 +1907,16 @@ paths:
                   - $ref: "#/components/schemas/SuccessEnvelope"
                   - type: object
                     properties:
-                      data: { $ref: "#/components/schemas/ToolchainInstallJobPage" }
+                      data: { $ref: "#/components/schemas/DevEnvJobPage" }
         "403": { $ref: "#/components/responses/Error" }
-  /ops/install-jobs/{id}:
-    parameters: [ { $ref: "#/components/parameters/ID" } ]
+  /ops/dev-environments/{id}/jobs/{jobId}:
+    parameters:
+      - $ref: "#/components/parameters/ID"
+      - { name: jobId, in: path, required: true, schema: { type: integer } }
     get:
       tags: [Ops]
-      summary: Get a toolchain install job
-      operationId: opsInstallJobsGet
+      summary: Get a development environment job
+      operationId: opsDevEnvironmentJobsGet
       responses:
         "200":
           description: OK
@@ -1833,14 +1927,16 @@ paths:
                   - $ref: "#/components/schemas/SuccessEnvelope"
                   - type: object
                     properties:
-                      data: { $ref: "#/components/schemas/ToolchainInstallJob" }
+                      data: { $ref: "#/components/schemas/DevEnvJob" }
         "403": { $ref: "#/components/responses/Error" }
-  /ops/install-jobs/{id}/logs:
-    parameters: [ { $ref: "#/components/parameters/ID" } ]
+  /ops/dev-environments/{id}/jobs/{jobId}/logs:
+    parameters:
+      - $ref: "#/components/parameters/ID"
+      - { name: jobId, in: path, required: true, schema: { type: integer } }
     get:
       tags: [Ops]
-      summary: Fetch toolchain install job logs
-      operationId: opsInstallJobsLogs
+      summary: Fetch development environment job logs
+      operationId: opsDevEnvironmentJobsLogs
       responses:
         "200":
           description: Log text
@@ -1848,12 +1944,14 @@ paths:
             text/plain:
               schema: { type: string }
         "403": { $ref: "#/components/responses/Error" }
-  /ops/install-jobs/{id}/retry:
-    parameters: [ { $ref: "#/components/parameters/ID" } ]
+  /ops/dev-environments/{id}/jobs/{jobId}/retry:
+    parameters:
+      - $ref: "#/components/parameters/ID"
+      - { name: jobId, in: path, required: true, schema: { type: integer } }
     post:
       tags: [Ops]
-      summary: Retry a terminal install job by creating a new job
-      operationId: opsInstallJobsRetry
+      summary: Retry a terminal job by creating a new job
+      operationId: opsDevEnvironmentJobsRetry
       responses:
         "202":
           description: Accepted
@@ -1864,7 +1962,7 @@ paths:
                   - $ref: "#/components/schemas/SuccessEnvelope"
                   - type: object
                     properties:
-                      data: { $ref: "#/components/schemas/ToolchainInstallJob" }
+                      data: { $ref: "#/components/schemas/DevEnvJob" }
         "403": { $ref: "#/components/responses/Error" }
   /projects:
     get:
@@ -2866,28 +2964,31 @@ components:
           type: array
           items:
             type: integer
-    TokenPair:
+    AccessTokenResponse:
       type: object
+      required: [access_token]
       properties:
         access_token:
           type: string
-        refresh_token:
+    LoginResponse:
+      type: object
+      required: [access_token, user]
+      properties:
+        access_token:
           type: string
+          description: JWT access token (Bearer); store client-side
         user:
           $ref: "#/components/schemas/User"
-    LoginResponse:
-      allOf:
-        - $ref: "#/components/schemas/TokenPair"
-        - type: object
-          properties:
-            permissions:
-              type: array
-              items:
-                type: string
-            menus:
-              type: array
-              items:
-                $ref: "#/components/schemas/MenuNode"
+        permissions:
+          type: array
+          items:
+            type: string
+        menus:
+          type: array
+          items:
+            $ref: "#/components/schemas/MenuNode"
+      description: >
+        refresh_token is delivered only via Set-Cookie (HttpOnly), not in JSON.
     MenuNode:
       type: object
       description: Trimmed menu for sidebar; map title/route/icon/children → NavItem (path ← route)
@@ -3176,6 +3277,41 @@ components:
               type: array
               items:
                 $ref: "#/components/schemas/OperationLog"
+
+    Notification:
+      type: object
+      properties:
+        id:
+          type: integer
+        user_id:
+          type: integer
+        type:
+          type: string
+          description: e.g. build_run_success, build_run_failed, agent_run_success
+        title:
+          type: string
+        message:
+          type: string
+        build_run_id:
+          type: integer
+          nullable: true
+        agent_run_id:
+          type: integer
+          nullable: true
+        is_read:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+    NotificationPage:
+      allOf:
+        - $ref: "#/components/schemas/Page"
+        - type: object
+          properties:
+            items:
+              type: array
+              items:
+                $ref: "#/components/schemas/Notification"
 
     Repository:
       type: object
@@ -3579,11 +3715,14 @@ components:
         cpu_percent: { type: number, format: double }
         memory_bytes: { type: integer, format: int64 }
         username: { type: string }
-        start_time: { type: integer, format: int64 }
+        num_threads: { type: integer }
+        status: { type: string, description: OS process status (e.g. R, S, Z) }
+        start_time: { type: integer, format: int64, description: Process start time as Unix epoch milliseconds }
+        cmdline: { type: string }
         ports:
           type: array
           items: { type: integer }
-    ToolchainDefinition:
+    DevEnvironment:
       type: object
       properties:
         id: { type: integer }
@@ -3591,41 +3730,45 @@ components:
         kind: { type: string, enum: [builtin, custom] }
         executable: { type: string }
         description: { type: string }
-        detect_command: { type: string }
-        install_template: { type: string }
-        upgrade_template: { type: string }
-        uninstall_template: { type: string }
-        versions_command: { type: string }
-        switch_template: { type: string }
+        detect_script: { type: string }
+        install_script: { type: string }
+        upgrade_script: { type: string }
+        uninstall_script: { type: string }
+        versions_script: { type: string }
+        switch_script: { type: string }
         default_version: { type: string }
         created_by: { type: integer }
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
-    ToolchainInput:
+        sources:
+          type: array
+          items: { $ref: "#/components/schemas/DevEnvInstallSource" }
+    DevEnvironmentInput:
       type: object
       required: [name, executable]
       properties:
         name: { type: string }
         executable: { type: string }
         description: { type: string }
-        detect_command: { type: string }
-        install_template: { type: string }
-        upgrade_template: { type: string }
-        uninstall_template: { type: string }
-        versions_command: { type: string }
-        switch_template: { type: string }
+        detect_script: { type: string }
+        install_script: { type: string }
+        upgrade_script: { type: string }
+        uninstall_script: { type: string }
+        versions_script: { type: string }
+        switch_script: { type: string }
         default_version: { type: string }
-    InstallSource:
+    DevEnvInstallSource:
       type: object
       properties:
         id: { type: integer }
+        environment_id: { type: integer }
         name: { type: string }
         base_url: { type: string }
         priority: { type: integer }
         enabled: { type: boolean }
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
-    InstallSourceInput:
+    DevEnvInstallSourceInput:
       type: object
       required: [name, base_url, priority, enabled]
       properties:
@@ -3633,31 +3776,31 @@ components:
         base_url: { type: string }
         priority: { type: integer }
         enabled: { type: boolean }
-    InstallSourceList:
+    DevEnvInstallSourceList:
       type: object
       properties:
         items:
           type: array
-          items: { $ref: "#/components/schemas/InstallSource" }
-    InstallSourcePingResult:
+          items: { $ref: "#/components/schemas/DevEnvInstallSource" }
+    DevEnvInstallSourcePingResult:
       type: object
       properties:
         ok: { type: boolean }
         detail: { type: string }
-    ToolchainDetectResult:
+    DevEnvironmentDetectResult:
       type: object
       properties:
         detected: { type: boolean }
         output: { type: string }
-    ToolchainJobInput:
+    DevEnvironmentJobInput:
       type: object
       properties:
         version: { type: string }
-    ToolchainInstallJob:
+    DevEnvJob:
       type: object
       properties:
         id: { type: integer }
-        toolchain_id: { type: integer }
+        environment_id: { type: integer }
         operation: { type: string, enum: [install, upgrade, uninstall, switch] }
         requested_version: { type: string }
         status: { type: string, enum: [queued, running, success, failed, interrupted] }
@@ -3668,16 +3811,16 @@ components:
         started_at: { type: string, format: date-time, nullable: true }
         finished_at: { type: string, format: date-time, nullable: true }
         created_at: { type: string, format: date-time }
-        toolchain: { $ref: "#/components/schemas/ToolchainDefinition" }
-        source: { $ref: "#/components/schemas/InstallSource" }
-    ToolchainInstallJobPage:
+        environment: { $ref: "#/components/schemas/DevEnvironment" }
+        source: { $ref: "#/components/schemas/DevEnvInstallSource" }
+    DevEnvJobPage:
       allOf:
         - $ref: "#/components/schemas/Page"
         - type: object
           properties:
             items:
               type: array
-              items: { $ref: "#/components/schemas/ToolchainInstallJob" }
+              items: { $ref: "#/components/schemas/DevEnvJob" }
     StorageObject:
       type: object
       properties:

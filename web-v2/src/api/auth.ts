@@ -1,8 +1,8 @@
-import { bareHttp, clearTokens, http, setTokens } from "./http";
-import type { MeResponse, TokenPair, User } from "./types";
+import { bareHttp, clearTokens, http, setAccessToken } from "./http";
+import type { LoginResponse, MeResponse, User } from "./types";
 
-export async function loginApi(username: string, passwordCipher: string): Promise<TokenPair> {
-  const { body } = await bareHttp.post<TokenPair>("/auth/login", {
+export async function loginApi(username: string, passwordCipher: string): Promise<LoginResponse> {
+  const { body } = await bareHttp.post<LoginResponse>("/auth/login", {
     username,
     password_cipher: passwordCipher,
   });
@@ -18,5 +18,5 @@ export async function meApi(): Promise<MeResponse> {
   return body;
 }
 
-export { clearTokens, setTokens };
-export type { MeResponse, TokenPair, User };
+export { clearTokens, setAccessToken };
+export type { LoginResponse, MeResponse, User };
