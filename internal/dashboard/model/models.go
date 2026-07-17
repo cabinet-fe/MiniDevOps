@@ -16,10 +16,15 @@ func (Layout) TableName() string { return "dashboard_layouts" }
 
 // CardLayout controls one known dashboard card. Card IDs are server-defined;
 // clients cannot register arbitrary cards through the layout endpoint.
+// X/Y/W/H are 12-column grid geometry (GridStack); omitted in legacy JSON.
 type CardLayout struct {
 	ID      string `json:"id"`
 	Visible bool   `json:"visible"`
 	Order   int    `json:"order"`
+	X       int    `json:"x"`
+	Y       int    `json:"y"`
+	W       int    `json:"w"`
+	H       int    `json:"h"`
 }
 
 // LayoutResponse is intentionally stable for the dashboard editor.

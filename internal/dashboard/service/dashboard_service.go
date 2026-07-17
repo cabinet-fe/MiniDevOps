@@ -26,9 +26,21 @@ const (
 	CardAgentRunSummary = "agent_run_summary"
 	CardSystemInfo      = "system_info"
 	CardSystemStatus    = "system_status"
+
+	gridColumns = 12
+	minCardSize = 2
 )
 
 var ErrUnauthorizedCard = errors.New("仪表盘包含无权限卡片")
+
+// defaultCardGeometry is the 12-column layout used for new users and legacy
+// cards that omit x/y/w/h.
+var defaultCardGeometry = map[string]struct{ X, Y, W, H int }{
+	CardBuildSummary:    {0, 0, 6, 4},
+	CardAgentRunSummary: {6, 0, 6, 4},
+	CardSystemInfo:      {0, 4, 6, 3},
+	CardSystemStatus:    {6, 4, 6, 3},
+}
 
 type DashboardService struct {
 	repo      *repository.DashboardRepository
@@ -245,11 +257,27 @@ func defaultLayout(allowed map[string]struct{}) []model.CardLayout {
 	all := []string{CardBuildSummary, CardAgentRunSummary, CardSystemInfo, CardSystemStatus}
 	cards := make([]model.CardLayout, 0, len(all))
 	for _, id := range all {
-		if _, ok := allowed[id]; ok {
-			cards = append(cards, model.CardLayout{ID: id, Visible: true, Order: len(cards)})
+		if _, ok := allowed[id]; !ok {
+			continue
 		}
+		geo := defaultCardGeometry[id]
+		cards = append(cards, model.CardLayout{
+			ID: id, Visible: true,
+			X: geo.X, Y: geo.Y, W: geo.W, H: geo.H,
+			Order: geo.Y*gridColumns + geo.X,
+		})
 	}
+	sort.SliceStable(cards, func(i, j int) bool {
+		if cards[i].Order != cards[j].Order {
+			return cards[i].Order < cards[j].Order
+		}
+		return cards[i].ID < cards[j].ID
+	})
 	return cards
+}
+
+func hasCardGeometry(card model.CardLayout) bool {
+	return card.W >= minCardSize && card.H >= minCardSize
 }
 
 func normalizeCards(cards []model.CardLayout, allowed map[string]struct{}) []model.CardLayout {
@@ -268,6 +296,8 @@ func normalizeCards(cards []model.CardLayout, allowed map[string]struct{}) []mod
 	for _, card := range byID {
 		out = append(out, card)
 	}
+	// Preserve legacy order while assigning missing geometry, then normalize
+	// order from y*cols+x so GridStack and list editors stay aligned.
 	sort.SliceStable(out, func(i, j int) bool {
 		if out[i].Order != out[j].Order {
 			return out[i].Order < out[j].Order
@@ -275,8 +305,19 @@ func normalizeCards(cards []model.CardLayout, allowed map[string]struct{}) []mod
 		return out[i].ID < out[j].ID
 	})
 	for i := range out {
-		out[i].Order = i
+		if !hasCardGeometry(out[i]) {
+			if geo, ok := defaultCardGeometry[out[i].ID]; ok {
+				out[i].X, out[i].Y, out[i].W, out[i].H = geo.X, geo.Y, geo.W, geo.H
+			}
+		}
+		out[i].Order = out[i].Y*gridColumns + out[i].X
 	}
+	sort.SliceStable(out, func(i, j int) bool {
+		if out[i].Order != out[j].Order {
+			return out[i].Order < out[j].Order
+		}
+		return out[i].ID < out[j].ID
+	})
 	return out
 }
 
@@ -290,6 +331,16 @@ func validateCards(cards []model.CardLayout, allowed map[string]struct{}) error 
 			return fmt.Errorf("重复卡片: %s", card.ID)
 		}
 		seen[card.ID] = struct{}{}
+		// Legacy payloads omit geometry (all zeros); normalizeCards fills defaults.
+		if card.W == 0 && card.H == 0 {
+			continue
+		}
+		if card.W < minCardSize || card.H < minCardSize {
+			return fmt.Errorf("卡片尺寸过小: %s (w/h 最小为 %d)", card.ID, minCardSize)
+		}
+		if card.W > gridColumns {
+			return fmt.Errorf("卡片宽度过大: %s (w 最大为 %d)", card.ID, gridColumns)
+		}
 	}
 	return nil
 }

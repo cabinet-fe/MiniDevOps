@@ -3,7 +3,7 @@ defineOptions({ name: "HomePage" });
 
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import { message } from "@veltra/desktop";
-import { Edit } from "@veltra/icons/normal";
+import { Edit, Setting } from "@veltra/icons/normal";
 import { useRouter } from "vue-router";
 
 import {
@@ -22,17 +22,16 @@ import type {
   SystemInfo,
   SystemStatus,
 } from "@/api/types";
-import DashboardAgentRunCard from "@/components/dashboard-agent-run-card";
-import DashboardBuildCard from "@/components/dashboard-build-card";
-import DashboardSystemInfoCard from "@/components/dashboard-system-info-card";
-import DashboardSystemStatusCard from "@/components/dashboard-system-status-card";
+import DashboardGrid, { ensureCardGeometry } from "@/components/dashboard-grid";
 
 const STATUS_REFRESH_MS = 30_000;
 
 const router = useRouter();
 const layout = ref<DashboardCardLayout[]>([]);
-const draftCards = ref<DashboardCardLayout[]>([]);
-const editorOpen = ref(false);
+const editSnapshot = ref<DashboardCardLayout[]>([]);
+const manageDraft = ref<DashboardCardLayout[]>([]);
+const editing = ref(false);
+const manageOpen = ref(false);
 const saving = ref(false);
 const loading = ref(true);
 const buildSummary = ref<BuildSummary | null>(null);
@@ -41,9 +40,7 @@ const systemInfo = ref<SystemInfo | null>(null);
 const systemStatus = ref<SystemStatus | null>(null);
 let statusTimer: ReturnType<typeof setInterval> | undefined;
 
-const visibleCards = computed(() =>
-  [...layout.value].filter((card) => card.visible).sort((a, b) => a.order - b.order),
-);
+const visibleCards = computed(() => layout.value.filter((card) => card.visible));
 
 const cardTitles: Record<DashboardCardID, string> = {
   build_summary: "构建摘要",
@@ -51,6 +48,10 @@ const cardTitles: Record<DashboardCardID, string> = {
   system_info: "系统信息",
   system_status: "系统状态",
 };
+
+function cloneCards(cards: DashboardCardLayout[]): DashboardCardLayout[] {
+  return cards.map((card) => ({ ...card }));
+}
 
 function isVisible(id: DashboardCardID): boolean {
   return layout.value.some((card) => card.id === id && card.visible);
@@ -101,9 +102,8 @@ async function loadDashboard() {
   loading.value = true;
   try {
     const result = await getDashboardLayout();
-    layout.value = result.cards;
+    layout.value = ensureCardGeometry(result.cards);
     await loadCardData();
-    // Wait until layout and primary cards have rendered before collecting status.
     window.setTimeout(() => void refreshStatus(), 0);
   } catch (error) {
     showLoadError(error);
@@ -112,25 +112,22 @@ async function loadDashboard() {
   }
 }
 
-function openEditor() {
-  draftCards.value = layout.value.map((card) => ({ ...card }));
-  editorOpen.value = true;
+function enterEdit() {
+  editSnapshot.value = cloneCards(layout.value);
+  editing.value = true;
 }
 
-function moveDraftCard(index: number, direction: -1 | 1) {
-  const next = index + direction;
-  if (next < 0 || next >= draftCards.value.length) return;
-  const cards = [...draftCards.value];
-  [cards[index], cards[next]] = [cards[next], cards[index]];
-  draftCards.value = cards.map((card, order) => ({ ...card, order }));
+function cancelEdit() {
+  layout.value = cloneCards(editSnapshot.value);
+  editing.value = false;
 }
 
-async function persistLayout() {
+async function saveEdit() {
   saving.value = true;
   try {
-    const saved = await saveDashboardLayout({ cards: draftCards.value });
-    layout.value = saved.cards;
-    editorOpen.value = false;
+    const saved = await saveDashboardLayout({ cards: ensureCardGeometry(layout.value) });
+    layout.value = ensureCardGeometry(saved.cards);
+    editing.value = false;
     await loadCardData();
     void refreshStatus();
     message.success("仪表盘布局已保存");
@@ -139,6 +136,46 @@ async function persistLayout() {
   } finally {
     saving.value = false;
   }
+}
+
+function openManage() {
+  manageDraft.value = cloneCards(layout.value);
+  manageOpen.value = true;
+}
+
+async function persistManage() {
+  const next = ensureCardGeometry(
+    layout.value.map((card) => {
+      const draft = manageDraft.value.find((item) => item.id === card.id);
+      return draft ? { ...card, visible: draft.visible } : card;
+    }),
+  );
+
+  if (editing.value) {
+    layout.value = next;
+    manageOpen.value = false;
+    await loadCardData();
+    void refreshStatus();
+    return;
+  }
+
+  saving.value = true;
+  try {
+    const saved = await saveDashboardLayout({ cards: next });
+    layout.value = ensureCardGeometry(saved.cards);
+    manageOpen.value = false;
+    await loadCardData();
+    void refreshStatus();
+    message.success("卡片可见性已保存");
+  } catch (error) {
+    showLoadError(error);
+  } finally {
+    saving.value = false;
+  }
+}
+
+function onGridChange(cards: DashboardCardLayout[]) {
+  layout.value = ensureCardGeometry(cards);
 }
 
 function openBuildRun(id: number) {
@@ -164,61 +201,55 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="dashboard">
+  <u-scroll class="dashboard">
     <div class="dashboard__toolbar">
-      <u-button text type="primary" @click="openEditor">
-        <u-icon :size="14"><Edit /></u-icon>
-        编辑卡片
+      <template v-if="editing">
+        <u-button text @click="cancelEdit">取消</u-button>
+        <u-button type="primary" :loading="saving" @click="saveEdit">保存</u-button>
+      </template>
+      <template v-else>
+        <u-button text type="primary" @click="enterEdit">
+          <u-icon :size="14"><Edit /></u-icon>
+          编辑布局
+        </u-button>
+      </template>
+      <u-button text @click="openManage">
+        <u-icon :size="14"><Setting /></u-icon>
+        管理卡片
       </u-button>
     </div>
 
-    <u-dialog v-model="editorOpen" title="编辑卡片" style="width: 480px">
+    <u-dialog v-model="manageOpen" title="管理卡片" style="width: 480px">
       <p class="dashboard__editor-hint">仅列出当前账号可用的卡片；关闭后可在此重新启用。</p>
-      <div v-for="(card, index) in draftCards" :key="card.id" class="dashboard__editor-row">
+      <div v-for="card in manageDraft" :key="card.id" class="dashboard__editor-row">
         <label class="dashboard__editor-label">
           <u-switch v-model="card.visible" />
           <span>{{ cardTitles[card.id] }}</span>
         </label>
-        <span class="dashboard__editor-actions">
-          <u-button text :disabled="index === 0" @click="moveDraftCard(index, -1)">上移</u-button>
-          <u-button
-            text
-            :disabled="index === draftCards.length - 1"
-            @click="moveDraftCard(index, 1)"
-          >
-            下移
-          </u-button>
-        </span>
       </div>
       <template #footer="{ close }">
         <u-button text @click="close()">取消</u-button>
-        <u-button type="primary" :loading="saving" @click="persistLayout">保存</u-button>
+        <u-button type="primary" :loading="saving" @click="persistManage">保存</u-button>
       </template>
     </u-dialog>
 
     <div v-if="loading" v-loading="true" class="dashboard__loading" />
-    <section v-else class="dashboard__cards">
-      <template v-for="card in visibleCards" :key="card.id">
-        <DashboardBuildCard
-          v-if="card.id === 'build_summary'"
-          :data="buildSummary"
-          @open-run="openBuildRun"
-        />
-        <DashboardAgentRunCard
-          v-else-if="card.id === 'agent_run_summary'"
-          :data="agentRunSummary"
-          @open-run="openAgentRun"
-        />
-        <DashboardSystemInfoCard v-else-if="card.id === 'system_info'" :data="systemInfo" />
-        <DashboardSystemStatusCard v-else-if="card.id === 'system_status'" :data="systemStatus" />
-      </template>
-      <u-empty
-        v-if="!visibleCards.length"
-        class="dashboard__empty"
-        text="当前没有可见卡片。请编辑并启用卡片。"
+    <template v-else>
+      <DashboardGrid
+        v-if="visibleCards.length"
+        :items="layout"
+        :editing="editing"
+        :build-summary="buildSummary"
+        :agent-run-summary="agentRunSummary"
+        :system-info="systemInfo"
+        :system-status="systemStatus"
+        @change="onGridChange"
+        @open-build-run="openBuildRun"
+        @open-agent-run="openAgentRun"
       />
-    </section>
-  </div>
+      <u-empty v-else class="dashboard__empty" text="当前没有可见卡片。请打开「管理卡片」启用。" />
+    </template>
+  </u-scroll>
 </template>
 
 <style scoped lang="scss">
@@ -267,26 +298,13 @@ onUnmounted(() => {
   cursor: pointer;
 }
 
-.dashboard__editor-actions {
-  display: inline-flex;
-  gap: 4px;
-}
-
 .dashboard__loading {
   flex: 1;
   min-height: 240px;
 }
 
-.dashboard__cards {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
-  gap: 20px;
-  align-content: start;
-  flex: 1;
-}
-
 .dashboard__empty {
-  grid-column: 1 / -1;
+  flex: 1;
   padding: 48px 0;
 }
 </style>

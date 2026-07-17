@@ -129,12 +129,18 @@ func TestLayoutPersistsAfterPut(t *testing.T) {
 	permissions := []string{
 		"cicd.build_runs:view", "dashboard.system_info:view", "dashboard.system_status:view",
 	}
-	want := []model.CardLayout{
-		{ID: CardSystemStatus, Visible: false, Order: 0},
-		{ID: CardBuildSummary, Visible: true, Order: 1},
-		{ID: CardSystemInfo, Visible: true, Order: 2},
+	input := []model.CardLayout{
+		{ID: CardSystemStatus, Visible: false, Order: 0, X: 0, Y: 0, W: 8, H: 3},
+		{ID: CardBuildSummary, Visible: true, Order: 1, X: 0, Y: 3, W: 6, H: 4},
+		{ID: CardSystemInfo, Visible: true, Order: 2, X: 6, Y: 3, W: 6, H: 3},
 	}
-	if _, err := svc.PutLayout(7, false, permissions, want); err != nil {
+	// order is normalized to y*12+x on save.
+	want := []model.CardLayout{
+		{ID: CardSystemStatus, Visible: false, Order: 0, X: 0, Y: 0, W: 8, H: 3},
+		{ID: CardBuildSummary, Visible: true, Order: 36, X: 0, Y: 3, W: 6, H: 4},
+		{ID: CardSystemInfo, Visible: true, Order: 42, X: 6, Y: 3, W: 6, H: 3},
+	}
+	if _, err := svc.PutLayout(7, false, permissions, input); err != nil {
 		t.Fatal(err)
 	}
 	// A fresh service models a restart or a new request lifecycle.
@@ -148,6 +154,102 @@ func TestLayoutPersistsAfterPut(t *testing.T) {
 	for index, card := range got.Cards {
 		if card != want[index] {
 			t.Fatalf("card %d = %#v, want %#v", index, card, want[index])
+		}
+	}
+}
+
+func TestLayoutUpgradesLegacyJSONWithoutGeometry(t *testing.T) {
+	repo := newDashboardRepository(t)
+	svc := NewDashboardService(repo, "test", time.Now(), []string{"."})
+	permissions := []string{
+		"cicd.build_runs:view", "ai.runs:view",
+		"dashboard.system_info:view", "dashboard.system_status:view",
+	}
+	if err := repo.CreateLayout(&model.Layout{
+		UserID: 8,
+		CardsJSON: `[
+			{"id":"system_info","visible":false,"order":0},
+			{"id":"build_summary","visible":true,"order":1},
+			{"id":"agent_run_summary","visible":true,"order":2},
+			{"id":"system_status","visible":true,"order":3}
+		]`,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	layout, err := svc.GetLayout(8, false, permissions)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]model.CardLayout{
+		CardBuildSummary:    {ID: CardBuildSummary, Visible: true, Order: 0, X: 0, Y: 0, W: 6, H: 4},
+		CardAgentRunSummary: {ID: CardAgentRunSummary, Visible: true, Order: 6, X: 6, Y: 0, W: 6, H: 4},
+		CardSystemInfo:      {ID: CardSystemInfo, Visible: false, Order: 48, X: 0, Y: 4, W: 6, H: 3},
+		CardSystemStatus:    {ID: CardSystemStatus, Visible: true, Order: 54, X: 6, Y: 4, W: 6, H: 3},
+	}
+	if len(layout.Cards) != len(want) {
+		t.Fatalf("got %d cards, want %d: %#v", len(layout.Cards), len(want), layout.Cards)
+	}
+	for _, card := range layout.Cards {
+		expected, ok := want[card.ID]
+		if !ok {
+			t.Fatalf("unexpected card %#v", card)
+		}
+		if card != expected {
+			t.Fatalf("card %s = %#v, want %#v", card.ID, card, expected)
+		}
+	}
+}
+
+func TestLayoutRejectsInvalidGeometry(t *testing.T) {
+	repo := newDashboardRepository(t)
+	svc := NewDashboardService(repo, "test", time.Now(), []string{"."})
+	permissions := []string{"dashboard.system_info:view"}
+
+	_, err := svc.PutLayout(9, false, permissions, []model.CardLayout{
+		{ID: CardSystemInfo, Visible: true, Order: 0, X: 0, Y: 0, W: 1, H: 4},
+	})
+	if err == nil {
+		t.Fatal("expected error for w < 2")
+	}
+
+	_, err = svc.PutLayout(9, false, permissions, []model.CardLayout{
+		{ID: CardSystemInfo, Visible: true, Order: 0, X: 0, Y: 0, W: 6, H: 1},
+	})
+	if err == nil {
+		t.Fatal("expected error for h < 2")
+	}
+
+	_, err = svc.PutLayout(9, false, permissions, []model.CardLayout{
+		{ID: CardSystemInfo, Visible: true, Order: 0, X: 0, Y: 0, W: 13, H: 3},
+	})
+	if err == nil {
+		t.Fatal("expected error for w > 12")
+	}
+}
+
+func TestDefaultLayoutIncludesGeometry(t *testing.T) {
+	repo := newDashboardRepository(t)
+	svc := NewDashboardService(repo, "test", time.Now(), []string{"."})
+	permissions := []string{
+		"cicd.build_runs:view", "ai.runs:view",
+		"dashboard.system_info:view", "dashboard.system_status:view",
+	}
+	layout, err := svc.GetLayout(10, false, permissions)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []model.CardLayout{
+		{ID: CardBuildSummary, Visible: true, Order: 0, X: 0, Y: 0, W: 6, H: 4},
+		{ID: CardAgentRunSummary, Visible: true, Order: 6, X: 6, Y: 0, W: 6, H: 4},
+		{ID: CardSystemInfo, Visible: true, Order: 48, X: 0, Y: 4, W: 6, H: 3},
+		{ID: CardSystemStatus, Visible: true, Order: 54, X: 6, Y: 4, W: 6, H: 3},
+	}
+	if len(layout.Cards) != len(want) {
+		t.Fatalf("got %d cards, want %d: %#v", len(layout.Cards), len(want), layout.Cards)
+	}
+	for i, card := range layout.Cards {
+		if card != want[i] {
+			t.Fatalf("card %d = %#v, want %#v", i, card, want[i])
 		}
 	}
 }

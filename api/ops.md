@@ -219,11 +219,21 @@
 
 ### DashboardCardLayout
 
+12 列网格几何（GridStack）。`order` 由服务端按 `y * 12 + x` 归一；旧数据缺 `x/y/w/h` 时按卡片默认几何补全。
+
+默认几何：`build_summary` `(0,0) 6×4`，`agent_run_summary` `(6,0) 6×4`，`system_info` `(0,4) 6×3`，`system_status` `(6,4) 6×3`。
+
+校验：`w`/`h` 最小 2，`w` 最大 12；未知或无权限 `id` 拒绝。
+
 | 字段 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
 | `id` | `'build_summary' \| 'agent_run_summary' \| 'system_info' \| 'system_status'` | 是 |  |
 | `visible` | `boolean` | 是 |  |
-| `order` | `integer` | 是 |  |
+| `order` | `integer` | 是 | 由 `y * 12 + x` 归一，兼容旧客户端 |
+| `x` | `integer` | 是 | 列起点（0-based） |
+| `y` | `integer` | 是 | 行起点（0-based） |
+| `w` | `integer` | 是 | 宽度（列数，2–12） |
+| `h` | `integer` | 是 | 高度（行数，≥2） |
 
 ### DashboardLayout
 

@@ -248,7 +248,16 @@ export type DashboardCardID =
 export interface DashboardCardLayout {
   id: DashboardCardID;
   visible: boolean;
+  /** Normalized as y * 12 + x by the server. */
   order: number;
+  /** Grid column start (0-based, 12-column grid). */
+  x: number;
+  /** Grid row start (0-based). */
+  y: number;
+  /** Width in columns (2–12). */
+  w: number;
+  /** Height in rows (≥2). */
+  h: number;
 }
 
 export interface DashboardLayout {

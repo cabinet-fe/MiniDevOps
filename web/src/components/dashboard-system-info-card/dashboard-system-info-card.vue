@@ -94,7 +94,7 @@ const uptime = computed(() => {
 
 .tile {
   height: 100%;
-  min-height: 320px;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   background: color-mix(in srgb, fn.use-var(bg-color, top) 88%, fn.use-var(color, primary) 4%);
@@ -143,6 +143,8 @@ const uptime = computed(() => {
   display: flex;
   flex-direction: column;
   gap: 20px;
+  min-height: 0;
+  overflow: auto;
 }
 
 .hero {
