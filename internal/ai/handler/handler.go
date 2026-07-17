@@ -39,6 +39,7 @@ func (h *Handler) RegisterRoutes(rg *gin.RouterGroup, authMW gin.HandlerFunc) {
 	ai := rg.Group("/ai", authMW)
 	ai.GET("/clis", rbacmw.RequirePermission(h.perm, "ai.clis:view"), h.ListCLIs)
 	ai.POST("/clis/:key/detect", rbacmw.RequirePermission(h.perm, "ai.clis:execute"), h.DetectCLI)
+	ai.POST("/clis/:key/check-update", rbacmw.RequirePermission(h.perm, "ai.clis:execute"), h.CheckCLIUpdate)
 	ai.POST("/clis/:key/install", rbacmw.RequirePermission(h.perm, "ai.clis:execute"), h.InstallCLI)
 	ai.POST("/clis/:key/upgrade", rbacmw.RequirePermission(h.perm, "ai.clis:execute"), h.UpgradeCLI)
 	ai.POST("/clis/:key/uninstall", rbacmw.RequirePermission(h.perm, "ai.clis:execute"), h.UninstallCLI)
@@ -89,6 +90,15 @@ func (h *Handler) ListCLIs(c *gin.Context) {
 
 func (h *Handler) DetectCLI(c *gin.Context) {
 	result, err := h.cli.Detect(c.Param("key"))
+	if err != nil {
+		writeErr(c, err)
+		return
+	}
+	pkg.Success(c, result)
+}
+
+func (h *Handler) CheckCLIUpdate(c *gin.Context) {
+	result, err := h.cli.CheckUpdate(c.Request.Context(), c.Param("key"))
 	if err != nil {
 		writeErr(c, err)
 		return

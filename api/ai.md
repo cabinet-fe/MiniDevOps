@@ -19,6 +19,13 @@ AI CLI、Agents、运行记录、Skills。
 路径参数：key*: string
 响应 200：data = CliDetectResult
 
+### POST /ai/clis/{key}/check-update — 检查 AI CLI 更新
+
+权限：`ai.clis:execute`
+路径参数：key*: string
+响应 200：data = CliCheckUpdateResult
+说明：通过 `npm view <package> version` 查询最新版本（按启用安装源优先级尝试 `--registry`，无源则用默认 Registry）。与已安装版本比较后返回是否可更新。未安装时 `update_available` 为 false。
+
 ### POST /ai/clis/{key}/install — 安装 AI CLI
 
 权限：`ai.clis:execute`
@@ -44,12 +51,14 @@ AI CLI、Agents、运行记录、Skills。
 权限：`ai.clis:view`
 查询参数：cli_key: string
 响应 200
+说明：安装源为可选 npm Registry。安装/升级时将 `base_url` 拼为 `npm --registry`；未配置启用源时使用 npm 默认 Registry。
 
 ### POST /ai/cli-sources — 创建 CLI 安装源
 
 权限：`ai.clis:create`
 请求：{ cli_key*, name*, base_url*, priority, enabled }
 响应 201
+说明：`base_url` 为 npm Registry 地址（如 `https://registry.npmjs.org`）。
 
 ### PUT /ai/cli-sources/{id} — 更新 CLI 安装源
 
@@ -265,6 +274,18 @@ AI CLI、Agents、运行记录、Skills。
 | `version` | `string` |  |  |
 | `healthy` | `boolean` |  |  |
 | `risk_notice` | `string` |  |  |
+
+### CliCheckUpdateResult
+
+| 字段 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `current_version` | `string` |  | 已安装版本；未安装为空 |
+| `latest_version` | `string` |  | Registry 上的最新版本 |
+| `update_available` | `boolean` |  | `latest_version` 高于 `current_version` 时为 true |
+| `package` | `string` |  | npm 包名 |
+| `registry` | `string` |  | 成功查询所用的 Registry；默认源时为空 |
+| `output` | `string` |  | 查询过程日志 |
+| `error` | `string` |  | 查询失败时的错误信息 |
 
 ### CliExecuteResult
 

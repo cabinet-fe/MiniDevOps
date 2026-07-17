@@ -561,6 +561,97 @@ func TestExecuteMultiSourceFallback(t *testing.T) {
 	}
 }
 
+func TestExecuteDefaultRegistryWhenNoSources(t *testing.T) {
+	gdb, cli, _, _, _, _ := setupAI(t)
+	if err := gdb.Model(&model.CliRuntimeDefinition{}).
+		Where("key = ?", "codex").
+		Updates(map[string]any{
+			"install_template": `base="{{base_url}}"; if [ -n "$base" ]; then echo unexpected-registry; exit 1; fi; echo default-registry-ok`,
+		}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := gdb.Where("cli_key = ?", "codex").Delete(&model.CliInstallSource{}).Error; err != nil {
+		t.Fatal(err)
+	}
+	result, err := cli.Execute(context.Background(), "codex", "install", service.ExecuteInput{}, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !result.Success || !strings.Contains(result.Output, "default-registry-ok") {
+		t.Fatalf("default registry result: %+v", result)
+	}
+}
+
+func TestCLINpmTemplatesUseRegistryFlag(t *testing.T) {
+	_, cli, _, _, _, _ := setupAI(t)
+	items, err := cli.ListCLIs()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, item := range items {
+		if !strings.Contains(item.InstallTemplate, "npm install -g") {
+			t.Fatalf("%s install should use npm: %s", item.Key, item.InstallTemplate)
+		}
+		if !strings.Contains(item.InstallTemplate, `--registry $base`) {
+			t.Fatalf("%s install should wire --registry: %s", item.Key, item.InstallTemplate)
+		}
+		if !strings.Contains(item.UpgradeTemplate, `--registry $base`) {
+			t.Fatalf("%s upgrade should wire --registry: %s", item.Key, item.UpgradeTemplate)
+		}
+		if !strings.Contains(item.UninstallTemplate, "npm uninstall -g") {
+			t.Fatalf("%s uninstall should use npm: %s", item.Key, item.UninstallTemplate)
+		}
+	}
+}
+
+func TestCheckUpdateRequiresNpmPackage(t *testing.T) {
+	gdb, cli, _, _, _, _ := setupAI(t)
+	if err := gdb.Model(&model.CliRuntimeDefinition{}).
+		Where("key = ?", "codex").
+		Update("install_template", `echo no-npm`).Error; err != nil {
+		t.Fatal(err)
+	}
+	_, err := cli.CheckUpdate(context.Background(), "codex")
+	if err == nil || !strings.Contains(err.Error(), "npm") {
+		t.Fatalf("expected npm package error, got %v", err)
+	}
+}
+
+func TestCheckUpdateReportsAvailability(t *testing.T) {
+	gdb, cli, _, _, _, _ := setupAI(t)
+	if err := gdb.Model(&model.CliRuntimeDefinition{}).
+		Where("key = ?", "codex").
+		Updates(map[string]any{
+			"install_template":  `npm install -g @openai/codex${version:+@$version}`,
+			"installed_version": "0.0.0",
+			"install_status":    "installed",
+		}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := gdb.Where("cli_key = ?", "codex").Delete(&model.CliInstallSource{}).Error; err != nil {
+		t.Fatal(err)
+	}
+	result, err := cli.CheckUpdate(context.Background(), "codex")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Package != "@openai/codex" {
+		t.Fatalf("package: %s", result.Package)
+	}
+	if result.Error != "" {
+		t.Skipf("npm view unavailable in this environment: %s", result.Error)
+	}
+	if result.LatestVersion == "" {
+		t.Fatal("expected latest version")
+	}
+	if !result.UpdateAvailable {
+		t.Fatalf("0.0.0 should be outdated vs %s", result.LatestVersion)
+	}
+	if result.CurrentVersion != "0.0.0" {
+		t.Fatalf("current: %s", result.CurrentVersion)
+	}
+}
+
 func TestCLIInstallJobsTableDropped(t *testing.T) {
 	gdb, err := db.Open(&config.DatabaseConfig{
 		Driver: "sqlite",

@@ -498,6 +498,16 @@ export interface CliExecuteResult {
   error?: string;
 }
 
+export interface CliCheckUpdateResult {
+  current_version: string;
+  latest_version: string;
+  update_available: boolean;
+  package: string;
+  registry?: string;
+  output?: string;
+  error?: string;
+}
+
 export interface AiAgent {
   id: number;
   name: string;

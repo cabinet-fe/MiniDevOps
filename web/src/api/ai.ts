@@ -3,6 +3,7 @@ import type {
   AgentRun,
   AgentTrigger,
   AiAgent,
+  CliCheckUpdateResult,
   CliExecuteResult,
   CliInstallSource,
   CliRuntimeDefinition,
@@ -35,6 +36,15 @@ export async function detectCLI(key: string) {
     healthy: boolean;
     risk_notice: string;
   }>(`/ai/clis/${key}/detect`, {});
+  return body;
+}
+
+export async function checkCLIUpdate(key: string): Promise<CliCheckUpdateResult> {
+  const { body } = await http.post<CliCheckUpdateResult>(
+    `/ai/clis/${key}/check-update`,
+    {},
+    { timeout: 60_000 },
+  );
   return body;
 }
 

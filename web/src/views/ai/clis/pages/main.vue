@@ -6,6 +6,7 @@ import { o } from "@cat-kit/core";
 import { message } from "@veltra/desktop";
 
 import {
+  checkCLIUpdate,
   createCLISource,
   deleteCLISource,
   detectCLI,
@@ -23,6 +24,12 @@ type DetectState = {
   version?: string;
 };
 
+type UpdateState = {
+  status: "idle" | "loading" | "ready" | "error";
+  latestVersion?: string;
+  updateAvailable?: boolean;
+};
+
 type Operation = "install" | "upgrade" | "uninstall";
 
 const { hasPermission } = usePermission();
@@ -31,6 +38,7 @@ const loading = ref(false);
 const items = ref<CliRuntimeDefinition[]>([]);
 const riskNotice = ref("");
 const detectStates = ref<Record<string, DetectState>>({});
+const updateStates = ref<Record<string, UpdateState>>({});
 const pendingOps = ref<Record<string, Operation | undefined>>({});
 
 const sourcesDialogOpen = ref(false);
@@ -78,6 +86,16 @@ function versionTagLabel(state?: DetectState) {
   return "检测失败";
 }
 
+function availableUpdate(key: string) {
+  const state = updateStates.value[key];
+  if (!state?.updateAvailable) return "";
+  return formatVersion(state.latestVersion);
+}
+
+function clearUpdateState(key: string) {
+  updateStates.value = { ...updateStates.value, [key]: { status: "idle" } };
+}
+
 function formatFailureDetail(result: CliExecuteResult) {
   const parts = [result.output?.trim(), result.error?.trim()].filter(Boolean);
   return parts.join("\n\n") || "无输出";
@@ -106,6 +124,7 @@ async function runDetect(item: CliRuntimeDefinition, options?: { silent?: boolea
     ...detectStates.value,
     [item.key]: { status: "loading", version: detectStates.value[item.key]?.version },
   };
+  clearUpdateState(item.key);
   try {
     const result = await detectCLI(item.key);
     detectStates.value = {
@@ -127,15 +146,54 @@ async function runDetect(item: CliRuntimeDefinition, options?: { silent?: boolea
   }
 }
 
+function isCheckPending(key: string) {
+  return updateStates.value[key]?.status === "loading";
+}
+
+async function runCheckUpdate(item: CliRuntimeDefinition) {
+  if (pendingOps.value[item.key] || isCheckPending(item.key)) return;
+
+  updateStates.value = {
+    ...updateStates.value,
+    [item.key]: { status: "loading" },
+  };
+  try {
+    const result = await checkCLIUpdate(item.key);
+    const latest = formatVersion(result.latest_version) || undefined;
+    updateStates.value = {
+      ...updateStates.value,
+      [item.key]: {
+        status: result.error ? "error" : "ready",
+        latestVersion: latest,
+        updateAvailable: !!result.update_available && !!latest,
+      },
+    };
+    if (result.error) {
+      message.error(result.error);
+    } else if (result.update_available && latest) {
+      message.info(`${item.name} 有新版本 ${latest}`);
+    } else {
+      message.success(`${item.name} 已是最新版本`);
+    }
+  } catch (error) {
+    updateStates.value = { ...updateStates.value, [item.key]: { status: "error" } };
+    showError(error);
+  }
+}
+
 function isOpPending(key: string, op: Operation) {
   return pendingOps.value[key] === op;
 }
 
-async function runOperation(item: CliRuntimeDefinition, operation: Operation) {
+async function runOperation(
+  item: CliRuntimeDefinition,
+  operation: Operation,
+  options?: { version?: string; skipPrompt?: boolean },
+) {
   if (pendingOps.value[item.key]) return;
 
-  let version = "";
-  if (operation !== "uninstall") {
+  let version = options?.version ?? "";
+  if (operation !== "uninstall" && !options?.skipPrompt) {
     const requested = window.prompt(`输入 ${item.name} 的目标版本（可留空）`);
     if (requested === null) return;
     version = requested;
@@ -146,7 +204,11 @@ async function runOperation(item: CliRuntimeDefinition, operation: Operation) {
   try {
     const result = await executeCLI(item.key, operation, version);
     if (result.success) {
-      message.success(`${item.name} ${operation} 完成`);
+      message.success(
+        operation === "upgrade" && version
+          ? `${item.name} 已更新到 ${version}`
+          : `${item.name} ${operation} 完成`,
+      );
       await runDetect(item, { silent: true });
       return;
     }
@@ -160,6 +222,12 @@ async function runOperation(item: CliRuntimeDefinition, operation: Operation) {
     delete next[item.key];
     pendingOps.value = next;
   }
+}
+
+function runAvailableUpdate(item: CliRuntimeDefinition) {
+  const latest = availableUpdate(item.key);
+  if (!latest) return;
+  void runOperation(item, "upgrade", { version: latest, skipPrompt: true });
 }
 
 async function openSourcesManager(item: CliRuntimeDefinition) {
@@ -238,7 +306,10 @@ onMounted(() => {
       <p class="risk">
         {{ riskNotice || "AI CLI 以 Bedrock 同 UID 执行，无 OS/容器沙箱。" }}
       </p>
-      <p class="hint">进入页面时自动检测版本；安装源通过各 CLI 的设置管理。</p>
+      <p class="hint">
+        进入页面时自动检测已安装版本；需要时点击「检查更新」查询 npm
+        最新版。安装源为可选 npm Registry（拼接 --registry），未配置时使用默认源。
+      </p>
     </div>
 
     <div class="cards">
@@ -251,6 +322,13 @@ onMounted(() => {
                 <u-tag size="small" :type="versionTagType(detectStates[item.key])">
                   {{ versionTagLabel(detectStates[item.key]) }}
                 </u-tag>
+                <u-tag
+                  v-if="availableUpdate(item.key)"
+                  size="small"
+                  type="warning"
+                >
+                  → {{ availableUpdate(item.key) }}
+                </u-tag>
               </div>
               <p class="meta">
                 <span>{{ item.key }}</span>
@@ -259,28 +337,48 @@ onMounted(() => {
               <p v-if="item.description" class="desc">{{ item.description }}</p>
             </div>
             <div class="actions">
-              <u-action-group :max="5">
+              <u-action-group :max="6">
                 <u-action v-if="hasPermission('ai.clis:view')" @run="openSourcesManager(item)">
                   设置
                 </u-action>
                 <u-action
                   v-if="hasPermission('ai.clis:execute')"
-                  :disabled="!!pendingOps[item.key]"
+                  :disabled="!!pendingOps[item.key] || isCheckPending(item.key)"
                   @run="runDetect(item)"
                 >
                   检测
                 </u-action>
                 <u-action
+                  v-if="
+                    hasPermission('ai.clis:execute') &&
+                    detectStates[item.key]?.status === 'detected'
+                  "
+                  :disabled="!!pendingOps[item.key] || isCheckPending(item.key)"
+                  :loading="isCheckPending(item.key)"
+                  @run="runCheckUpdate(item)"
+                >
+                  检查更新
+                </u-action>
+                <u-action
                   v-if="hasPermission('ai.clis:execute')"
-                  :disabled="!!pendingOps[item.key]"
+                  :disabled="!!pendingOps[item.key] || isCheckPending(item.key)"
                   :loading="isOpPending(item.key, 'install')"
                   @run="runOperation(item, 'install')"
                 >
                   安装
                 </u-action>
                 <u-action
-                  v-if="hasPermission('ai.clis:execute')"
-                  :disabled="!!pendingOps[item.key]"
+                  v-if="hasPermission('ai.clis:execute') && availableUpdate(item.key)"
+                  :disabled="!!pendingOps[item.key] || isCheckPending(item.key)"
+                  :loading="isOpPending(item.key, 'upgrade')"
+                  type="warning"
+                  @run="runAvailableUpdate(item)"
+                >
+                  更新到 {{ availableUpdate(item.key) }}
+                </u-action>
+                <u-action
+                  v-else-if="hasPermission('ai.clis:execute')"
+                  :disabled="!!pendingOps[item.key] || isCheckPending(item.key)"
                   :loading="isOpPending(item.key, 'upgrade')"
                   @run="runOperation(item, 'upgrade')"
                 >
@@ -288,7 +386,7 @@ onMounted(() => {
                 </u-action>
                 <u-action
                   v-if="hasPermission('ai.clis:execute')"
-                  :disabled="!!pendingOps[item.key]"
+                  :disabled="!!pendingOps[item.key] || isCheckPending(item.key)"
                   :loading="isOpPending(item.key, 'uninstall')"
                   type="danger"
                   @run="runOperation(item, 'uninstall')"
@@ -345,7 +443,7 @@ onMounted(() => {
             </div>
           </li>
         </ul>
-        <p v-else class="empty">尚未配置安装源</p>
+        <p v-else class="empty">尚未配置安装源，安装时将使用 npm 默认 Registry</p>
       </div>
       <template #footer="{ close }">
         <u-button type="primary" @click="close()">关闭</u-button>
@@ -361,7 +459,12 @@ onMounted(() => {
       @submit="saveSource"
     >
       <u-input label="名称" field="name" :rules="{ required: '必填' }" />
-      <u-input label="地址" field="base_url" :rules="{ required: '必填' }" />
+      <u-input
+        label="Registry"
+        field="base_url"
+        placeholder="https://registry.npmjs.org"
+        :rules="{ required: '必填' }"
+      />
       <u-input label="优先级" field="priority" type="number" />
       <u-select
         label="启用"
@@ -419,6 +522,7 @@ onMounted(() => {
 }
 .title-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 10px;
   min-width: 0;

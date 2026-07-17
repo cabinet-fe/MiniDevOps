@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"strconv"
 	"strings"
 
 	"bedrock/internal/ai/model"
@@ -105,6 +106,47 @@ func (s *CLIService) Detect(key string) (*DetectResult, error) {
 	return result, nil
 }
 
+type CheckUpdateResult struct {
+	CurrentVersion  string `json:"current_version"`
+	LatestVersion   string `json:"latest_version"`
+	UpdateAvailable bool   `json:"update_available"`
+	Package         string `json:"package"`
+	Registry        string `json:"registry,omitempty"`
+	Output          string `json:"output,omitempty"`
+	Error           string `json:"error,omitempty"`
+}
+
+func (s *CLIService) CheckUpdate(ctx context.Context, key string) (*CheckUpdateResult, error) {
+	cli, err := s.repo.FindCLIByKey(key)
+	if err != nil {
+		return nil, err
+	}
+	pkgName := npmPackageFromTemplate(cli.InstallTemplate)
+	if pkgName == "" {
+		return nil, errors.New("该 CLI 未配置 npm 安装包")
+	}
+	result := &CheckUpdateResult{
+		Package:        pkgName,
+		CurrentVersion: normalizeCLIVersion(cli.InstalledVersion),
+	}
+	if result.CurrentVersion == "" {
+		if detected, detErr := s.Detect(key); detErr == nil && detected.Detected {
+			result.CurrentVersion = normalizeCLIVersion(detected.Version)
+		}
+	}
+
+	latest, registry, log, queryErr := s.queryLatestNPMVersion(ctx, key, pkgName)
+	result.Output = log
+	if queryErr != nil {
+		result.Error = queryErr.Error()
+		return result, nil
+	}
+	result.LatestVersion = latest
+	result.Registry = registry
+	result.UpdateAvailable = result.CurrentVersion != "" && isNewerCLIVersion(latest, result.CurrentVersion)
+	return result, nil
+}
+
 type ExecuteInput struct {
 	Version string `json:"version"`
 }
@@ -144,8 +186,16 @@ func (s *CLIService) executeWithSources(ctx context.Context, key, operation, ver
 	if err != nil {
 		return nil, err
 	}
+	// No configured sources → use the package manager default registry (no --registry).
 	if len(sources) == 0 {
-		return nil, errors.New("没有可用安装源")
+		command := renderCLICommand(template, version, "")
+		output, runErr := executeShell(ctx, command)
+		if runErr != nil {
+			s.auditExecute(key, operation, createdBy, false)
+			return &ExecuteResult{Success: false, Output: output, Error: runErr.Error()}, nil
+		}
+		s.auditExecute(key, operation, createdBy, true)
+		return &ExecuteResult{Success: true, Output: output}, nil
 	}
 	var log strings.Builder
 	for i, source := range sources {
@@ -180,7 +230,7 @@ type SourceInput struct {
 
 func (s *CLIService) CreateSource(input SourceInput) (*model.CliInstallSource, error) {
 	if strings.TrimSpace(input.CliKey) == "" || strings.TrimSpace(input.Name) == "" || strings.TrimSpace(input.BaseURL) == "" {
-		return nil, errors.New("cli_key、名称和地址不能为空")
+		return nil, errors.New("cli_key、名称和 Registry 地址不能为空")
 	}
 	if _, err := s.repo.FindCLIByKey(input.CliKey); err != nil {
 		return nil, errors.New("CLI 不存在")
@@ -245,6 +295,146 @@ func templateFor(cli *model.CliRuntimeDefinition, operation string) string {
 
 func needsSource(operation, template string) bool {
 	return (operation == "install" || operation == "upgrade") && strings.Contains(template, "{{base_url}}")
+}
+
+var npmPackagePattern = regexp.MustCompile(`npm install -g ([@A-Za-z0-9_./-]+)`)
+
+func npmPackageFromTemplate(template string) string {
+	m := npmPackagePattern.FindStringSubmatch(template)
+	if len(m) < 2 {
+		return ""
+	}
+	return m[1]
+}
+
+func (s *CLIService) queryLatestNPMVersion(ctx context.Context, key, pkgName string) (latest, registry, log string, err error) {
+	sources, listErr := s.repo.ListEnabledSources(key)
+	if listErr != nil {
+		return "", "", "", listErr
+	}
+	var buf strings.Builder
+	try := func(baseURL string) (string, error) {
+		cmd := "command -v npm >/dev/null 2>&1 || { echo 'npm is required'; exit 1; }; npm view " + shellQuote(pkgName) + " version"
+		if baseURL != "" {
+			cmd += " --registry " + shellQuote(baseURL)
+		}
+		out, runErr := executeShell(ctx, cmd)
+		buf.WriteString(out)
+		if runErr != nil {
+			return "", runErr
+		}
+		ver := normalizeCLIVersion(firstNonEmptyLine(out))
+		if ver == "" {
+			return "", errors.New("未能解析最新版本")
+		}
+		return ver, nil
+	}
+	if len(sources) == 0 {
+		ver, runErr := try("")
+		if runErr != nil {
+			return "", "", buf.String(), runErr
+		}
+		return ver, "", buf.String(), nil
+	}
+	var lastErr error
+	for _, source := range sources {
+		buf.WriteString(fmt.Sprintf("trying source %q (priority %d)\n", source.Name, source.Priority))
+		ver, runErr := try(source.BaseURL)
+		if runErr == nil {
+			return ver, source.BaseURL, buf.String(), nil
+		}
+		lastErr = runErr
+		buf.WriteString(fmt.Sprintf("source %q failed: %v\n", source.Name, runErr))
+	}
+	if lastErr == nil {
+		lastErr = errors.New("所有安装源均失败")
+	}
+	return "", "", buf.String(), lastErr
+}
+
+func firstNonEmptyLine(output string) string {
+	for _, line := range strings.Split(output, "\n") {
+		line = strings.TrimSpace(line)
+		if line != "" {
+			return line
+		}
+	}
+	return ""
+}
+
+func normalizeCLIVersion(v string) string {
+	v = strings.TrimSpace(v)
+	v = strings.TrimPrefix(v, "v")
+	v = strings.TrimPrefix(v, "V")
+	if v == "" || strings.Contains(v, "/") || strings.Contains(v, `\`) {
+		return ""
+	}
+	if m := versionPattern.FindStringSubmatch(v); len(m) > 1 {
+		return m[1]
+	}
+	return v
+}
+
+// isNewerCLIVersion reports whether latest is strictly newer than current.
+func isNewerCLIVersion(latest, current string) bool {
+	l := normalizeCLIVersion(latest)
+	c := normalizeCLIVersion(current)
+	if l == "" || c == "" {
+		return false
+	}
+	return compareSemver(l, c) > 0
+}
+
+// compareSemver returns 1 if a>b, -1 if a<b, 0 if equal. Non-numeric suffixes
+// are compared lexicographically after the numeric core.
+func compareSemver(a, b string) int {
+	aCore, aPre := splitSemver(a)
+	bCore, bPre := splitSemver(b)
+	n := len(aCore)
+	if len(bCore) > n {
+		n = len(bCore)
+	}
+	for i := 0; i < n; i++ {
+		avar, bvar := 0, 0
+		if i < len(aCore) {
+			avar = aCore[i]
+		}
+		if i < len(bCore) {
+			bvar = bCore[i]
+		}
+		if avar > bvar {
+			return 1
+		}
+		if avar < bvar {
+			return -1
+		}
+	}
+	if aPre == bPre {
+		return 0
+	}
+	if aPre == "" {
+		return 1 // release > pre-release
+	}
+	if bPre == "" {
+		return -1
+	}
+	return strings.Compare(aPre, bPre)
+}
+
+func splitSemver(v string) (core []int, prerelease string) {
+	main := v
+	if i := strings.IndexAny(v, "-+"); i >= 0 {
+		main = v[:i]
+		prerelease = v[i+1:]
+	}
+	for _, part := range strings.Split(main, ".") {
+		n, err := strconv.Atoi(part)
+		if err != nil {
+			n = 0
+		}
+		core = append(core, n)
+	}
+	return core, prerelease
 }
 
 func renderCLICommand(template, version, baseURL string) string {
