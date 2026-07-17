@@ -119,13 +119,28 @@ func (s *AgentService) rebuildJobLinks(agentRoot string, jobIDs []uint) ([]strin
 	return linked, nil
 }
 
+// appendNonStreamingOutputArgs prefers final/summary output for CLIs that support it.
+// Human-readable incremental streaming is the default for non-interactive runs; do not
+// add JSON/NDJSON flags here — those are machine-oriented and look ugly in log UIs.
+func appendNonStreamingOutputArgs(cliKey string, args []string) []string {
+	switch cliKey {
+	case "reasonix":
+		return append(args, "-p")
+	default:
+		return args
+	}
+}
+
 // appendFullPermissionArgs enables each CLI's broad / bypass-sandbox mode so
 // job-* softlinks under the agent workspace can be followed. Scope is enforced
 // via prompt splicing (agentWorkspaceScopeHint), not per-directory allow lists.
 func appendFullPermissionArgs(cliKey string, args []string) []string {
 	switch cliKey {
-	case "claude_code", "opencode", "reasonix":
+	case "claude_code", "opencode":
 		return append(args, "--dangerously-skip-permissions")
+	case "reasonix":
+		// reasonix run accepts --permission-mode, not --dangerously-skip-permissions.
+		return append(args, "--permission-mode", "bypassPermissions")
 	case "codex":
 		return append(args, "--dangerously-bypass-approvals-and-sandbox")
 	default:

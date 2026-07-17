@@ -239,6 +239,7 @@ AI CLI、Agents、运行记录、Skills。
 | `output_dir` | `string` |  | 相对名提示，默认 `output`；实际每次 run 使用独立 `runs/run-{id}/output` |
 | `artifact_format` | `'zip' \| 'gzip'` |  | 默认 `gzip` |
 | `max_artifacts` | `integer` |  | 按 Agent 保留最近 N 个制品文件，默认 10 |
+| `stream_output` | `boolean` |  | 启用后使用 CLI 默认可读流式输出；关闭时部分 CLI 仅输出最终摘要（如 Reasonix `-p`），默认 `false` |
 | `timeout_sec` | `integer` |  |  |
 
 ### AgentRun

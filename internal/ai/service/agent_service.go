@@ -153,6 +153,7 @@ type AgentInput struct {
 	OutputDir      string `json:"output_dir"`
 	ArtifactFormat string `json:"artifact_format"`
 	MaxArtifacts   int    `json:"max_artifacts"`
+	StreamOutput   *bool  `json:"stream_output"`
 	TimeoutSec     int    `json:"timeout_sec"`
 }
 
@@ -171,6 +172,7 @@ func (s *AgentService) CreateAgent(createdBy uint, in AgentInput) (*model.AiAgen
 		OutputDir: stringOr(in.OutputDir, "output"),
 		ArtifactFormat: normalizeAgentArtifactFormat(in.ArtifactFormat),
 		MaxArtifacts: intOr(in.MaxArtifacts, 10),
+		StreamOutput: boolOr(in.StreamOutput, false),
 		TimeoutSec: intOr(in.TimeoutSec, 600), CreatedBy: createdBy,
 	}
 	if err := encodeSkillIDs(agent, in.SkillIDs); err != nil {
@@ -236,6 +238,9 @@ func (s *AgentService) UpdateAgent(id, userID uint, in AgentInput) (*model.AiAge
 	}
 	if in.MaxArtifacts > 0 {
 		agent.MaxArtifacts = in.MaxArtifacts
+	}
+	if in.StreamOutput != nil {
+		agent.StreamOutput = *in.StreamOutput
 	}
 	if in.TimeoutSec > 0 {
 		agent.TimeoutSec = in.TimeoutSec
@@ -399,6 +404,7 @@ func (s *AgentService) CreateRun(agentID uint, in CreateRunInput) (*model.AgentR
 		"output_dir":      agent.OutputDir,
 		"artifact_format": agent.ArtifactFormat,
 		"max_artifacts":   agent.MaxArtifacts,
+		"stream_output":   agent.StreamOutput,
 		"timeout_sec":     agent.TimeoutSec,
 		"context_note":    "system_prompt + skills + build_job softlinks in persistent agent workspace",
 		"risk_notice":     model.RiskNoticeSameUID,
@@ -637,6 +643,12 @@ func (s *AgentService) ExecuteRun(ctx context.Context, id uint) {
 	args := strings.Fields(cli.DefaultArgs)
 	args = appendFullPermissionArgs(agent.CliKey, args)
 	writeLog("cli full-permission flags enabled for softlink access (scope via prompt)")
+	if agent.StreamOutput {
+		writeLog("cli stream-output: human-readable (CLI default)")
+	} else {
+		args = appendNonStreamingOutputArgs(agent.CliKey, args)
+		writeLog("cli stream-output disabled: summary mode where supported")
+	}
 	hint := agentWorkspaceScopeHint()
 	if run.TriggerType == model.TriggerDocsGen {
 		args = append(args, "Generate API documentation draft based on the workspace. Output Markdown only. "+hint)

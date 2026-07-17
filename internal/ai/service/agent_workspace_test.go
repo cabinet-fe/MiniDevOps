@@ -340,6 +340,249 @@ func TestAgentRunPassesFullPermissionFlagsAndScopeHint(t *testing.T) {
 	t.Fatal("timeout")
 }
 
+func TestAgentRunNonInteractiveCLIArgs(t *testing.T) {
+	if _, err := exec.LookPath("sh"); err != nil {
+		t.Skip("sh required")
+	}
+	cases := []struct {
+		cliKey     string
+		defaultArg string
+		wantParts  []string
+	}{
+		{
+			cliKey: "claude_code", defaultArg: "--print",
+			wantParts: []string{"--print", "--dangerously-skip-permissions"},
+		},
+		{
+			cliKey: "codex", defaultArg: "exec",
+			wantParts: []string{"exec", "--dangerously-bypass-approvals-and-sandbox"},
+		},
+		{
+			cliKey: "opencode", defaultArg: "run",
+			wantParts: []string{"run", "--dangerously-skip-permissions"},
+		},
+		{
+			cliKey: "reasonix", defaultArg: "run",
+			wantParts: []string{"run", "--permission-mode", "bypassPermissions"},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.cliKey, func(t *testing.T) {
+			agents, _, repo, _, _ := setupAgentWorkspace(t)
+			argvFile := filepath.Join(t.TempDir(), "argv.txt")
+			script := filepath.Join(t.TempDir(), "fake-cli.sh")
+			content := "#!/bin/sh\nprintf '%s\\n' \"$@\" > " + argvFile + "\n"
+			if err := os.WriteFile(script, []byte(content), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			cli, err := repo.FindCLIByKey(tc.cliKey)
+			if err != nil {
+				t.Fatal(err)
+			}
+			cli.InstalledPath = script
+			cli.DefaultArgs = tc.defaultArg
+			cli.InstallStatus = "installed"
+			cli.Healthy = true
+			if err := repo.UpdateCLI(cli); err != nil {
+				t.Fatal(err)
+			}
+			agent, err := agents.CreateAgent(1, service.AgentInput{
+				Name: "args-" + tc.cliKey, CliKey: tc.cliKey, SystemPrompt: "do work", TimeoutSec: 30,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			run, err := agents.ManualRun(agent.ID, 1)
+			if err != nil {
+				t.Fatal(err)
+			}
+			deadline := time.Now().Add(5 * time.Second)
+			for time.Now().Before(deadline) {
+				got, _ := agents.GetRun(run.ID)
+				if got != nil && (got.Status == model.JobSuccess || got.Status == model.JobFailed) {
+					if got.Status != model.JobSuccess {
+						t.Fatalf("status=%s err=%s", got.Status, got.ErrorMessage)
+					}
+					raw, err := os.ReadFile(argvFile)
+					if err != nil {
+						t.Fatal(err)
+					}
+					joined := string(raw)
+					for _, want := range tc.wantParts {
+						if !strings.Contains(joined, want) {
+							t.Fatalf("argv missing %q; got:\n%s", want, raw)
+						}
+					}
+					return
+				}
+				time.Sleep(20 * time.Millisecond)
+			}
+			t.Fatal("timeout")
+		})
+	}
+}
+
+func TestAgentRunStreamOutputCLIArgs(t *testing.T) {
+	if _, err := exec.LookPath("sh"); err != nil {
+		t.Skip("sh required")
+	}
+	cases := []struct {
+		cliKey     string
+		defaultArg string
+		forbidden  []string
+	}{
+		{
+			cliKey: "claude_code", defaultArg: "--print",
+			forbidden: []string{"stream-json", "--json", "--format", "json"},
+		},
+		{cliKey: "codex", defaultArg: "exec", forbidden: []string{"--json", "stream-json"}},
+		{cliKey: "opencode", defaultArg: "run", forbidden: []string{"--format", "json", "stream-json"}},
+		{cliKey: "reasonix", defaultArg: "run", forbidden: []string{"stream-json", "--json", "-p"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.cliKey, func(t *testing.T) {
+			agents, _, repo, _, _ := setupAgentWorkspace(t)
+			argvFile := filepath.Join(t.TempDir(), "argv.txt")
+			script := filepath.Join(t.TempDir(), "fake-cli.sh")
+			content := "#!/bin/sh\nprintf '%s\\n' \"$@\" > " + argvFile + "\n"
+			if err := os.WriteFile(script, []byte(content), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			cli, err := repo.FindCLIByKey(tc.cliKey)
+			if err != nil {
+				t.Fatal(err)
+			}
+			cli.InstalledPath = script
+			cli.DefaultArgs = tc.defaultArg
+			cli.InstallStatus = "installed"
+			cli.Healthy = true
+			if err := repo.UpdateCLI(cli); err != nil {
+				t.Fatal(err)
+			}
+			stream := true
+			agent, err := agents.CreateAgent(1, service.AgentInput{
+				Name: "stream-" + tc.cliKey, CliKey: tc.cliKey, SystemPrompt: "do work",
+				StreamOutput: &stream, TimeoutSec: 30,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			run, err := agents.ManualRun(agent.ID, 1)
+			if err != nil {
+				t.Fatal(err)
+			}
+			deadline := time.Now().Add(5 * time.Second)
+			for time.Now().Before(deadline) {
+				got, _ := agents.GetRun(run.ID)
+				if got != nil && (got.Status == model.JobSuccess || got.Status == model.JobFailed) {
+					if got.Status != model.JobSuccess {
+						t.Fatalf("status=%s err=%s", got.Status, got.ErrorMessage)
+					}
+					raw, err := os.ReadFile(argvFile)
+					if err != nil {
+						t.Fatal(err)
+					}
+					joined := string(raw)
+					lines := strings.Fields(strings.ReplaceAll(joined, "\n", " "))
+					hasArg := func(flag string) bool {
+						for _, line := range strings.Split(joined, "\n") {
+							if strings.TrimSpace(line) == flag {
+								return true
+							}
+						}
+						return false
+					}
+					for _, bad := range tc.forbidden {
+						switch bad {
+						case "-p", "--print":
+							if hasArg(bad) {
+								t.Fatalf("argv should not contain %q; got:\n%s", bad, raw)
+							}
+						case "stream-json", "--json":
+							if strings.Contains(joined, bad) {
+								t.Fatalf("argv should not contain %q; got:\n%s", bad, raw)
+							}
+						case "--format":
+							if hasArg("--format") || strings.Contains(joined, "--format json") {
+								t.Fatalf("argv should not contain json format flag; got:\n%s", raw)
+							}
+						default:
+							if strings.Contains(strings.Join(lines, " "), bad) {
+								t.Fatalf("argv should not contain %q; got:\n%s", bad, raw)
+							}
+						}
+					}
+					return
+				}
+				time.Sleep(20 * time.Millisecond)
+			}
+			t.Fatal("timeout")
+		})
+	}
+}
+
+func TestAgentRunNonStreamOutputCLIArgs(t *testing.T) {
+	if _, err := exec.LookPath("sh"); err != nil {
+		t.Skip("sh required")
+	}
+	agents, _, repo, _, _ := setupAgentWorkspace(t)
+	argvFile := filepath.Join(t.TempDir(), "argv.txt")
+	script := filepath.Join(t.TempDir(), "fake-cli.sh")
+	content := "#!/bin/sh\nprintf '%s\\n' \"$@\" > " + argvFile + "\n"
+	if err := os.WriteFile(script, []byte(content), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cli, err := repo.FindCLIByKey("reasonix")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cli.InstalledPath = script
+	cli.DefaultArgs = "run"
+	cli.InstallStatus = "installed"
+	cli.Healthy = true
+	if err := repo.UpdateCLI(cli); err != nil {
+		t.Fatal(err)
+	}
+	stream := false
+	agent, err := agents.CreateAgent(1, service.AgentInput{
+		Name: "non-stream-rx", CliKey: "reasonix", SystemPrompt: "do work",
+		StreamOutput: &stream, TimeoutSec: 30,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	run, err := agents.ManualRun(agent.ID, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		got, _ := agents.GetRun(run.ID)
+		if got != nil && (got.Status == model.JobSuccess || got.Status == model.JobFailed) {
+			if got.Status != model.JobSuccess {
+				t.Fatalf("status=%s err=%s", got.Status, got.ErrorMessage)
+			}
+			raw, err := os.ReadFile(argvFile)
+			if err != nil {
+				t.Fatal(err)
+			}
+			hasArg := false
+			for _, line := range strings.Split(string(raw), "\n") {
+				if strings.TrimSpace(line) == "-p" {
+					hasArg = true
+					break
+				}
+			}
+			if !hasArg {
+				t.Fatalf("reasonix non-stream should pass -p; got:\n%s", raw)
+			}
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatal("timeout")
+}
+
 func TestAgentRunZipArtifactFormat(t *testing.T) {
 	if _, err := exec.LookPath("sh"); err != nil {
 		t.Skip("sh required")

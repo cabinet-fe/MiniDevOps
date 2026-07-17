@@ -95,6 +95,7 @@ type AiAgent struct {
 	OutputDir        string    `json:"output_dir" gorm:"size:200;not null;default:output"`
 	ArtifactFormat   string    `json:"artifact_format" gorm:"size:20;not null;default:gzip"`
 	MaxArtifacts     int       `json:"max_artifacts" gorm:"not null;default:10"`
+	StreamOutput     bool      `json:"stream_output" gorm:"not null;default:false"`
 	TimeoutSec       int       `json:"timeout_sec" gorm:"not null;default:600"`
 	CreatedBy        uint      `json:"created_by" gorm:"index"`
 	CreatedAt        time.Time `json:"created_at"`

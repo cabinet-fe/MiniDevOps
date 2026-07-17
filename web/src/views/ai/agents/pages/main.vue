@@ -70,6 +70,7 @@ const form = reactive({
   output_dir: "output",
   artifact_format: "gzip" as "zip" | "gzip",
   max_artifacts: 10,
+  stream_output: false,
   timeout_sec: 600,
 });
 
@@ -153,6 +154,7 @@ function resetFormFields() {
   form.output_dir = "output";
   form.artifact_format = "gzip";
   form.max_artifacts = 10;
+  form.stream_output = false;
   form.timeout_sec = 600;
 }
 
@@ -274,6 +276,7 @@ async function save() {
     output_dir: form.output_dir || "output",
     artifact_format: form.artifact_format,
     max_artifacts: form.max_artifacts,
+    stream_output: form.stream_output,
     timeout_sec: form.timeout_sec,
   };
   try {
@@ -344,10 +347,7 @@ async function remove(row: AiAgent) {
           <u-action v-if="hasPermission('ai.agents:execute')" @run="run(rowData as AiAgent)">
             运行
           </u-action>
-          <u-action
-            v-if="hasPermission('ai.runs:view')"
-            @run="openRunHistory(rowData as AiAgent)"
-          >
+          <u-action v-if="hasPermission('ai.runs:view')" @run="openRunHistory(rowData as AiAgent)">
             运行历史
           </u-action>
           <u-action
@@ -417,12 +417,18 @@ async function remove(row: AiAgent) {
       <u-input label="产出目录名" field="output_dir" placeholder="默认 output" />
       <u-number-input label="保留制品数" field="max_artifacts" :min="1" />
       <u-number-input label="超时(秒)" field="timeout_sec" :min="30" />
+      <u-switch label="流式输出" field="stream_output" />
+
       <u-switch label="启用" field="enabled" />
 
       <u-form-item label="触发器" span="full">
         <div class="trigger-section">
           <ul v-if="formTriggers.length" class="trigger-list">
-            <li v-for="(t, index) in formTriggers" :key="t.id ?? `new-${index}`" class="trigger-row">
+            <li
+              v-for="(t, index) in formTriggers"
+              :key="t.id ?? `new-${index}`"
+              class="trigger-row"
+            >
               <span class="trigger-summary">{{ triggerSummary(t) }}</span>
               <u-button text type="danger" size="small" @click="removeFormTrigger(index)">
                 移除
@@ -515,6 +521,13 @@ async function remove(row: AiAgent) {
 .trigger-empty {
   margin: 0 0 12px;
   font-size: 13px;
+  opacity: 0.65;
+}
+
+.form-hint {
+  margin: -8px 0 12px;
+  font-size: 12px;
+  line-height: 1.5;
   opacity: 0.65;
 }
 

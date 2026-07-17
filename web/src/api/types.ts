@@ -510,6 +510,7 @@ export interface AiAgent {
   output_dir: string;
   artifact_format: "zip" | "gzip";
   max_artifacts: number;
+  stream_output: boolean;
   timeout_sec: number;
   created_by: number;
   created_at: string;

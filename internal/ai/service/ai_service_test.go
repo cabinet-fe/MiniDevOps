@@ -4,7 +4,6 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -343,7 +342,19 @@ func TestCLIListSeeded(t *testing.T) {
 	if len(items) != 4 {
 		t.Fatalf("want 4 CLIs, got %d", len(items))
 	}
-	_ = os.DevNull
+	wantDefaultArgs := map[string]string{
+		"claude_code": "--print",
+		"codex":       "exec",
+		"opencode":    "run",
+		"reasonix":    "run",
+	}
+	for _, item := range items {
+		got := strings.TrimSpace(item.DefaultArgs)
+		want := wantDefaultArgs[item.Key]
+		if got != want {
+			t.Fatalf("cli %s default_args=%q want %q", item.Key, got, want)
+		}
+	}
 }
 
 func TestCronReloadAppliesTimezone(t *testing.T) {

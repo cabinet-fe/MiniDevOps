@@ -5,6 +5,18 @@ import (
 	"testing"
 )
 
+func TestAppendNonStreamingOutputArgs(t *testing.T) {
+	got := appendNonStreamingOutputArgs("reasonix", []string{"run"})
+	want := []string{"run", "-p"}
+	if strings.Join(got, " ") != strings.Join(want, " ") {
+		t.Fatalf("reasonix args=%v want=%v", got, want)
+	}
+	got = appendNonStreamingOutputArgs("claude_code", []string{"--print"})
+	if strings.Join(got, " ") != "--print" {
+		t.Fatalf("claude should stay unchanged, got %v", got)
+	}
+}
+
 func TestAppendFullPermissionArgs(t *testing.T) {
 	got := appendFullPermissionArgs("claude_code", []string{"--print"})
 	want := []string{"--print", "--dangerously-skip-permissions"}
@@ -21,8 +33,8 @@ func TestAppendFullPermissionArgs(t *testing.T) {
 	if strings.Join(got, " ") != strings.Join(want, " ") {
 		t.Fatalf("opencode args=%v want=%v", got, want)
 	}
-	got = appendFullPermissionArgs("reasonix", nil)
-	want = []string{"--dangerously-skip-permissions"}
+	got = appendFullPermissionArgs("reasonix", []string{"run"})
+	want = []string{"run", "--permission-mode", "bypassPermissions"}
 	if strings.Join(got, " ") != strings.Join(want, " ") {
 		t.Fatalf("reasonix args=%v want=%v", got, want)
 	}
