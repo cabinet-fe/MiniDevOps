@@ -121,7 +121,7 @@ async function remove(row: Role) {
 </script>
 
 <template>
-  <div class="page">
+  <div>
     <ProTable ref="list" url="/roles" :columns="columns" pagination>
       <template #filters>
         <u-button

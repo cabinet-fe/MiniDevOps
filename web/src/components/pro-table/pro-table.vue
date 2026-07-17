@@ -336,6 +336,7 @@ defineExpose({ search, reload, load });
   display: flex;
   flex-direction: column;
   gap: fn.use-var(gap, default);
+  height: 100%;
   flex: 1;
   min-height: 0;
 }

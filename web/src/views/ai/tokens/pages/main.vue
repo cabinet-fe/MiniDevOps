@@ -87,7 +87,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="page">
+  <div>
     <div class="page-toolbar">
       <u-button type="primary" @click="openCreate">创建令牌</u-button>
     </div>
@@ -146,11 +146,6 @@ onMounted(() => {
 </template>
 
 <style scoped lang="scss">
-.page {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
 .page-toolbar {
   display: flex;
   justify-content: flex-end;

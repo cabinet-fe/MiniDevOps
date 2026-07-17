@@ -18,9 +18,9 @@ type seedMenu struct {
 	Children []seedMenu
 }
 
-// EnsureRBACResources seeds and incrementally completes the preset resource tree.
-// Ops paths are included but only effective for super-admin. Incremental upserts
-// keep new cards available on installations that were initialized before P2.
+// EnsureRBACResources seeds missing preset resources. Existing rows matched by
+// path are left untouched (title/route/sort_key/enabled are not overwritten).
+// Ops paths are included but only effective for super-admin.
 func EnsureRBACResources(db *gorm.DB) error {
 	tree := []seedMenu{
 		{Path: "dashboard", Title: "仪表盘", Route: "/", SortKey: 10},
@@ -52,9 +52,9 @@ func EnsureRBACResources(db *gorm.DB) error {
 		{
 			Path: "ai", Title: "AI", Route: "/ai", SortKey: 50,
 			Children: []seedMenu{
-				{Path: "ai.clis", Title: "AI CLI", Route: "/ai/clis", SortKey: 10},
+				{Path: "ai.clis", Title: "CLI", Route: "/ai/clis", SortKey: 10},
 				{Path: "ai.agents", Title: "智能体", Route: "/ai/agents", SortKey: 20},
-				{Path: "ai.skills", Title: "Skills", Route: "/ai/skills", SortKey: 30},
+				{Path: "ai.skills", Title: "技能", Route: "/ai/skills", SortKey: 30},
 				{Path: "ai.tokens", Title: "访问令牌", Route: "/ai/tokens", SortKey: 40},
 			},
 		},
@@ -103,20 +103,7 @@ func insertMenu(tx *gorm.DB, node seedMenu, parentID *uint, now time.Time) error
 		if err := tx.Create(&res).Error; err != nil {
 			return fmt.Errorf("create resource %s: %w", node.Path, err)
 		}
-	} else if err != nil {
-		return fmt.Errorf("find resource %s: %w", node.Path, err)
-	} else if res.SortKey != node.SortKey {
-		if err := tx.Model(&res).Updates(map[string]any{
-			"sort_key":   node.SortKey,
-			"updated_at": now,
-		}).Error; err != nil {
-			return fmt.Errorf("update resource %s: %w", node.Path, err)
-		}
-	}
-	var meta model.MenuMetadata
-	err = tx.Where("resource_id = ?", res.ID).First(&meta).Error
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		meta = model.MenuMetadata{
+		meta := model.MenuMetadata{
 			ResourceID: res.ID,
 			Title:      node.Title,
 			Route:      node.Route,
@@ -125,14 +112,22 @@ func insertMenu(tx *gorm.DB, node seedMenu, parentID *uint, now time.Time) error
 			return fmt.Errorf("create menu metadata %s: %w", node.Path, err)
 		}
 	} else if err != nil {
-		return fmt.Errorf("find menu metadata %s: %w", node.Path, err)
-	} else if meta.Title != node.Title || meta.Route != node.Route {
-		// Keep preset routes/titles in sync when seeds evolve (e.g. P3 path fix).
-		if err := tx.Model(&meta).Updates(map[string]any{
-			"title": node.Title,
-			"route": node.Route,
-		}).Error; err != nil {
-			return fmt.Errorf("update menu metadata %s: %w", node.Path, err)
+		return fmt.Errorf("find resource %s: %w", node.Path, err)
+	} else {
+		// Path already exists — do not overwrite admin edits; only backfill missing metadata.
+		var meta model.MenuMetadata
+		err = tx.Where("resource_id = ?", res.ID).First(&meta).Error
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			meta = model.MenuMetadata{
+				ResourceID: res.ID,
+				Title:      node.Title,
+				Route:      node.Route,
+			}
+			if err := tx.Create(&meta).Error; err != nil {
+				return fmt.Errorf("create menu metadata %s: %w", node.Path, err)
+			}
+		} else if err != nil {
+			return fmt.Errorf("find menu metadata %s: %w", node.Path, err)
 		}
 	}
 	id := res.ID

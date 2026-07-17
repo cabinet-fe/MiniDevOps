@@ -3,7 +3,7 @@ defineOptions({ name: "HomePage" });
 
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import { message } from "@veltra/desktop";
-import { Edit, Save } from "@veltra/icons/normal";
+import { Edit } from "@veltra/icons/normal";
 import { useRouter } from "vue-router";
 
 import {
@@ -28,7 +28,9 @@ const STATUS_REFRESH_MS = 30_000;
 
 const router = useRouter();
 const layout = ref<DashboardCardLayout[]>([]);
-const editing = ref(false);
+const draftCards = ref<DashboardCardLayout[]>([]);
+const editorOpen = ref(false);
+const saving = ref(false);
 const loading = ref(true);
 const buildSummary = ref<BuildSummary | null>(null);
 const systemInfo = ref<SystemInfo | null>(null);
@@ -96,24 +98,32 @@ async function loadDashboard() {
   }
 }
 
-function moveCard(index: number, direction: -1 | 1) {
+function openEditor() {
+  draftCards.value = layout.value.map((card) => ({ ...card }));
+  editorOpen.value = true;
+}
+
+function moveDraftCard(index: number, direction: -1 | 1) {
   const next = index + direction;
-  if (next < 0 || next >= layout.value.length) return;
-  const cards = [...layout.value];
+  if (next < 0 || next >= draftCards.value.length) return;
+  const cards = [...draftCards.value];
   [cards[index], cards[next]] = [cards[next], cards[index]];
-  layout.value = cards.map((card, order) => ({ ...card, order }));
+  draftCards.value = cards.map((card, order) => ({ ...card, order }));
 }
 
 async function persistLayout() {
+  saving.value = true;
   try {
-    const saved = await saveDashboardLayout({ cards: layout.value });
+    const saved = await saveDashboardLayout({ cards: draftCards.value });
     layout.value = saved.cards;
-    editing.value = false;
+    editorOpen.value = false;
     await loadCardData();
     void refreshStatus();
     message.success("仪表盘布局已保存");
   } catch (error) {
     showLoadError(error);
+  } finally {
+    saving.value = false;
   }
 }
 
@@ -138,39 +148,31 @@ onUnmounted(() => {
 <template>
   <div class="dashboard">
     <div class="dashboard__toolbar">
-      <template v-if="editing">
-        <u-button @click="editing = false">取消</u-button>
-        <u-button type="primary" @click="persistLayout">
-          <u-icon :size="14"><Save /></u-icon>
-          保存布局
-        </u-button>
-      </template>
-      <u-button v-else text type="primary" @click="editing = true">
+      <u-button text type="primary" @click="openEditor">
         <u-icon :size="14"><Edit /></u-icon>
         编辑卡片
       </u-button>
     </div>
 
-    <u-card v-if="editing" class="dashboard__editor" integrate>
-      <u-card-header>
-        <h3 class="dashboard__editor-title">卡片布局</h3>
-      </u-card-header>
-      <u-card-content>
-        <p class="dashboard__editor-hint">仅列出当前账号可用的卡片；关闭后可在此重新启用。</p>
-        <div v-for="(card, index) in layout" :key="card.id" class="dashboard__editor-row">
-          <label class="dashboard__editor-label">
-            <u-switch v-model="card.visible" />
-            <span>{{ cardTitles[card.id] }}</span>
-          </label>
-          <span class="dashboard__editor-actions">
-            <u-button text :disabled="index === 0" @click="moveCard(index, -1)">上移</u-button>
-            <u-button text :disabled="index === layout.length - 1" @click="moveCard(index, 1)">
-              下移
-            </u-button>
-          </span>
-        </div>
-      </u-card-content>
-    </u-card>
+    <u-dialog v-model="editorOpen" title="编辑卡片" style="width: 480px">
+      <p class="dashboard__editor-hint">仅列出当前账号可用的卡片；关闭后可在此重新启用。</p>
+      <div v-for="(card, index) in draftCards" :key="card.id" class="dashboard__editor-row">
+        <label class="dashboard__editor-label">
+          <u-switch v-model="card.visible" />
+          <span>{{ cardTitles[card.id] }}</span>
+        </label>
+        <span class="dashboard__editor-actions">
+          <u-button text :disabled="index === 0" @click="moveDraftCard(index, -1)">上移</u-button>
+          <u-button text :disabled="index === draftCards.length - 1" @click="moveDraftCard(index, 1)">
+            下移
+          </u-button>
+        </span>
+      </div>
+      <template #footer="{ close }">
+        <u-button text @click="close()">取消</u-button>
+        <u-button type="primary" :loading="saving" @click="persistLayout">保存</u-button>
+      </template>
+    </u-dialog>
 
     <div v-if="loading" v-loading="true" class="dashboard__loading" />
     <section v-else class="dashboard__cards">
@@ -210,17 +212,6 @@ onUnmounted(() => {
   justify-content: flex-end;
   gap: 8px;
   min-height: 32px;
-}
-
-.dashboard__editor {
-  background: color-mix(in srgb, fn.use-var(bg-color, top) 92%, transparent);
-}
-
-.dashboard__editor-title {
-  margin: 0;
-  color: fn.use-var(text-color, title);
-  font-size: 15px;
-  font-weight: 600;
 }
 
 .dashboard__editor-hint {

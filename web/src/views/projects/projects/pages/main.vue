@@ -104,7 +104,7 @@ function splitTags(raw?: string | null): string[] {
 </script>
 
 <template>
-  <div class="page">
+  <div>
     <ProTable
       ref="table"
       url="/projects"
@@ -202,11 +202,6 @@ function splitTags(raw?: string | null): string[] {
 </template>
 
 <style scoped>
-.page {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
 .tag-cell {
   display: inline-flex;
   flex-wrap: wrap;

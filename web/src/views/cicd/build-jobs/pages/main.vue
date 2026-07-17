@@ -343,7 +343,7 @@ async function rotateWebhookSecret() {
 </script>
 
 <template>
-  <div class="page">
+  <div>
     <ProTable
       ref="list"
       url="/build-jobs"
@@ -587,11 +587,6 @@ async function rotateWebhookSecret() {
 </template>
 
 <style scoped>
-.page {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
 .mono {
   font-family: ui-monospace, monospace;
   word-break: break-all;

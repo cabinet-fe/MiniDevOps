@@ -111,7 +111,7 @@ async function remove(row: Dictionary) {
 </script>
 
 <template>
-  <div class="page">
+  <div>
     <ProTable ref="list" url="/dictionaries" :columns="columns" pagination>
       <template #filters>
         <u-button
@@ -171,11 +171,6 @@ async function remove(row: Dictionary) {
 </template>
 
 <style scoped>
-.page {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
 .items-head {
   display: flex;
   align-items: center;

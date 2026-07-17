@@ -50,7 +50,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="page" v-if="run">
+  <div v-if="run">
     <p>
       Agent {{ run.agent_id }} · {{ run.trigger_type }} ·
       <strong>{{ run.status }}</strong>
@@ -61,11 +61,6 @@ onUnmounted(() => {
 </template>
 
 <style scoped lang="scss">
-.page {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
 .error {
   color: var(--u-color-danger, #c00);
 }

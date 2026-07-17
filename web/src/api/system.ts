@@ -51,8 +51,12 @@ export async function deleteRole(id: number): Promise<void> {
   await http.delete(`/roles/${id}`);
 }
 
-export async function listResources(): Promise<{ items: RbacResource[] }> {
-  const { body } = await http.get<{ items: RbacResource[] }>("/rbac/resources");
+export async function listResources(query?: {
+  keyword?: string;
+  type?: string;
+  enabled?: string | boolean;
+}): Promise<{ items: RbacResource[] }> {
+  const { body } = await http.get<{ items: RbacResource[] }>("/rbac/resources", { query });
   return body;
 }
 

@@ -5,7 +5,7 @@ import { computed } from "vue";
 import type { ColorType } from "@veltra/utils";
 import { Monitor, Folder } from "@veltra/icons/normal";
 
-import type { DiskStatus, SystemStatus } from "@/api/types";
+import type { DirectoryUsage, SystemStatus } from "@/api/types";
 import { formatDateTime } from "@/lib/datetime";
 
 const props = defineProps<{
@@ -24,6 +24,7 @@ const healthMeta = computed(() => {
 
 const cpuPercent = computed(() => props.data?.cpu_usage_percent ?? 0);
 const memPercent = computed(() => props.data?.memory_usage_percent ?? 0);
+const diskPercent = computed(() => props.data?.disk_usage_percent ?? 0);
 
 function loadType(percentage: number): ColorType {
   if (percentage >= 90) return "danger";
@@ -39,8 +40,8 @@ function formatBytes(value: number | undefined): string {
   return `${(value / 1024 ** index).toFixed(index ? 1 : 0)} ${units[index]}`;
 }
 
-function diskFreeLabel(dir: DiskStatus): string {
-  return `${formatBytes(dir.free_bytes)} 可用 / ${formatBytes(dir.total_bytes)}`;
+function directorySizeLabel(dir: DirectoryUsage): string {
+  return formatBytes(dir.used_bytes);
 }
 
 function shortPath(path: string): string {
@@ -73,7 +74,7 @@ function shortPath(path: string): string {
     <u-card-content class="tile__body">
       <div class="gauges">
         <div class="gauge">
-          <u-progress circle :size="112" :percentage="cpuPercent" :type="loadType">
+          <u-progress circle :size="100" :percentage="cpuPercent" :type="loadType">
             <template #default="{ percentage }">
               <span class="gauge__pct">{{ percentage.toFixed(0) }}%</span>
             </template>
@@ -81,7 +82,7 @@ function shortPath(path: string): string {
           <span class="gauge__label">CPU</span>
         </div>
         <div class="gauge">
-          <u-progress circle :size="112" :percentage="memPercent" :type="loadType">
+          <u-progress circle :size="100" :percentage="memPercent" :type="loadType">
             <template #default="{ percentage }">
               <span class="gauge__pct">{{ percentage.toFixed(0) }}%</span>
             </template>
@@ -91,24 +92,31 @@ function shortPath(path: string): string {
             {{ formatBytes(data?.memory_used_bytes) }} / {{ formatBytes(data?.memory_total_bytes) }}
           </span>
         </div>
+        <div class="gauge">
+          <u-progress circle :size="100" :percentage="diskPercent" :type="loadType">
+            <template #default="{ percentage }">
+              <span class="gauge__pct">{{ percentage.toFixed(0) }}%</span>
+            </template>
+          </u-progress>
+          <span class="gauge__label">磁盘</span>
+          <span class="gauge__hint">
+            {{ formatBytes(data?.disk_used_bytes) }} / {{ formatBytes(data?.disk_total_bytes) }}
+          </span>
+        </div>
       </div>
 
-      <div class="disks">
-        <div class="disks__head">
+      <div class="dirs">
+        <div class="dirs__head">
           <u-icon :size="14"><Folder /></u-icon>
-          <span>磁盘占用</span>
+          <span>目录占用</span>
         </div>
-        <ul v-if="data?.directories?.length" class="disks__list">
-          <li v-for="dir in data.directories" :key="dir.path" class="disk">
-            <div class="disk__meta">
-              <span class="disk__path" :title="dir.path">{{ shortPath(dir.path) }}</span>
-              <span class="disk__pct">{{ dir.used_percent.toFixed(1) }}%</span>
-            </div>
-            <u-progress :percentage="dir.used_percent" :type="loadType" />
-            <p class="disk__free">{{ diskFreeLabel(dir) }}</p>
+        <ul v-if="data?.directories?.length" class="dirs__list">
+          <li v-for="dir in data.directories" :key="dir.path" class="dir">
+            <span class="dir__path" :title="dir.path">{{ shortPath(dir.path) }}</span>
+            <span class="dir__size">{{ directorySizeLabel(dir) }}</span>
           </li>
         </ul>
-        <p v-else class="disks__empty">暂无磁盘采样</p>
+        <p v-else class="dirs__empty">暂无目录采样</p>
       </div>
     </u-card-content>
   </u-card>
@@ -179,7 +187,7 @@ function shortPath(path: string): string {
 .gauges {
   display: flex;
   justify-content: space-around;
-  gap: 16px;
+  gap: 12px;
   padding: 8px 0 4px;
 }
 
@@ -213,13 +221,13 @@ function shortPath(path: string): string {
   text-align: center;
 }
 
-.disks {
+.dirs {
   display: flex;
   flex-direction: column;
   gap: 12px;
 }
 
-.disks__head {
+.dirs__head {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -230,24 +238,23 @@ function shortPath(path: string): string {
   text-transform: uppercase;
 }
 
-.disks__list {
+.dirs__list {
   margin: 0;
   padding: 0;
   list-style: none;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 10px;
 }
 
-.disk__meta {
+.dir {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 6px;
 }
 
-.disk__path {
+.dir__path {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -257,7 +264,7 @@ function shortPath(path: string): string {
   font-weight: 550;
 }
 
-.disk__pct {
+.dir__size {
   flex-shrink: 0;
   color: fn.use-var(text-color, second);
   font-size: 13px;
@@ -265,14 +272,7 @@ function shortPath(path: string): string {
   font-weight: 600;
 }
 
-.disk__free {
-  margin: 6px 0 0;
-  color: fn.use-var(text-color, assist);
-  font-size: 12px;
-  font-variant-numeric: tabular-nums;
-}
-
-.disks__empty {
+.dirs__empty {
   margin: 0;
   color: fn.use-var(text-color, assist);
   font-size: 13px;

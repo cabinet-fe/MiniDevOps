@@ -35,7 +35,7 @@ function openProject(project: ProductProject) {
 </script>
 
 <template>
-  <div class="page">
+  <div>
     <ProTable
       url="/projects"
       v-model:query="query"
@@ -77,10 +77,3 @@ function openProject(project: ProductProject) {
   </div>
 </template>
 
-<style scoped>
-.page {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-</style>

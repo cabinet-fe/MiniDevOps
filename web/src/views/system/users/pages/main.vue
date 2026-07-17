@@ -115,7 +115,7 @@ async function remove(row: User) {
 </script>
 
 <template>
-  <div class="page">
+  <div>
     <ProTable ref="list" url="/users" v-model:query="query" :columns="columns" pagination>
       <template #filters="{ search }">
         <u-input v-model="query.keyword" placeholder="用户名关键词" style="width: 200px" />
@@ -195,11 +195,6 @@ async function remove(row: User) {
 </template>
 
 <style scoped>
-.page {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
 .tag-cell {
   display: inline-flex;
   flex-wrap: wrap;

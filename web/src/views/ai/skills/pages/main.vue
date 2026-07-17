@@ -96,7 +96,7 @@ async function remove(row: SkillPackage) {
 </script>
 
 <template>
-  <div class="page">
+  <div>
     <ProTable ref="table" url="/skills" mode="pagination" :columns="columns">
       <template #filters>
         <u-button
@@ -173,11 +173,6 @@ async function remove(row: SkillPackage) {
 </template>
 
 <style scoped lang="scss">
-.page {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
 .zip-field {
   display: flex;
   align-items: center;

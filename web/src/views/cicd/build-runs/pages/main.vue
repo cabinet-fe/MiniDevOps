@@ -74,7 +74,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="page">
+  <div>
     <ProTable
       url="/build-runs"
       v-model:query="query"
@@ -139,10 +139,3 @@ onMounted(async () => {
   </div>
 </template>
 
-<style scoped>
-.page {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-</style>

@@ -93,8 +93,10 @@
 ### GET /rbac/resources — 列出 RBAC 资源树
 
 权限：`system.resources:view`
+查询参数：keyword: string, type: string(menu|page|action|card), enabled: boolean
 响应 200：data = object
 错误：403
+说明：返回树形 `items`。有筛选时匹配 path / 菜单标题 / 路由，并保留匹配节点的祖先以维持树结构。
 
 ### POST /rbac/resources — 创建 RBAC 资源
 

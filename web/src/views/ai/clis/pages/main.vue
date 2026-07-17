@@ -233,7 +233,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <div v-loading="loading" class="page">
+  <div v-loading="loading">
     <div class="page-notice">
       <p class="risk">
         {{ riskNotice || "AI CLI 以 Bedrock 同 UID 执行，无 OS/容器沙箱。" }}
@@ -385,11 +385,6 @@ onMounted(() => {
 <style scoped lang="scss">
 @use "pkg:@veltra/styles/functions" as fn;
 
-.page {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
 .page-notice {
   display: flex;
   flex-direction: column;

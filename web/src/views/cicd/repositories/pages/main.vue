@@ -119,7 +119,7 @@ async function onTest(row: Repository) {
 </script>
 
 <template>
-  <div class="page">
+  <div>
     <ProTable ref="list" url="/repositories" v-model:query="query" :columns="columns" pagination>
       <template #filters="{ search }">
         <u-input v-model="query.keyword" placeholder="名称/URL" style="width: 200px" />
@@ -192,10 +192,3 @@ async function onTest(row: Repository) {
   </div>
 </template>
 
-<style scoped>
-.page {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-</style>

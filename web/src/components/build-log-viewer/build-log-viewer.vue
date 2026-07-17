@@ -52,6 +52,10 @@ const props = withDefaults(
   },
 );
 
+const emit = defineEmits<{
+  refresh: [];
+}>();
+
 const terminalContainer = useTemplateRef<HTMLDivElement>("terminalContainer");
 
 const autoScroll = shallowRef(true);
@@ -218,7 +222,12 @@ function connectWS() {
   const url = buildRunLogsWSURL(props.runId, token);
   ws = new WebSocket(url);
   ws.onmessage = (ev) => {
-    appendToTerminal(String(ev.data));
+    const text = String(ev.data);
+    if (text === "__REFRESH__" || text.startsWith("__REFRESH__")) {
+      emit("refresh");
+      return;
+    }
+    appendToTerminal(text);
   };
   ws.onerror = () => {
     void hydrateLogHTTP();

@@ -1,9 +1,9 @@
 <script setup lang="ts">
 defineOptions({ name: "SystemResources" });
 
-import { computed, onMounted, reactive, ref } from "vue";
+import { computed, reactive, ref, useTemplateRef } from "vue";
 import { o } from "@cat-kit/core";
-import { defineTableColumns, message } from "@veltra/desktop";
+import { message } from "@veltra/desktop";
 
 import {
   createResource,
@@ -14,6 +14,7 @@ import {
 } from "@/api/system";
 import type { MenuMetadata, RbacResource } from "@/api/types";
 import FormDialog from "@/components/form-dialog";
+import ProTable, { defineProTableColumns } from "@/components/pro-table";
 import { usePermission } from "@/composables/use-permission";
 import { tagType, type TagType } from "@/lib/tag";
 
@@ -22,6 +23,14 @@ const TYPE_OPTIONS = [
   { label: "page", value: "page" },
   { label: "action", value: "action" },
   { label: "card", value: "card" },
+];
+
+const FILTER_TYPE_OPTIONS = [{ label: "全部类型", value: "" }, ...TYPE_OPTIONS];
+
+const ENABLED_OPTIONS = [
+  { label: "全部状态", value: "" },
+  { label: "启用", value: "true" },
+  { label: "禁用", value: "false" },
 ];
 
 const RESOURCE_TYPE_TAG: Record<string, TagType> = {
@@ -36,8 +45,9 @@ function resourceTypeTag(type: string) {
 }
 
 const { hasPermission } = usePermission();
-const tree = ref<RbacResource[]>([]);
-const loading = ref(false);
+const listRef = useTemplateRef("list");
+const query = reactive({ keyword: "", type: "", enabled: "" });
+const parentTree = ref<RbacResource[]>([]);
 const uploading = ref(false);
 const dialogOpen = ref(false);
 const editing = ref<RbacResource | null>(null);
@@ -51,18 +61,18 @@ const form = reactive({
   route: "",
 });
 
-const columns = defineTableColumns([
+const columns = defineProTableColumns([
   { key: "title", name: "菜单标题", minWidth: 140 },
-  { key: "path", name: "Path", minWidth: 220 },
-  { key: "type", name: "类型", width: 100, minWidth: 80 },
+  { key: "type", name: "类型" },
+  { key: "path", name: "Code", minWidth: 220 },
   { key: "route", name: "路由", minWidth: 160 },
-  { key: "sort_key", name: "排序", width: 80, minWidth: 60 },
-  { key: "enabled", name: "状态", width: 90, minWidth: 70 },
-  { key: "action", name: "操作", width: 220, minWidth: 180, fixed: "right" },
+  { key: "sort_key", name: "排序" },
+  { key: "enabled", name: "状态" },
+  { key: "action", name: "操作", width: 220, fixed: "right" },
 ]);
 
 const parentOptions = computed(() =>
-  flatten(tree.value)
+  flatten(parentTree.value)
     .filter((n) => !editing.value || n.id !== editing.value.id)
     .map((n) => ({
       label: `${n.path} (${n.type})`,
@@ -93,20 +103,10 @@ function iconSrc(meta?: MenuMetadata): string | undefined {
   return `data:${meta.icon_mime || "image/png"};base64,${meta.icon_base64}`;
 }
 
-async function load() {
-  loading.value = true;
-  try {
-    const res = await listResources();
-    tree.value = res.items ?? [];
-    if (editing.value) {
-      const refreshed = findNode(tree.value, editing.value.id);
-      if (refreshed) editing.value = refreshed;
-    }
-  } catch (err) {
-    message.error(err instanceof Error ? err.message : "加载失败");
-  } finally {
-    loading.value = false;
-  }
+function onLoaded(items: Record<string, any>[]) {
+  if (!editing.value) return;
+  const refreshed = findNode(items as RbacResource[], editing.value.id);
+  if (refreshed) editing.value = refreshed;
 }
 
 function findNode(nodes: RbacResource[], id: number): RbacResource | null {
@@ -120,13 +120,19 @@ function findNode(nodes: RbacResource[], id: number): RbacResource | null {
   return null;
 }
 
-onMounted(() => {
-  void load();
-});
+async function loadParentOptions() {
+  try {
+    const res = await listResources();
+    parentTree.value = res.items ?? [];
+  } catch {
+    /* ignore — parent select stays empty */
+  }
+}
 
-function openCreate(parent?: RbacResource) {
+async function openCreate(parent?: RbacResource) {
   editing.value = null;
   form.parent_id = parent?.id;
+  await loadParentOptions();
   dialogOpen.value = true;
 }
 
@@ -161,7 +167,7 @@ async function save() {
       message.success("已创建");
     }
     dialogOpen.value = false;
-    await load();
+    await listRef.value?.reload();
   } catch (err) {
     message.error(err instanceof Error ? err.message : "保存失败");
   }
@@ -186,7 +192,7 @@ async function onIconPick(files: File[]) {
     const updated = await updateResourceIcon(editing.value.id, b64, file.type || "image/png");
     editing.value = updated;
     message.success("图标已更新");
-    await load();
+    await listRef.value?.reload();
   } catch (err) {
     message.error(err instanceof Error ? err.message : "上传失败");
   } finally {
@@ -198,7 +204,7 @@ async function remove(row: RbacResource) {
   try {
     await deleteResource(row.id);
     message.success("已删除");
-    await load();
+    await listRef.value?.reload();
   } catch (err) {
     message.error(err instanceof Error ? err.message : "删除失败");
   }
@@ -206,65 +212,82 @@ async function remove(row: RbacResource) {
 </script>
 
 <template>
-  <div class="page">
-    <div class="page-toolbar">
-      <u-button @click="load">刷新</u-button>
-      <u-button
-        v-if="hasPermission('system.resources:create')"
-        type="primary"
-        @click="openCreate()"
-      >
-        新建资源
-      </u-button>
-    </div>
-
-    <div class="table-wrap" :class="{ 'is-loading': loading }">
-      <u-table tree default-expand-all :stripe="false" row-key="id" :columns="columns" :data="tree">
-        <template #column:title="{ rowData }">
-          {{ (rowData as RbacResource).menu_metadata?.title || "—" }}
-        </template>
-        <template #column:route="{ rowData }">
-          {{ (rowData as RbacResource).menu_metadata?.route || "—" }}
-        </template>
-        <template #column:type="{ rowData }">
-          <u-tag size="small" :type="resourceTypeTag((rowData as RbacResource).type)">
-            {{ (rowData as RbacResource).type }}
-          </u-tag>
-        </template>
-        <template #column:enabled="{ rowData }">
-          <u-tag size="small" :type="(rowData as RbacResource).enabled ? 'success' : 'warning'">
-            {{ (rowData as RbacResource).enabled ? "启用" : "禁用" }}
-          </u-tag>
-        </template>
-        <template #column:action="{ rowData }">
-          <u-action-group :max="3">
-            <u-action
-              v-if="hasPermission('system.resources:create')"
-              @run="openCreate(rowData as RbacResource)"
-            >
-              子节点
-            </u-action>
-            <u-action
-              v-if="hasPermission('system.resources:update')"
-              @run="openEdit(rowData as RbacResource)"
-            >
-              编辑
-            </u-action>
-            <u-action
-              v-if="hasPermission('system.resources:delete')"
-              need-confirm
-              type="danger"
-              @run="remove(rowData as RbacResource)"
-            >
-              删除
-            </u-action>
-          </u-action-group>
-        </template>
-        <template #empty>
-          <u-empty :text="loading ? '加载中…' : '暂无资源'" />
-        </template>
-      </u-table>
-    </div>
+  <div>
+    <ProTable
+      ref="list"
+      url="/rbac/resources"
+      v-model:query="query"
+      :columns="columns"
+      tree
+      default-expand-all
+      :auto-query-fields="['type', 'enabled']"
+      @loaded="onLoaded"
+    >
+      <template #filters="{ search }">
+        <u-input v-model="query.keyword" placeholder="Code / 标题 / 路由" style="width: 220px" />
+        <u-select
+          v-model="query.type"
+          placeholder="全部类型"
+          :options="FILTER_TYPE_OPTIONS"
+          style="width: 130px"
+        />
+        <u-select
+          v-model="query.enabled"
+          placeholder="全部状态"
+          :options="ENABLED_OPTIONS"
+          style="width: 130px"
+        />
+        <u-button type="primary" @click="search">查询</u-button>
+        <u-button
+          v-if="hasPermission('system.resources:create')"
+          type="primary"
+          style="margin-left: auto"
+          @click.prevent="openCreate()"
+        >
+          新建资源
+        </u-button>
+      </template>
+      <template #column:title="{ rowData }">
+        {{ (rowData as RbacResource).menu_metadata?.title || "—" }}
+      </template>
+      <template #column:route="{ rowData }">
+        {{ (rowData as RbacResource).menu_metadata?.route || "—" }}
+      </template>
+      <template #column:type="{ rowData }">
+        <u-tag size="small" :type="resourceTypeTag((rowData as RbacResource).type)">
+          {{ (rowData as RbacResource).type }}
+        </u-tag>
+      </template>
+      <template #column:enabled="{ rowData }">
+        <u-tag size="small" :type="(rowData as RbacResource).enabled ? 'success' : 'warning'">
+          {{ (rowData as RbacResource).enabled ? "启用" : "禁用" }}
+        </u-tag>
+      </template>
+      <template #column:action="{ rowData }">
+        <u-action-group :max="3">
+          <u-action
+            v-if="hasPermission('system.resources:create')"
+            @run="openCreate(rowData as RbacResource)"
+          >
+            子节点
+          </u-action>
+          <u-action
+            v-if="hasPermission('system.resources:update')"
+            @run="openEdit(rowData as RbacResource)"
+          >
+            编辑
+          </u-action>
+          <u-action
+            v-if="hasPermission('system.resources:delete')"
+            need-confirm
+            type="danger"
+            @run="remove(rowData as RbacResource)"
+          >
+            删除
+          </u-action>
+        </u-action-group>
+      </template>
+    </ProTable>
 
     <FormDialog
       v-model="dialogOpen"
@@ -275,7 +298,7 @@ async function remove(row: RbacResource) {
       @submit="save"
     >
       <u-input
-        label="Path"
+        label="Code"
         field="path"
         :disabled="!!editing"
         :rules="{ required: '必填' }"
@@ -317,40 +340,6 @@ async function remove(row: RbacResource) {
 
 <style scoped lang="scss">
 @use "pkg:@veltra/styles/functions" as fn;
-
-.page {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  min-height: 100%;
-  min-width: 0;
-}
-.page-toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
-  flex-shrink: 0;
-}
-.table-wrap {
-  flex: 1;
-  min-height: 280px;
-  position: relative;
-}
-.table-wrap :deep(.u-table) {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100% !important;
-}
-.table-wrap.is-loading::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: rgba(255, 255, 255, 0.35);
-  pointer-events: none;
-  z-index: 1;
-}
 
 .icon-field {
   display: flex;

@@ -88,7 +88,7 @@ watch(tab, (next) => {
 </script>
 
 <template>
-  <div class="page">
+  <div>
     <div class="page-toolbar">
       <u-button text @click="router.push({ name: 'projects' })">返回项目列表</u-button>
     </div>
@@ -119,11 +119,6 @@ watch(tab, (next) => {
 </template>
 
 <style scoped>
-.page {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
 .page-toolbar {
   display: flex;
   align-items: center;

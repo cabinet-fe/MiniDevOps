@@ -424,7 +424,7 @@ onUnmounted(stopJobPolling);
 </script>
 
 <template>
-  <div v-loading="loading" class="page">
+  <div v-loading="loading">
     <div class="page-toolbar">
       <u-button
         v-if="hasPermission('ops.dev_environments:create')"
@@ -620,11 +620,6 @@ onUnmounted(stopJobPolling);
 <style scoped lang="scss">
 @use "pkg:@veltra/styles/functions" as fn;
 
-.page {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
 .page-toolbar {
   display: flex;
   justify-content: flex-end;

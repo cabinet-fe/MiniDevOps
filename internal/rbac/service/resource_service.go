@@ -73,10 +73,28 @@ func (s *ResourceService) Get(id uint) (*model.RbacResource, error) {
 	return s.resources.FindByID(id)
 }
 
-func (s *ResourceService) ListTree() ([]model.RbacResource, error) {
+// ListResourcesFilter filters the RBAC resource tree.
+// Matching nodes keep their ancestors so the response remains a valid tree.
+type ListResourcesFilter struct {
+	Keyword string
+	Type    string
+	Enabled *bool
+}
+
+func (f ListResourcesFilter) active() bool {
+	return strings.TrimSpace(f.Keyword) != "" || strings.TrimSpace(f.Type) != "" || f.Enabled != nil
+}
+
+func (s *ResourceService) ListTree(filter ListResourcesFilter) ([]model.RbacResource, error) {
 	items, err := s.resources.ListAll()
 	if err != nil {
 		return nil, err
+	}
+	if filter.active() {
+		if typ := strings.TrimSpace(filter.Type); typ != "" && !validResourceType(typ) {
+			return nil, errors.New("type 必须为 menu|page|action|card")
+		}
+		items = filterResourcesWithAncestors(items, filter)
 	}
 	return buildResourceTree(items), nil
 }
@@ -224,6 +242,64 @@ func validResourceType(t string) bool {
 	default:
 		return false
 	}
+}
+
+func resourceMatchesFilter(item model.RbacResource, filter ListResourcesFilter) bool {
+	if typ := strings.TrimSpace(filter.Type); typ != "" && item.Type != typ {
+		return false
+	}
+	if filter.Enabled != nil && item.Enabled != *filter.Enabled {
+		return false
+	}
+	keyword := strings.TrimSpace(filter.Keyword)
+	if keyword == "" {
+		return true
+	}
+	kw := strings.ToLower(keyword)
+	if strings.Contains(strings.ToLower(item.Path), kw) {
+		return true
+	}
+	if item.MenuMetadata != nil {
+		if strings.Contains(strings.ToLower(item.MenuMetadata.Title), kw) {
+			return true
+		}
+		if strings.Contains(strings.ToLower(item.MenuMetadata.Route), kw) {
+			return true
+		}
+	}
+	return false
+}
+
+func filterResourcesWithAncestors(items []model.RbacResource, filter ListResourcesFilter) []model.RbacResource {
+	byID := make(map[uint]model.RbacResource, len(items))
+	for _, item := range items {
+		byID[item.ID] = item
+	}
+	keep := make(map[uint]struct{})
+	for _, item := range items {
+		if !resourceMatchesFilter(item, filter) {
+			continue
+		}
+		cur := item.ID
+		for {
+			if _, ok := keep[cur]; ok {
+				break
+			}
+			keep[cur] = struct{}{}
+			node, ok := byID[cur]
+			if !ok || node.ParentID == nil {
+				break
+			}
+			cur = *node.ParentID
+		}
+	}
+	out := make([]model.RbacResource, 0, len(keep))
+	for _, item := range items {
+		if _, ok := keep[item.ID]; ok {
+			out = append(out, item)
+		}
+	}
+	return out
 }
 
 func buildResourceTree(items []model.RbacResource) []model.RbacResource {

@@ -68,7 +68,7 @@ async function terminate(row: ProcessInfo) {
 </script>
 
 <template>
-  <div class="page">
+  <div>
     <ProTable
       ref="list"
       url="/ops/processes"
@@ -117,11 +117,6 @@ async function terminate(row: ProcessInfo) {
 </template>
 
 <style scoped>
-.page {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
 .cmdline {
   display: block;
   max-width: 280px;

@@ -133,6 +133,7 @@ func (p *Pipeline) Execute(ctx context.Context, runID uint) {
 		})
 		run.Status = "success"
 		run.Stage = "distributing"
+		p.broadcastRunRefresh(run.ID)
 	} else {
 		p.setRunning(run, "cloning")
 	}
@@ -159,6 +160,7 @@ func (p *Pipeline) Execute(ctx context.Context, runID uint) {
 		"stage":      run.Stage,
 		"status":     run.Status,
 	})
+	p.broadcastRunRefresh(run.ID)
 
 	channel := fmt.Sprintf("build-run:%d", run.ID)
 	var logMu sync.Mutex
@@ -220,6 +222,7 @@ func (p *Pipeline) Execute(ctx context.Context, runID uint) {
 			hash := strings.TrimSpace(out)
 			run.CommitHash = hash
 			_ = p.runs.UpdateFields(run.ID, map[string]interface{}{"commit_hash": hash})
+			p.broadcastRunRefresh(run.ID)
 		}
 	}
 
@@ -341,6 +344,7 @@ func (p *Pipeline) Execute(ctx context.Context, runID uint) {
 		} else {
 			run.ArtifactPath = artifactPath
 			_ = p.runs.UpdateFields(run.ID, map[string]interface{}{"artifact_path": artifactPath})
+			p.broadcastRunRefresh(run.ID)
 			writeLine("Artifact saved: " + artifactPath)
 		}
 		p.cleanupArtifacts(job)
@@ -386,6 +390,13 @@ func (p *Pipeline) resolveRepoGitAuth(repo *model.Repository) (authType, usernam
 	}
 }
 
+func (p *Pipeline) broadcastRunRefresh(runID uint) {
+	if p.hub == nil {
+		return
+	}
+	p.hub.BroadcastToChannel(fmt.Sprintf("build-run:%d", runID), []byte("__REFRESH__"))
+}
+
 func (p *Pipeline) setRunning(run *model.BuildRun, stage string) {
 	run.Status = "running"
 	run.Stage = stage
@@ -393,6 +404,7 @@ func (p *Pipeline) setRunning(run *model.BuildRun, stage string) {
 		"status": "running",
 		"stage":  stage,
 	})
+	p.broadcastRunRefresh(run.ID)
 }
 
 func (p *Pipeline) setStageKeepSuccess(run *model.BuildRun, stage string) {
@@ -401,6 +413,7 @@ func (p *Pipeline) setStageKeepSuccess(run *model.BuildRun, stage string) {
 		"status": "success",
 		"stage":  stage,
 	})
+	p.broadcastRunRefresh(run.ID)
 }
 
 func (p *Pipeline) failRun(run *model.BuildRun, errMsg string) {
@@ -419,6 +432,7 @@ func (p *Pipeline) failRun(run *model.BuildRun, errMsg string) {
 		fields["duration_ms"] = finished.Sub(*run.StartedAt).Milliseconds()
 	}
 	_ = p.runs.UpdateFields(run.ID, fields)
+	p.broadcastRunRefresh(run.ID)
 	p.notifyTerminal(run, "failed", errMsg)
 }
 
@@ -429,6 +443,7 @@ func (p *Pipeline) cancelRun(run *model.BuildRun) {
 			"stage":                "idle",
 			"distribution_summary": "cancelled",
 		})
+		p.broadcastRunRefresh(run.ID)
 		return
 	}
 	finished := time.Now()
@@ -441,6 +456,7 @@ func (p *Pipeline) cancelRun(run *model.BuildRun) {
 		fields["duration_ms"] = finished.Sub(*run.StartedAt).Milliseconds()
 	}
 	_ = p.runs.UpdateFields(run.ID, fields)
+	p.broadcastRunRefresh(run.ID)
 	p.notifyTerminal(run, "cancelled", "")
 }
 
@@ -468,6 +484,7 @@ func (p *Pipeline) markArtifactSuccess(run *model.BuildRun, writeLine func(strin
 		"error_message":        "",
 		"distribution_summary": summary,
 	})
+	p.broadcastRunRefresh(run.ID)
 	writeLine(fmt.Sprintf("=== Build phase succeeded in %dms (artifact ready) ===", run.DurationMs))
 	p.notifyTerminal(run, "success", "")
 	if p.agentHook != nil && run.ArtifactPath != "" {

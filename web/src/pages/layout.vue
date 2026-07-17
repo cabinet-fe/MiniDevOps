@@ -142,15 +142,15 @@ function toggleNav() {
         </div>
       </header>
 
-      <u-scroll height="100%" class="app-main">
+      <main class="app-main">
         <router-view v-slot="{ Component, route: viewRoute }">
           <Transition name="fade" mode="out-in">
             <keep-alive :include="tabsStore.cachedNames">
-              <component :is="Component" :key="viewRoute.fullPath" />
+              <component :is="Component" :key="viewRoute.fullPath" class="app-page" />
             </keep-alive>
           </Transition>
         </router-view>
-      </u-scroll>
+      </main>
     </div>
   </div>
 </template>
@@ -320,6 +320,12 @@ function toggleNav() {
 }
 
 .app-main {
+  height: 100%;
+}
+
+.app-page {
+  gap: fn.use-var(gap, large);
   padding: fn.use-var(gap, large);
+  height: 100%;
 }
 </style>

@@ -187,6 +187,23 @@
 路径参数：id*: integer
 响应 200：data = text/plain
 
+### GET /ws/build-runs/{id}/logs — 构建日志 WebSocket（实时）
+
+路径前缀为 `/ws`（非 `/api/v1`）。查询参数 `token` 携带 JWT（与其它 WebSocket 一致）。
+
+权限：`cicd.build_runs:view`
+路径参数：id*: integer
+查询参数：token*: string
+
+连接成功后：
+
+1. 服务端先按行回放已有日志文件（若有）。
+2. 后续推送两类文本帧：
+   - 日志行：追加到终端输出。
+   - 控制帧 `__REFRESH__`：元数据（status / stage / distribution_summary / deploy_attempts 等）已变更；客户端应重新请求 `GET /build-runs/{id}`，勿写入日志视图。
+
+`__REFRESH__` 仅经 WebSocket 广播，不写入日志文件。
+
 ## 服务器
 
 ### GET /servers — 列出服务器

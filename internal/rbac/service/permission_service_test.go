@@ -94,7 +94,7 @@ func TestPermissionUnion(t *testing.T) {
 func TestProjectScopeActionsAreSeededAndResolvable(t *testing.T) {
 	perm, roles, resources, users := setupRBAC(t)
 
-	tree, err := resources.ListTree()
+	tree, err := resources.ListTree(service.ListResourcesFilter{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -234,6 +234,67 @@ func TestMenuTrimAndParentFill(t *testing.T) {
 	if err := perm.CheckAccess(u2.ID, false, "system.users:view"); err == nil {
 		t.Fatal("expected 403 without :view")
 	}
+}
+
+func TestListTreeFilterKeepsAncestors(t *testing.T) {
+	_, _, resources, _ := setupRBAC(t)
+
+	tree, err := resources.ListTree(service.ListResourcesFilter{Keyword: "system.users"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tree) != 1 || tree[0].Path != "system" {
+		t.Fatalf("expected system root, got %+v", summarizeTree(tree))
+	}
+	var foundUsers bool
+	var walk func([]model.RbacResource)
+	walk = func(nodes []model.RbacResource) {
+		for _, n := range nodes {
+			if n.Path == "system.users" {
+				foundUsers = true
+			}
+			walk(n.Children)
+		}
+	}
+	walk(tree)
+	if !foundUsers {
+		t.Fatalf("expected system.users under ancestors, got %+v", summarizeTree(tree))
+	}
+
+	actions, err := resources.ListTree(service.ListResourcesFilter{Type: model.ResourceTypeAction})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(actions) == 0 {
+		t.Fatal("expected action matches with ancestors")
+	}
+	var walkActions func([]model.RbacResource)
+	walkActions = func(nodes []model.RbacResource) {
+		for _, n := range nodes {
+			if len(n.Children) == 0 && n.Type != model.ResourceTypeAction {
+				t.Fatalf("leaf %q should be action when filtering type=action", n.Path)
+			}
+			walkActions(n.Children)
+		}
+	}
+	walkActions(actions)
+
+	if _, err := resources.ListTree(service.ListResourcesFilter{Type: "nope"}); err == nil {
+		t.Fatal("expected invalid type error")
+	}
+}
+
+func summarizeTree(nodes []model.RbacResource) []string {
+	var out []string
+	var walk func([]model.RbacResource, string)
+	walk = func(items []model.RbacResource, prefix string) {
+		for _, n := range items {
+			out = append(out, prefix+n.Path+":"+n.Type)
+			walk(n.Children, prefix+"  ")
+		}
+	}
+	walk(nodes, "")
+	return out
 }
 
 func TestMenuIconRejectOver32KB(t *testing.T) {

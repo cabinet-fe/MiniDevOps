@@ -276,11 +276,9 @@ export interface SystemInfo {
   start_time: string;
 }
 
-export interface DiskStatus {
+export interface DirectoryUsage {
   path: string;
-  total_bytes: number;
-  free_bytes: number;
-  used_percent: number;
+  used_bytes: number;
 }
 
 export interface SystemStatus {
@@ -288,8 +286,12 @@ export interface SystemStatus {
   memory_used_bytes: number;
   memory_total_bytes: number;
   memory_usage_percent: number;
+  disk_used_bytes: number;
+  disk_total_bytes: number;
+  disk_free_bytes: number;
+  disk_usage_percent: number;
   health: string;
-  directories: DiskStatus[];
+  directories: DirectoryUsage[];
   collected_at: string;
 }
 

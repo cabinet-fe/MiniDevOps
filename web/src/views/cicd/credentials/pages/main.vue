@@ -98,7 +98,7 @@ async function remove(row: Credential) {
 </script>
 
 <template>
-  <div class="page">
+  <div>
     <ProTable ref="list" url="/credentials" v-model:query="query" :columns="columns" pagination>
       <template #filters="{ search }">
         <u-input v-model="query.keyword" placeholder="名称关键词" style="width: 200px" />
@@ -178,10 +178,3 @@ async function remove(row: Credential) {
   </div>
 </template>
 
-<style scoped>
-.page {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-</style>

@@ -143,7 +143,7 @@ async function remove(row: AiAgent) {
 </script>
 
 <template>
-  <div class="page">
+  <div>
     <ProTable ref="table" url="/ai/agents" mode="pagination" :columns="columns">
       <template #filters>
         <u-button
@@ -195,7 +195,7 @@ async function remove(row: AiAgent) {
       :title="editing ? '编辑智能体' : '新建智能体'"
       :model="form"
       label-width="110px"
-      style="width: 560px"
+      style="width: 960px"
       @submit="save"
     >
       <u-input label="名称" field="name" :rules="{ required: '必填' }" />
@@ -211,7 +211,7 @@ async function remove(row: AiAgent) {
         ]"
         :rules="{ required: '必填' }"
       />
-      <u-textarea label="系统提示词" field="system_prompt" :rows="6" />
+      <u-textarea label="系统提示词" field="system_prompt" span="full" :rows="6" />
       <u-input label="Skill IDs" field="skill_ids" placeholder="逗号分隔" />
       <u-number-input label="仓库 ID" field="repository_id" :min="1" placeholder="可选" />
       <u-number-input label="超时(秒)" field="timeout_sec" :min="30" />
@@ -282,11 +282,6 @@ async function remove(row: AiAgent) {
 </template>
 
 <style scoped lang="scss">
-.page {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
 .trigger-list {
   margin: 0 0 12px;
   padding-left: 18px;

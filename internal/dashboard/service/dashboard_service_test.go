@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -14,6 +15,57 @@ import (
 	"bedrock/internal/platform/migration"
 	_ "bedrock/internal/platform/migration/migrations"
 )
+
+func TestSystemStatusReportsHostDiskAndDirectorySizes(t *testing.T) {
+	root := t.TempDir()
+	workspace := filepath.Join(root, "workspaces")
+	artifacts := filepath.Join(root, "artifacts")
+	if err := os.MkdirAll(workspace, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(artifacts, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	payload := []byte("bedrock-dashboard-disk")
+	if err := os.WriteFile(filepath.Join(workspace, "a.bin"), payload, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(artifacts, "b.bin"), append(payload, payload...), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	repo := newDashboardRepository(t)
+	svc := NewDashboardService(repo, "test", time.Now(), []string{workspace, artifacts})
+	status, err := svc.SystemStatus()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status.DiskTotalBytes == 0 {
+		t.Fatalf("expected host disk total, got %#v", status)
+	}
+	if status.DiskUsedBytes == 0 && status.DiskUsagePercent == 0 && status.DiskFreeBytes == 0 {
+		t.Fatalf("expected host disk usage sample, got %#v", status)
+	}
+	if len(status.Directories) != 2 {
+		t.Fatalf("directories = %#v", status.Directories)
+	}
+	if status.Directories[0].UsedBytes != uint64(len(payload)) {
+		t.Fatalf("workspace used = %d, want %d", status.Directories[0].UsedBytes, len(payload))
+	}
+	if status.Directories[1].UsedBytes != uint64(len(payload)*2) {
+		t.Fatalf("artifacts used = %d, want %d", status.Directories[1].UsedBytes, len(payload)*2)
+	}
+}
+
+func TestDirectoryUsedBytesMissingRootIsZero(t *testing.T) {
+	got, err := directoryUsedBytes(filepath.Join(t.TempDir(), "missing"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != 0 {
+		t.Fatalf("got %d, want 0", got)
+	}
+}
 
 func TestLayoutFiltersStaleBuildCardAndRejectsUnauthorizedAddition(t *testing.T) {
 	repo := newDashboardRepository(t)

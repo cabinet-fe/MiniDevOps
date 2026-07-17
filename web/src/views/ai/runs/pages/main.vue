@@ -28,7 +28,7 @@ function openDetail(row: AgentRun) {
 </script>
 
 <template>
-  <div class="page">
+  <div>
     <ProTable ref="table" url="/ai/runs" mode="pagination" :columns="columns" v-model:query="query">
       <template #filters>
         <u-input v-model="query.agent_id" placeholder="agent_id" clearable />
@@ -51,10 +51,3 @@ function openDetail(row: AgentRun) {
   </div>
 </template>
 
-<style scoped lang="scss">
-.page {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-</style>

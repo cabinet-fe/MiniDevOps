@@ -1,7 +1,7 @@
 <script setup lang="ts">
 defineOptions({ name: "CicdBuildRunDetail" });
 
-import { computed, onMounted, onUnmounted, ref, watch } from "vue";
+import { computed, onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { message } from "@veltra/desktop";
 
@@ -28,8 +28,6 @@ const loading = ref(true);
 const acting = ref(false);
 const logViewerRef = ref<InstanceType<typeof BuildLogViewer> | null>(null);
 
-let pollTimer: ReturnType<typeof setInterval> | null = null;
-
 const STAGE_TAG: Record<string, TagType> = {
   pending: undefined,
   cloning: "primary",
@@ -48,8 +46,16 @@ const DISTRIBUTION_TAG: Record<string, TagType> = {
   cancelled: "warning",
 };
 
+function parseRouteId(raw: unknown): number | null {
+  const value = Array.isArray(raw) ? raw[0] : raw;
+  const id = typeof value === "number" ? value : Number(value);
+  return Number.isSafeInteger(id) && id > 0 ? id : null;
+}
+
 const canExecute = computed(() => hasPermission("cicd.build_jobs:execute"));
-const runId = computed(() => Number(route.params.id));
+// Layout keys detail by fullPath and keep-alive caches the instance. Freeze the id at
+// setup so deactivated instances do not re-read the global route (which loses :id).
+const runId = parseRouteId(route.params.id);
 
 const isLive = computed(() => {
   const s = run.value?.status;
@@ -86,24 +92,14 @@ const shortCommit = computed(() => {
   return hash.length > 12 ? hash.slice(0, 12) : hash;
 });
 
-const snapshotText = computed(() => {
-  const raw = run.value?.snapshot_json?.trim();
-  if (!raw) return "（空）";
-  try {
-    return JSON.stringify(JSON.parse(raw), null, 2);
-  } catch {
-    return raw;
-  }
-});
-
 async function load() {
-  const id = runId.value;
-  if (!id) {
+  if (runId == null) {
     message.error("无效 ID");
+    loading.value = false;
     return;
   }
   try {
-    run.value = await getBuildRun(id);
+    run.value = await getBuildRun(runId);
   } catch (err) {
     message.error(err instanceof Error ? err.message : "加载失败");
   } finally {
@@ -111,22 +107,12 @@ async function load() {
   }
 }
 
-function startPolling() {
-  stopPolling();
-  pollTimer = setInterval(async () => {
-    try {
-      run.value = await getBuildRun(runId.value);
-      if (!isLive.value) stopPolling();
-    } catch {
-      /* ignore */
-    }
-  }, 2500);
-}
-
-function stopPolling() {
-  if (pollTimer) {
-    clearInterval(pollTimer);
-    pollTimer = null;
+async function onLogRefresh() {
+  if (runId == null) return;
+  try {
+    run.value = await getBuildRun(runId);
+  } catch {
+    /* ignore */
   }
 }
 
@@ -165,7 +151,6 @@ async function onRedeploy() {
     message.success("已开始重新分发");
     logViewerRef.value?.appendLine("=== Redeploy requested ===");
     logViewerRef.value?.reconnect();
-    startPolling();
   } catch (err) {
     message.error(err instanceof Error ? err.message : "重新分发失败");
   } finally {
@@ -197,126 +182,118 @@ async function onDownloadArtifact() {
   }
 }
 
-watch(runId, async () => {
-  loading.value = true;
-  stopPolling();
-  await load();
-  if (isLive.value) startPolling();
-});
-
 onMounted(async () => {
   await load();
-  if (isLive.value) startPolling();
-});
-
-onUnmounted(() => {
-  stopPolling();
 });
 </script>
 
 <template>
-  <div class="page">
-    <div class="page-toolbar">
-      <p class="risk-note">
-        构建脚本与 Bedrock 以同一操作系统用户执行，无沙箱隔离；请仅让可信人员编辑脚本。
-      </p>
-      <div class="actions">
-        <u-button v-if="canCancel" :disabled="acting" variant="outline" @click="onCancel">
-          取消
-        </u-button>
-        <u-button v-if="canRetry" :disabled="acting" @click="onRetry">重试</u-button>
-        <u-button v-if="canRedeploy" :disabled="acting" @click="onRedeploy">重新分发</u-button>
-        <u-button v-if="run?.status === 'success'" variant="outline" @click="onDownloadArtifact">
-          下载制品
-        </u-button>
-        <u-button @click="router.push({ name: 'cicd-build-runs' })">返回列表</u-button>
-      </div>
-    </div>
-
-    <div v-if="loading" class="state">加载中…</div>
-    <template v-else-if="run">
-      <section class="panel meta-panel">
-        <div class="meta-grid">
-          <div class="meta-item">
-            <span class="meta-label">状态</span>
+  <u-scroll>
+    <div class="page">
+      <header class="page-header">
+        <div class="page-header__lead">
+          <u-button text @click="router.push({ name: 'cicd-build-runs' })">返回列表</u-button>
+          <div v-if="run" class="page-header__title">
+            <h2>构建 #{{ run.build_number }}</h2>
             <u-tag size="small" :type="tagType(run.status, JOB_STATUS_TAG)">{{ run.status }}</u-tag>
           </div>
-          <div class="meta-item">
-            <span class="meta-label">阶段</span>
-            <u-tag size="small" :type="tagType(run.stage, STAGE_TAG)">
-              {{ run.stage || "—" }}
-            </u-tag>
-          </div>
-          <div class="meta-item">
-            <span class="meta-label">分发汇总</span>
-            <u-tag size="small" :type="tagType(run.distribution_summary, DISTRIBUTION_TAG)">
-              {{ run.distribution_summary || "—" }}
-            </u-tag>
-          </div>
-          <div class="meta-item">
-            <span class="meta-label">触发</span>
-            <u-tag size="small" :type="tagType(run.trigger_type, TRIGGER_TYPE_TAG)">
-              {{ run.trigger_type }}
-            </u-tag>
-          </div>
-          <div class="meta-item">
-            <span class="meta-label">任务 ID</span>
-            <span class="meta-value">{{ run.build_job_id }}</span>
-          </div>
-          <div class="meta-item">
-            <span class="meta-label">分支</span>
-            <span class="meta-value mono">{{ run.branch || "—" }}</span>
-          </div>
-          <div class="meta-item meta-item--wide">
-            <span class="meta-label">Commit</span>
-            <span class="meta-value mono" :title="run.commit_hash || undefined">
-              {{ shortCommit }}
-            </span>
-          </div>
-          <div class="meta-item">
-            <span class="meta-label">创建时间</span>
-            <span class="meta-value">{{ formatDateTime(run.created_at) || "—" }}</span>
-          </div>
         </div>
-        <p v-if="run.commit_message" class="commit-msg">{{ run.commit_message }}</p>
-        <p v-if="run.error_message" class="error-msg">{{ run.error_message }}</p>
-      </section>
-
-      <section class="section">
-        <h3>构建日志</h3>
-        <BuildLogViewer
-          ref="logViewerRef"
-          :run-id="runId"
-          :live="isLive"
-          :status="logViewerStatus"
-        />
-      </section>
-
-      <section class="section">
-        <h3>部署尝试</h3>
-        <div class="panel">
-          <u-empty v-if="!run.deploy_attempts?.length" text="暂无部署尝试" />
-          <ul v-else class="attempts">
-            <li v-for="a in run.deploy_attempts" :key="a.id" class="attempt">
-              <div class="attempt__main">
-                <span class="mono">batch {{ a.batch_no }}</span>
-                <span class="attempt__sep">·</span>
-                <span>target {{ a.deploy_target_id ?? "—" }}</span>
-                <u-tag size="small" :type="tagType(a.status, JOB_STATUS_TAG)">{{ a.status }}</u-tag>
-              </div>
-              <p v-if="a.error_message" class="attempt__error">{{ a.error_message }}</p>
-            </li>
-          </ul>
+        <div v-if="run" class="page-header__actions">
+          <u-button v-if="canCancel" plain type="danger" :disabled="acting" @click="onCancel">
+            取消
+          </u-button>
+          <u-button
+            v-if="run.status === 'success'"
+            plain
+            :disabled="acting"
+            @click="onDownloadArtifact"
+          >
+            下载制品
+          </u-button>
+          <u-button v-if="canRetry" type="primary" :disabled="acting" @click="onRetry">重试</u-button>
+          <u-button v-if="canRedeploy" type="primary" :disabled="acting" @click="onRedeploy">
+            重新分发
+          </u-button>
         </div>
-      </section>
+      </header>
 
-      <section class="section">
-        <h3>配置快照</h3>
-        <pre class="snap">{{ snapshotText }}</pre>
-      </section>
-    </template>
-    <u-empty v-else text="执行记录不存在或无权访问" />
-  </div>
+      <div v-if="loading" class="state">加载中…</div>
+      <template v-else-if="run">
+        <section class="panel meta-panel">
+          <div class="meta-grid">
+            <div class="meta-item">
+              <span class="meta-label">阶段</span>
+              <u-tag size="small" :type="tagType(run.stage, STAGE_TAG)">
+                {{ run.stage || "—" }}
+              </u-tag>
+            </div>
+            <div class="meta-item">
+              <span class="meta-label">分发汇总</span>
+              <u-tag size="small" :type="tagType(run.distribution_summary, DISTRIBUTION_TAG)">
+                {{ run.distribution_summary || "—" }}
+              </u-tag>
+            </div>
+            <div class="meta-item">
+              <span class="meta-label">触发</span>
+              <u-tag size="small" :type="tagType(run.trigger_type, TRIGGER_TYPE_TAG)">
+                {{ run.trigger_type }}
+              </u-tag>
+            </div>
+            <div class="meta-item">
+              <span class="meta-label">任务 ID</span>
+              <span class="meta-value">{{ run.build_job_id }}</span>
+            </div>
+            <div class="meta-item">
+              <span class="meta-label">分支</span>
+              <span class="meta-value mono">{{ run.branch || "—" }}</span>
+            </div>
+            <div class="meta-item meta-item--wide">
+              <span class="meta-label">Commit</span>
+              <span class="meta-value mono" :title="run.commit_hash || undefined">
+                {{ shortCommit }}
+              </span>
+            </div>
+            <div class="meta-item">
+              <span class="meta-label">创建时间</span>
+              <span class="meta-value">{{ formatDateTime(run.created_at) || "—" }}</span>
+            </div>
+          </div>
+          <p v-if="run.commit_message" class="commit-msg">{{ run.commit_message }}</p>
+          <p v-if="run.error_message" class="error-msg">{{ run.error_message }}</p>
+        </section>
+
+        <section class="section">
+          <h3 class="section__title">构建日志</h3>
+          <BuildLogViewer
+            ref="logViewerRef"
+            :run-id="run.id"
+            :live="isLive"
+            :status="logViewerStatus"
+            @refresh="onLogRefresh"
+          />
+        </section>
+
+        <section class="section">
+          <h3 class="section__title">部署尝试</h3>
+          <div class="panel" :class="{ 'panel--empty': !run.deploy_attempts?.length }">
+            <u-empty v-if="!run.deploy_attempts?.length" text="暂无部署尝试" />
+            <ul v-else class="attempts">
+              <li v-for="a in run.deploy_attempts" :key="a.id" class="attempt">
+                <div class="attempt__main">
+                  <span class="mono">batch {{ a.batch_no }}</span>
+                  <span class="attempt__sep">·</span>
+                  <span>target {{ a.deploy_target_id ?? "—" }}</span>
+                  <u-tag size="small" :type="tagType(a.status, JOB_STATUS_TAG)">{{ a.status }}</u-tag>
+                </div>
+                <p v-if="a.error_message" class="attempt__error">{{ a.error_message }}</p>
+              </li>
+            </ul>
+          </div>
+        </section>
+      </template>
+      <u-empty v-else text="执行记录不存在或无权访问" />
+    </div>
+  </u-scroll>
 </template>
 
 <style scoped lang="scss">
@@ -325,45 +302,63 @@ onUnmounted(() => {
 .page {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: fn.use-var(gap, large);
   min-width: 0;
 }
 
-.page-toolbar {
+.page-header {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 12px;
+  gap: 16px;
   flex-wrap: wrap;
 }
 
-.risk-note {
-  margin: 0;
-  flex: 1;
+.page-header__lead {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
   min-width: 0;
-  font-size: 12px;
-  line-height: 1.5;
-  color: fn.use-var(text-color, assist);
 }
 
-.actions {
+.page-header__title {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.page-header__title h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.3;
+  color: fn.use-var(text-color, title);
+}
+
+.page-header__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
   gap: 8px;
-  flex-shrink: 0;
+  margin-left: auto;
 }
 
 .section {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
   min-width: 0;
 }
 
-.section h3 {
+.section__title {
   margin: 0;
   font-size: 14px;
   font-weight: 600;
+  line-height: 1.4;
   color: fn.use-var(text-color, title);
 }
 
@@ -372,6 +367,13 @@ onUnmounted(() => {
   padding: fn.use-var(gap, default);
   border-radius: fn.use-var(radius, default);
   background: fn.use-var(bg-color, top);
+}
+
+.panel--empty {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 120px;
 }
 
 .meta-panel {
@@ -383,7 +385,7 @@ onUnmounted(() => {
 .meta-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-  gap: 12px 16px;
+  gap: 14px 20px;
 }
 
 .meta-item {
@@ -470,21 +472,6 @@ onUnmounted(() => {
   font-size: 12px;
   color: fn.use-var(color, danger);
   overflow-wrap: anywhere;
-}
-
-.snap {
-  margin: 0;
-  padding: fn.use-var(gap, default);
-  max-height: 280px;
-  overflow: auto;
-  font-size: 12px;
-  line-height: 1.55;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  background: fn.use-var(bg-color, top);
-  border-radius: fn.use-var(radius, default);
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  word-break: break-word;
 }
 
 .state {

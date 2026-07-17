@@ -37,8 +37,29 @@ func (h *ResourceHandler) RegisterRoutes(rg *gin.RouterGroup, authMW gin.Handler
 }
 
 func (h *ResourceHandler) List(c *gin.Context) {
-	tree, err := h.resources.ListTree()
+	filter := service.ListResourcesFilter{
+		Keyword: c.Query("keyword"),
+		Type:    c.Query("type"),
+	}
+	if raw := strings.TrimSpace(c.Query("enabled")); raw != "" {
+		switch strings.ToLower(raw) {
+		case "true", "1":
+			v := true
+			filter.Enabled = &v
+		case "false", "0":
+			v := false
+			filter.Enabled = &v
+		default:
+			pkg.Error(c, http.StatusBadRequest, "enabled 必须为 true 或 false")
+			return
+		}
+	}
+	tree, err := h.resources.ListTree(filter)
 	if err != nil {
+		if strings.Contains(err.Error(), "type 必须为") {
+			pkg.Error(c, http.StatusBadRequest, err.Error())
+			return
+		}
 		pkg.Error(c, http.StatusInternalServerError, "查询失败")
 		return
 	}

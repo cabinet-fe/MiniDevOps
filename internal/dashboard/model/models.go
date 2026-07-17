@@ -52,19 +52,22 @@ type SystemInfo struct {
 	StartTime time.Time `json:"start_time"`
 }
 
-type DiskStatus struct {
-	Path       string  `json:"path"`
-	TotalBytes uint64  `json:"total_bytes"`
-	FreeBytes  uint64  `json:"free_bytes"`
-	UsedPct    float64 `json:"used_percent"`
+// DirectoryUsage is the on-disk size of one configured data directory.
+type DirectoryUsage struct {
+	Path      string `json:"path"`
+	UsedBytes uint64 `json:"used_bytes"`
 }
 
 type SystemStatus struct {
-	CPUUsagePercent    float64      `json:"cpu_usage_percent"`
-	MemoryUsedBytes    uint64       `json:"memory_used_bytes"`
-	MemoryTotalBytes   uint64       `json:"memory_total_bytes"`
-	MemoryUsagePercent float64      `json:"memory_usage_percent"`
-	Health             string       `json:"health"`
-	Directories        []DiskStatus `json:"directories"`
-	CollectedAt        time.Time    `json:"collected_at"`
+	CPUUsagePercent    float64          `json:"cpu_usage_percent"`
+	MemoryUsedBytes    uint64           `json:"memory_used_bytes"`
+	MemoryTotalBytes   uint64           `json:"memory_total_bytes"`
+	MemoryUsagePercent float64          `json:"memory_usage_percent"`
+	DiskUsedBytes      uint64           `json:"disk_used_bytes"`
+	DiskTotalBytes     uint64           `json:"disk_total_bytes"`
+	DiskFreeBytes      uint64           `json:"disk_free_bytes"`
+	DiskUsagePercent   float64          `json:"disk_usage_percent"`
+	Health             string           `json:"health"`
+	Directories        []DirectoryUsage `json:"directories"`
+	CollectedAt        time.Time        `json:"collected_at"`
 }

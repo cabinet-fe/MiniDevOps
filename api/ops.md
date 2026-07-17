@@ -38,6 +38,7 @@
 权限：`dashboard.system_status:view`
 响应 200：data = SystemStatus
 错误：403
+说明：`disk_*` 为关键数据目录所在分区的宿主机磁盘占用；`directories` 为各关键目录自身占用大小（非分区剩余空间）。
 
 ## 运维
 
@@ -342,14 +343,14 @@
 | --- | --- | --- | --- |
 | `version` | `string` |  |  |
 
-### DiskStatus
+### DirectoryUsage
+
+关键数据目录的占用大小（目录树合计），不是所在分区的剩余空间。
 
 | 字段 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
-| `path` | `string` |  |  |
-| `total_bytes` | `integer` |  |  |
-| `free_bytes` | `integer` |  |  |
-| `used_percent` | `number` |  |  |
+| `path` | `string` |  | 目录绝对/配置路径 |
+| `used_bytes` | `integer` |  | 该目录内容占用字节数 |
 
 ### ProcessInfo
 
@@ -387,6 +388,10 @@ Complete read-only system information; this does not grant operations write acce
 | `memory_used_bytes` | `integer` |  |  |
 | `memory_total_bytes` | `integer` |  |  |
 | `memory_usage_percent` | `number` |  |  |
+| `disk_used_bytes` | `integer` |  | 宿主机数据盘已用字节（关键目录所在分区） |
+| `disk_total_bytes` | `integer` |  | 宿主机数据盘总容量 |
+| `disk_free_bytes` | `integer` |  | 宿主机数据盘可用字节 |
+| `disk_usage_percent` | `number` |  | 宿主机数据盘占用百分比 |
 | `health` | `'ok' \| 'degraded'` |  |  |
-| `directories` | `DiskStatus[]` |  |  |
+| `directories` | `DirectoryUsage[]` |  | 关键目录各自占用大小 |
 | `collected_at` | `string(date-time)` |  |  |

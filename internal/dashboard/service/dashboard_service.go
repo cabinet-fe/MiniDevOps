@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
+	"path/filepath"
 	"runtime"
 	"sort"
 	"time"
@@ -137,17 +139,60 @@ func (s *DashboardService) SystemStatus() (*model.SystemStatus, error) {
 		result.MemoryTotalBytes = vm.Total
 		result.MemoryUsagePercent = roundSingleDecimal(vm.UsedPercent)
 	}
+	// Host disk: capacity of the partition that holds configured data directories.
+	if usage, err := disk.Usage(s.diskPaths[0]); err == nil {
+		result.DiskUsedBytes = usage.Used
+		result.DiskTotalBytes = usage.Total
+		result.DiskFreeBytes = usage.Free
+		result.DiskUsagePercent = roundSingleDecimal(usage.UsedPercent)
+	} else {
+		result.Health = "degraded"
+	}
 	for _, path := range s.diskPaths {
-		usage, err := disk.Usage(path)
+		used, err := directoryUsedBytes(path)
 		if err != nil {
 			result.Health = "degraded"
+			result.Directories = append(result.Directories, model.DirectoryUsage{Path: path})
 			continue
 		}
-		result.Directories = append(result.Directories, model.DiskStatus{
-			Path: path, TotalBytes: usage.Total, FreeBytes: usage.Free, UsedPct: roundSingleDecimal(usage.UsedPercent),
+		result.Directories = append(result.Directories, model.DirectoryUsage{
+			Path: path, UsedBytes: used,
 		})
 	}
 	return result, nil
+}
+
+// directoryUsedBytes sums regular file sizes under root. Missing roots report 0;
+// unreadable entries are skipped so one bad path does not fail the whole sample.
+func directoryUsedBytes(root string) (uint64, error) {
+	info, err := os.Stat(root)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return 0, nil
+		}
+		return 0, err
+	}
+	if !info.IsDir() {
+		return uint64(info.Size()), nil
+	}
+	var total uint64
+	err = filepath.WalkDir(root, func(_ string, d fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return nil
+		}
+		if d.IsDir() {
+			return nil
+		}
+		fi, infoErr := d.Info()
+		if infoErr != nil {
+			return nil
+		}
+		if fi.Mode().IsRegular() {
+			total += uint64(fi.Size())
+		}
+		return nil
+	})
+	return total, err
 }
 
 func allowedCards(isSuperAdmin bool, permissions []string) map[string]struct{} {
