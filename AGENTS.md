@@ -1,23 +1,11 @@
 # AGENTS.md
 
-Bedrock 2.0 单体开发平台（Go Server + Vue 前端）。本文只保留**常用命令、目录导航与读写指引**；不写业务规则与详细设计。
-
-| 文档 | 用途 |
-| ---- | ---- |
-| [docs/PRD.md](docs/PRD.md) | 产品需求 |
-| [docs/DESIGN.md](docs/DESIGN.md) | 架构与领域设计（权威） |
-| [docs/ROADMAP.md](docs/ROADMAP.md) | 路线图 |
-| [api/openapi.yaml](api/openapi.yaml) | API 契约（OpenAPI 3.2，唯一手改） |
-| [.agents/fe.md](.agents/fe.md) | **前端**约定与工作流 |
-| [.agents/be.md](.agents/be.md) | **后端**约定与工作流 |
-
 **按需阅读（省上下文）：**
 
-- 改 `web/`、Vue / Veltra / cat-kit → 先读 [`.agents/fe.md`](.agents/fe.md)
-- 改 `cmd/`、`internal/`、`api/`、migration、OpenAPI → 先读 [`.agents/be.md`](.agents/be.md)
-- 领域行为、权限语义、流水线状态机等 → 查 [docs/DESIGN.md](docs/DESIGN.md)，勿在本文件或 fe/be 中复制产品设计
-
-提交代码时遵循 [`.agents/skills/git-commit`](.agents/skills/git-commit)。
+- 改 `web/` 先读 [`.agents/fe.md`](.agents/fe.md)
+- 改 `cmd/`、`internal/`、migration → 先读 [`.agents/be.md`](.agents/be.md)
+- 改 HTTP / JSON 信封 / 分页 / API 契约 → 先读 [`.agents/api.md`](.agents/api.md)
+- 领域行为、权限语义、流水线状态机等 → 查 [docs/DESIGN.md](docs/DESIGN.md)，勿在本文件或 fe/be/api 中复制产品设计
 
 ## 常用命令
 
@@ -39,11 +27,7 @@ make build-agent-linux   # Deploy Agent amd64
 make build-agent-linux-arm64
 make checksums           # 对已构建 linux 产物输出 SHA256
 
-# 契约与检查
-# OpenAPI 3.2 源：api/openapi.yaml（唯一手改）
-# 生成 3.1 投影（禁止手改）：api/openapi.3.1.projection.yaml
-make openapi-projection
-make openapi-check
+# 检查
 make ga-guardrails       # 禁止把 1.x 数据迁移当作支持路径
 
 # 测试 / GA 冒烟
@@ -59,7 +43,7 @@ make smoke-linux-package
 make smoke-restart-recovery
 
 # 前端（web；推荐 Vite+ 工作流）
-cd web && vp install
+cd web && bun install
 cd web && vp dev
 cd web && vp check    # format + lint + typecheck
 cd web && vp build
@@ -93,9 +77,14 @@ make clean
 │   ├── storage/
 │   ├── ws/
 │   └── pkg/
-├── api/
-│   ├── openapi.yaml            # OpenAPI 3.2（唯一手改）
-│   └── openapi.3.1.projection.yaml
+├── api/                        # HTTP 契约（Markdown，按域拆分）
+│   ├── README.md
+│   ├── auth.md
+│   ├── system.md
+│   ├── cicd.md
+│   ├── ops.md
+│   ├── project.md
+│   └── ai.md
 ├── web/                        # Vue 3 前端 → .agents/fe.md
 │   └── src/
 ├── scripts/
@@ -112,15 +101,11 @@ make clean
 ├── .agents/
 │   ├── fe.md
 │   ├── be.md
+│   ├── api.md
 │   └── skills/
 ├── config.yaml / config.example.yaml
 ├── Makefile
 └── data/                       # gitignore（db、工作区、制品等）
 ```
 
-## 跨切卫生（极简）
-
-- **不要**把业务规则、权限/流水线/AI 等领域设计写进本文件；权威在 DESIGN。
-- FE / BE 具体禁止项与编码约定分别见 fe.md / be.md。
-- 契约：只改 `api/openapi.yaml`，投影用 `make openapi-projection` 生成。
-- **不提供** 1.x → 2.0 数据迁移；已接受风险（HTTP + access Web Storage / refresh HttpOnly Cookie 不设 Secure、同 UID、自定义超管命令）见 DESIGN §1.4。
+**以上目录结构在文件更改时需要同步更新!**

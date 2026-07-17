@@ -23,7 +23,7 @@ make smoke-linux-package  # 产出校验和；Linux amd64 主机可启动冒烟
 
 ## 质量门禁
 
-- [ ] `make openapi-check`（投影未手改且与源一致）
+- [ ] API 变更已同步到对应 `api/<域>.md`
 - [ ] `cd web && vp check && vp build`
 - [ ] `go test ./...`（或 CI 等价）
 - [ ] `make smoke-fresh-install`

@@ -1,28 +1,15 @@
 # 前端约定（web）
 
-改 `web/`、Vue / UI / HTTP 客户端时阅读本文。领域产品规则见 [docs/DESIGN.md](../docs/DESIGN.md)；仓库入口与命令见 [AGENTS.md](../AGENTS.md)。
-
 ## 技术栈
 
-| 项 | 技术 |
-| -- | ---- |
-| 框架 | Vue 3.5+ / TypeScript / Pinia / Vue Router |
-| 构建 | Vite+（`vite-plus` / `vp`） |
-| UI | `@veltra/desktop` + styles / icons / utils / directives / compositions |
-| 工具库 | `@cat-kit/core`、`@cat-kit/fe`、`@cat-kit/http`、`@cat-kit/tsconfig` |
-| 包管理 | bun（可由 `vp install` 包装） |
-| 目录 | `web/` |
-
-## 必读技能（渐进）
-
-写代码前按需检索，勿整包预加载：
-
-| 场景 | Skill |
-| ---- | ----- |
-| Vue SFC / Composition | `.agents/skills/vue-best-practices` |
-| UI 组件 / 样式 / 图标 | `.agents/skills/veltra-ui`（尤其 `packages/desktop/`） |
-| HTTP / 工具库 API | `.agents/skills/cat-kit` |
-| 提交 | `.agents/skills/git-commit` |
+| 项     | 技术                                                                   |
+| ------ | ---------------------------------------------------------------------- |
+| 框架   | Vue 3.5+ / TypeScript / Pinia / Vue Router                             |
+| 构建   | Vite+（`vite-plus` / `vp`）                                            |
+| UI     | `@veltra/desktop` + styles / icons / utils / directives / compositions |
+| 工具库 | `@cat-kit/core`、`@cat-kit/fe`、`@cat-kit/http`、`@cat-kit/tsconfig`   |
+| 包管理 | bun                                                                    |
+| 目录   | `web/`                                                                 |
 
 ## 规范
 
@@ -32,12 +19,9 @@
 - 字段与交互形态对齐 `@veltra/desktop` 契约（查 `components/<name>/types.d.ts` 与 `api.md`）。例如：
   - 侧栏：`UNav` / `UDualNav` 的 `NavItem`（`title` / `path` / `icon` / `children` 等）
   - 表格列：裸 `UTable` 用 `defineTableColumns`；`ProTable` 用 `defineProTableColumns`；分页：`UPaginator`；表单：`UForm` / `UFormItem`
-- API/DTO 可与后端 `snake_case` 并存；映射到组件 props 时保持类型兼容。
-- HTTP **只走** `@cat-kit/http` 封装客户端（含 refresh）；禁止页面内散落 `fetch`（除非 DESIGN 标明的特例并抽 helper）。
 - 状态：Pinia；权限辅助：composables。
-- Token：`access_token` → `@cat-kit/fe` `storage.local` + Bearer；`refresh_token` → 服务端 `Set-Cookie`（HttpOnly，默认跟随 `jwt.refresh_ttl` / 7 天，**不设 Secure**）。HTTP 客户端 `credentials: true`；401 时 POST `/auth/refresh`（带 Cookie）换发 access 并重试原请求。
-- 枚举与后端 `snake_case` JSON 字段保持一致。
-- **禁止**硬编码全量菜单/权限表作为真源；菜单由后端裁剪下发（见 DESIGN）。
+- Token：`access_token` → `@cat-kit/fe` `storage.local` + Bearer。HTTP / 信封 / refresh / JSON 字段约定见 [.agents/api.md](api.md)。
+- **禁止**硬编码全量菜单/权限表作为真源；菜单由后端返回(除运维相关功能外).
 
 ## 登录（前端侧）
 
@@ -62,14 +46,13 @@ import ProTable, { defineProTableColumns } from "@/components/pro-table";
 - 组件内部：请求、加载态（`v-loading`）、空态（`UEmpty`）、分页时 `UPaginator`
 - 暴露 `search()` / `reload()` 供手动刷新
 
-后端分页信封字段约定见 [.agents/be.md](be.md)。
+分页信封与 query 字段约定见 [.agents/api.md](api.md)。
 
 ## 代码风格
 
 - TypeScript / Vue：`vp check`（或项目 lint）
 - SFC 文件名：`kebab-case`
 - 前端常量：`UPPER_SNAKE_CASE`（对象键 `snake_case`）
-- JSON：`snake_case`
 
 ## 测试
 
@@ -80,5 +63,5 @@ import ProTable, { defineProTableColumns } from "@/components/pro-table";
 ## 禁止事项（前端）
 
 1. 硬编码全量菜单/权限表作为真源后再隐藏。
-2. 绕过统一 HTTP 客户端；或绕过 OpenAPI 契约私自加前后端字段（契约改动走后端 OpenAPI 流程）。
+2. 绕过统一 HTTP 客户端（见 [.agents/api.md](api.md)）。
 3. 未检索 Veltra / cat-kit 就引入重复能力的第三方 UI/工具库。

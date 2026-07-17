@@ -1,7 +1,7 @@
 .PHONY: dev dev-backend dev-frontend build build-frontend build-backend \
 	build-linux build-linux-arm64 build-win \
 	build-agent-linux build-agent-linux-arm64 build-agent-win \
-	openapi-projection openapi-check clean \
+	clean \
 	smoke-fresh-install smoke-api-e2e smoke-three-db smoke-linux-package smoke-restart-recovery smoke \
 	ga-guardrails checksums
 
@@ -59,13 +59,6 @@ checksums:
 	@sha256sum bedrock-linux-amd64 bedrock-linux-arm64 bedrock-agent-linux-amd64 bedrock-agent-linux-arm64 2>/dev/null || \
 		shasum -a 256 bedrock-linux-amd64 bedrock-linux-arm64 bedrock-agent-linux-amd64 bedrock-agent-linux-arm64 2>/dev/null || \
 		(echo "build linux packages first" >&2; exit 1)
-
-openapi-projection:
-	go run ./tools/openapi-project api/openapi.yaml api/openapi.3.1.projection.yaml
-
-openapi-check: openapi-projection
-	@git diff --exit-code -- api/openapi.3.1.projection.yaml || \
-		(echo "openapi.3.1.projection.yaml is out of date; run make openapi-projection" >&2; exit 1)
 
 ga-guardrails:
 	bash scripts/check-ga-guardrails.sh

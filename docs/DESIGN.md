@@ -52,7 +52,7 @@
 | D23 | 菜单/资源 | `RbacResource` 唯一资源树 + 一对一 `MenuMetadata`；统一事务管理 |
 | D24 | Schema | 应用内版本化 Go migration + `schema_migrations`；禁止仅靠 AutoMigrate |
 | D25 | DB 切换 | 改 driver 只连接目标库，**不搬迁数据** |
-| D26 | API | OpenAPI **3.2** 唯一源；自动生成不可手改的 **3.1 兼容投影** |
+| D26 | API | HTTP 契约以 `api/*.md`（按域拆分的 Markdown）为真源 |
 | D27 | 存储 | `StorageObject` 注册表 + `StorageService`；日志独立分段；保守默认限额 |
 | D28 | 前端迁移 | 原 React `web/` 已移除；Vue 3 `web/` 为唯一 embed 源 |
 | D29 | Run 快照 | 创建运行时强制写入最小配置快照（只读复现） |
@@ -117,9 +117,8 @@ internal/
   storage/                # StorageObject + StorageService
   ws/                     # Hub + 频道
   pkg/                    # response、crypto、errors、id
-api/
-  openapi.yaml            # OpenAPI 3.2 源（唯一手改契约）
-  openapi.3.1.projection.yaml  # 生成物，禁止手改
+api/                      # HTTP 契约（Markdown，按域拆分）
+  README.md / auth.md / system.md / cicd.md / ops.md / project.md / ai.md
 web/                      # Vue 3 前端
 docs/
   PRD.md / DESIGN.md / ROADMAP.md
@@ -348,7 +347,7 @@ database:
 | 幂等 | 写接口支持 `Idempotency-Key`（Webhook delivery、手动触发等） |
 | 并发 | 文档发布等使用 `expected_version` / `If-Match` |
 | 鉴权 | `Authorization: Bearer <jwt\|pat>` |
-| 契约源 | `api/openapi.yaml`（3.2）；CI 生成 3.1 投影；前端类型从投影或 3.2 工具生成；Gin 实现合同测试对照源 |
+| 契约源 | `api/*.md`（按域拆分）；前后端对照契约文档实现；行为级保障见 `make smoke-api-e2e` |
 
 ### 7.2 错误码基线
 
@@ -363,7 +362,7 @@ database:
 | 429 | 限流（可选，首期可占位） |
 | 500/503 | 内部错误/依赖不可用 |
 
-### 7.3 路由域（与 PRD 对齐，实现以 OpenAPI 为准）
+### 7.3 路由域（与 PRD 对齐，实现以 `api/*.md` 为准）
 
 - Auth / Users / Roles / RBAC resources / Menus / Dictionaries / Operation logs / Tokens
 - Dashboard layout + card data
@@ -527,7 +526,7 @@ web/src/
 | 层级 | 内容 |
 | --- | --- |
 | 单元 | migration、权限合并、状态机、签名校验、存储路径安全 |
-| 合同 | 三数据库 repository；OpenAPI 响应形状 |
+| 合同 | 三数据库 repository；契约文档中的响应形状 |
 | 集成 | Pipeline 分发失败、redeploy attempt、重启恢复、Webhook 幂等 |
 | E2E | Playwright 冒烟：登录→菜单→构建→日志→（GA）Agent/文档发布 |
 | 平台 | Linux amd64/arm64 发布包冒烟；macOS 开发路径 |
@@ -574,9 +573,9 @@ web/src/
 | ops-handbook.md | 安装、多库、备份、风险、回滚 |
 | release-checklist.md | 发版检查与 checksum |
 | known-issues.md | 非阻塞已知问题 |
-| api/openapi.yaml | API 真源 |
+| api/*.md | API 真源（按域拆分） |
 
-冲突时：实现与 OpenAPI/DESIGN 对齐；需求争议回退 PRD，并开变更同步三份文档。
+冲突时：实现与 `api/*.md` / DESIGN 对齐；需求争议回退 PRD，并开变更同步文档。
 
 ---
 
