@@ -12,12 +12,10 @@ import {
   enqueueBuildRun,
   getBuildJob,
   getBuildJobWebhookSecret,
-  listRepositories,
-  listRepositoryBranches,
-  listServers,
   rotateBuildJobWebhookSecret,
   updateBuildJob,
 } from "@/api/cicd";
+import { listRepositories, listRepositoryBranches, listServers } from "@/api/resource";
 import type { BuildJob, BuildRun, DeployTarget, Repository, Server } from "@/api/types";
 import FormDialog from "@/components/form-dialog";
 import ProTable, { defineProTableColumns } from "@/components/pro-table";

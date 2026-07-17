@@ -8,11 +8,12 @@ import (
 
 	"bedrock/internal/cicd/model"
 	"bedrock/internal/cicd/repository"
+	resourcerepo "bedrock/internal/resource/repository"
 )
 
 type BuildJobService struct {
 	jobs  *repository.BuildJobRepository
-	repos *repository.RepositoryRepository
+	repos *resourcerepo.RepositoryRepository
 	cron  CronRegistrar
 }
 
@@ -22,7 +23,7 @@ type CronRegistrar interface {
 	Remove(jobID uint)
 }
 
-func NewBuildJobService(jobs *repository.BuildJobRepository, repos *repository.RepositoryRepository) *BuildJobService {
+func NewBuildJobService(jobs *repository.BuildJobRepository, repos *resourcerepo.RepositoryRepository) *BuildJobService {
 	return &BuildJobService{jobs: jobs, repos: repos}
 }
 
@@ -37,25 +38,25 @@ type DeployTargetInput struct {
 }
 
 type CreateBuildJobInput struct {
-	RepositoryID      uint                `json:"repository_id"`
-	Name              string              `json:"name"`
-	Description       string              `json:"description"`
-	Enabled           *bool               `json:"enabled"`
-	Branch            string              `json:"branch"`
-	ShallowClone      *bool               `json:"shallow_clone"`
-	BuildScriptType   string              `json:"build_script_type"`
-	BuildScript       string              `json:"build_script"`
-	WorkDir           string              `json:"work_dir"`
-	OutputDir         string              `json:"output_dir"`
-	CachePaths        string              `json:"cache_paths"`
-	EnvVarNames       []string            `json:"env_var_names"`
-	TriggerManual     *bool               `json:"trigger_manual"`
-	TriggerWebhook    *bool               `json:"trigger_webhook"`
-	TriggerCron       *bool               `json:"trigger_cron"`
-	CronExpression    string              `json:"cron_expression"`
-	CronTimezone      string              `json:"cron_timezone"`
-	MaxArtifacts      int                 `json:"max_artifacts"`
-	ArtifactFormat    string              `json:"artifact_format"`
+	RepositoryID       uint                `json:"repository_id"`
+	Name               string              `json:"name"`
+	Description        string              `json:"description"`
+	Enabled            *bool               `json:"enabled"`
+	Branch             string              `json:"branch"`
+	ShallowClone       *bool               `json:"shallow_clone"`
+	BuildScriptType    string              `json:"build_script_type"`
+	BuildScript        string              `json:"build_script"`
+	WorkDir            string              `json:"work_dir"`
+	OutputDir          string              `json:"output_dir"`
+	CachePaths         string              `json:"cache_paths"`
+	EnvVarNames        []string            `json:"env_var_names"`
+	TriggerManual      *bool               `json:"trigger_manual"`
+	TriggerWebhook     *bool               `json:"trigger_webhook"`
+	TriggerCron        *bool               `json:"trigger_cron"`
+	CronExpression     string              `json:"cron_expression"`
+	CronTimezone       string              `json:"cron_timezone"`
+	MaxArtifacts       int                 `json:"max_artifacts"`
+	ArtifactFormat     string              `json:"artifact_format"`
 	AgentTriggerEvent  string              `json:"agent_trigger_event"`
 	AgentID            *uint               `json:"agent_id"`
 	WebhookType        string              `json:"webhook_type"`
@@ -66,24 +67,24 @@ type CreateBuildJobInput struct {
 }
 
 type UpdateBuildJobInput struct {
-	Name              *string              `json:"name"`
-	Description       *string              `json:"description"`
-	Enabled           *bool                `json:"enabled"`
-	Branch            *string              `json:"branch"`
-	ShallowClone      *bool                `json:"shallow_clone"`
-	BuildScriptType   *string              `json:"build_script_type"`
-	BuildScript       *string              `json:"build_script"`
-	WorkDir           *string              `json:"work_dir"`
-	OutputDir         *string              `json:"output_dir"`
-	CachePaths        *string              `json:"cache_paths"`
-	EnvVarNames       *[]string            `json:"env_var_names"`
-	TriggerManual     *bool                `json:"trigger_manual"`
-	TriggerWebhook    *bool                `json:"trigger_webhook"`
-	TriggerCron       *bool                `json:"trigger_cron"`
-	CronExpression    *string              `json:"cron_expression"`
-	CronTimezone      *string              `json:"cron_timezone"`
-	MaxArtifacts      *int                 `json:"max_artifacts"`
-	ArtifactFormat    *string              `json:"artifact_format"`
+	Name               *string              `json:"name"`
+	Description        *string              `json:"description"`
+	Enabled            *bool                `json:"enabled"`
+	Branch             *string              `json:"branch"`
+	ShallowClone       *bool                `json:"shallow_clone"`
+	BuildScriptType    *string              `json:"build_script_type"`
+	BuildScript        *string              `json:"build_script"`
+	WorkDir            *string              `json:"work_dir"`
+	OutputDir          *string              `json:"output_dir"`
+	CachePaths         *string              `json:"cache_paths"`
+	EnvVarNames        *[]string            `json:"env_var_names"`
+	TriggerManual      *bool                `json:"trigger_manual"`
+	TriggerWebhook     *bool                `json:"trigger_webhook"`
+	TriggerCron        *bool                `json:"trigger_cron"`
+	CronExpression     *string              `json:"cron_expression"`
+	CronTimezone       *string              `json:"cron_timezone"`
+	MaxArtifacts       *int                 `json:"max_artifacts"`
+	ArtifactFormat     *string              `json:"artifact_format"`
 	AgentTriggerEvent  *string              `json:"agent_trigger_event"`
 	AgentID            *uint                `json:"agent_id"`
 	WebhookType        *string              `json:"webhook_type"`
@@ -390,7 +391,6 @@ func decodeEnvNames(job *model.BuildJob) {
 	}
 	job.EnvVarNames = names
 }
-
 
 func normalizeArtifactFormat(f string) string {
 	if strings.ToLower(strings.TrimSpace(f)) == "zip" {

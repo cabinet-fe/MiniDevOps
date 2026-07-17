@@ -1,11 +1,17 @@
 <script setup lang="ts">
-defineOptions({ name: "CicdServers" });
+defineOptions({ name: "ResourceServers" });
 
 import { onMounted, reactive, ref, useTemplateRef } from "vue";
 import { o } from "@cat-kit/core";
 import { message } from "@veltra/desktop";
 
-import { createServer, deleteServer, listCredentials, testServer, updateServer } from "@/api/cicd";
+import {
+  createServer,
+  deleteServer,
+  listCredentials,
+  testServer,
+  updateServer,
+} from "@/api/resource";
 import type { Credential, Server } from "@/api/types";
 import FormDialog from "@/components/form-dialog";
 import ProTable, { defineProTableColumns } from "@/components/pro-table";
@@ -126,11 +132,17 @@ async function onTest(row: Server) {
 
 <template>
   <div>
-    <ProTable ref="list" url="/servers" v-model:query="query" :columns="columns" pagination>
+    <ProTable
+      ref="list"
+      url="/resource/servers"
+      v-model:query="query"
+      :columns="columns"
+      pagination
+    >
       <template #filters>
         <u-input v-model="query.keyword" placeholder="名称/主机" style="width: 200px" />
         <u-button
-          v-if="hasPermission('cicd.servers:create')"
+          v-if="hasPermission('resource.servers:create')"
           type="primary"
           style="margin-left: auto"
           @click.prevent="openCreate"
@@ -150,13 +162,19 @@ async function onTest(row: Server) {
       </template>
       <template #column:action="{ rowData }">
         <u-action-group :max="4">
-          <u-action v-if="hasPermission('cicd.servers:update')" @run="openEdit(rowData as Server)">
+          <u-action
+            v-if="hasPermission('resource.servers:update')"
+            @run="openEdit(rowData as Server)"
+          >
             编辑
           </u-action>
-          <u-action v-if="hasPermission('cicd.servers:view')" @run="onTest(rowData as Server)">
+          <u-action v-if="hasPermission('resource.servers:view')" @run="onTest(rowData as Server)">
             测试
           </u-action>
-          <u-action v-if="hasPermission('cicd.servers:delete')" @run="remove(rowData as Server)">
+          <u-action
+            v-if="hasPermission('resource.servers:delete')"
+            @run="remove(rowData as Server)"
+          >
             删除
           </u-action>
         </u-action-group>
@@ -206,4 +224,3 @@ async function onTest(row: Server) {
     </FormDialog>
   </div>
 </template>
-

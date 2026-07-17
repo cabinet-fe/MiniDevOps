@@ -118,10 +118,10 @@ func builtinDevEnvironments() []seededDevEnv {
 			Env: devEnvironmentMigrationModel{
 				Name: "Go", Kind: "builtin", Executable: "go", Description: "Go 编译环境（需要 asdf >= 0.16）",
 				DetectScript: "go version", VersionsScript: "asdf list golang",
-				InstallScript: `command -v asdf >/dev/null 2>&1 || { echo 'asdf >= 0.16 is required to manage Go versions'; exit 1; }; version="{{version}}"; [ -n "$version" ] || { echo 'a Go version is required'; exit 2; }; asdf plugin add golang https://github.com/asdf-community/asdf-golang.git 2>/dev/null || true; asdf install golang "$version" && asdf set -u golang "$version"`,
-				UpgradeScript: `command -v asdf >/dev/null 2>&1 || { echo 'asdf >= 0.16 is required to manage Go versions'; exit 1; }; version="{{version}}"; [ -n "$version" ] || { echo 'a Go version is required'; exit 2; }; asdf plugin update golang || true; asdf install golang "$version" && asdf set -u golang "$version"`,
+				InstallScript:   `command -v asdf >/dev/null 2>&1 || { echo 'asdf >= 0.16 is required to manage Go versions'; exit 1; }; version="{{version}}"; [ -n "$version" ] || { echo 'a Go version is required'; exit 2; }; asdf plugin add golang https://github.com/asdf-community/asdf-golang.git 2>/dev/null || true; asdf install golang "$version" && asdf set -u golang "$version"`,
+				UpgradeScript:   `command -v asdf >/dev/null 2>&1 || { echo 'asdf >= 0.16 is required to manage Go versions'; exit 1; }; version="{{version}}"; [ -n "$version" ] || { echo 'a Go version is required'; exit 2; }; asdf plugin update golang || true; asdf install golang "$version" && asdf set -u golang "$version"`,
 				UninstallScript: `command -v asdf >/dev/null 2>&1 || { echo 'asdf >= 0.16 is required to manage Go versions'; exit 1; }; version="{{version}}"; [ -n "$version" ] || version="$(asdf current golang 2>/dev/null | awk 'NR==1 {print $2}')"; [ -n "$version" ] || { echo 'a Go version is required'; exit 2; }; asdf uninstall golang "$version"`,
-				SwitchScript: `command -v asdf >/dev/null 2>&1 || { echo 'asdf >= 0.16 is required to manage Go versions'; exit 1; }; version="{{version}}"; [ -n "$version" ] || { echo 'a Go version is required'; exit 2; }; asdf set -u golang "$version"`,
+				SwitchScript:    `command -v asdf >/dev/null 2>&1 || { echo 'asdf >= 0.16 is required to manage Go versions'; exit 1; }; version="{{version}}"; [ -n "$version" ] || { echo 'a Go version is required'; exit 2; }; asdf set -u golang "$version"`,
 			},
 			Sources: []devEnvInstallSourceMigrationModel{
 				{Name: "proxy.golang.org", BaseURL: "https://proxy.golang.org", Priority: 10, Enabled: true},
@@ -132,10 +132,10 @@ func builtinDevEnvironments() []seededDevEnv {
 			Env: devEnvironmentMigrationModel{
 				Name: "Node.js", Kind: "builtin", Executable: "node", Description: "Node.js 运行时（需要 fnm）",
 				DetectScript: "node --version", VersionsScript: "fnm list",
-				InstallScript: `command -v fnm >/dev/null 2>&1 || { echo 'fnm is required to manage Node.js versions'; exit 1; }; version="{{version}}"; [ -n "$version" ] || { echo 'a Node.js version is required'; exit 2; }; export FNM_NODE_DIST_MIRROR="{{source_url}}"; fnm install "$version" && fnm default "$version"`,
-				UpgradeScript: `command -v fnm >/dev/null 2>&1 || { echo 'fnm is required to manage Node.js versions'; exit 1; }; version="{{version}}"; [ -n "$version" ] || { echo 'a Node.js version is required'; exit 2; }; export FNM_NODE_DIST_MIRROR="{{source_url}}"; fnm install "$version" && fnm default "$version"`,
+				InstallScript:   `command -v fnm >/dev/null 2>&1 || { echo 'fnm is required to manage Node.js versions'; exit 1; }; version="{{version}}"; [ -n "$version" ] || { echo 'a Node.js version is required'; exit 2; }; export FNM_NODE_DIST_MIRROR="{{source_url}}"; fnm install "$version" && fnm default "$version"`,
+				UpgradeScript:   `command -v fnm >/dev/null 2>&1 || { echo 'fnm is required to manage Node.js versions'; exit 1; }; version="{{version}}"; [ -n "$version" ] || { echo 'a Node.js version is required'; exit 2; }; export FNM_NODE_DIST_MIRROR="{{source_url}}"; fnm install "$version" && fnm default "$version"`,
 				UninstallScript: `command -v fnm >/dev/null 2>&1 || { echo 'fnm is required to manage Node.js versions'; exit 1; }; version="{{version}}"; [ -n "$version" ] || { echo 'a Node.js version is required'; exit 2; }; fnm uninstall "$version"`,
-				SwitchScript: `command -v fnm >/dev/null 2>&1 || { echo 'fnm is required to manage Node.js versions'; exit 1; }; version="{{version}}"; [ -n "$version" ] || { echo 'a Node.js version is required'; exit 2; }; fnm default "$version"`,
+				SwitchScript:    `command -v fnm >/dev/null 2>&1 || { echo 'fnm is required to manage Node.js versions'; exit 1; }; version="{{version}}"; [ -n "$version" ] || { echo 'a Node.js version is required'; exit 2; }; fnm default "$version"`,
 			},
 			Sources: []devEnvInstallSourceMigrationModel{
 				{Name: "nodejs.org", BaseURL: "https://nodejs.org/dist", Priority: 10, Enabled: true},
@@ -146,10 +146,10 @@ func builtinDevEnvironments() []seededDevEnv {
 			Env: devEnvironmentMigrationModel{
 				Name: "Java", Kind: "builtin", Executable: "java", Description: "Java 运行时（需要 SDKMAN!）",
 				DetectScript: "java -version", VersionsScript: `. "$HOME/.sdkman/bin/sdkman-init.sh" && sdk list java`,
-				InstallScript: `[ -s "$HOME/.sdkman/bin/sdkman-init.sh" ] || { echo 'SDKMAN! is required to manage Java versions'; exit 1; }; . "$HOME/.sdkman/bin/sdkman-init.sh"; version="{{version}}"; [ -n "$version" ] || { echo 'a Java identifier is required'; exit 2; }; sdk install java "$version" && sdk default java "$version"`,
-				UpgradeScript: `[ -s "$HOME/.sdkman/bin/sdkman-init.sh" ] || { echo 'SDKMAN! is required to manage Java versions'; exit 1; }; . "$HOME/.sdkman/bin/sdkman-init.sh"; version="{{version}}"; [ -n "$version" ] || { echo 'a Java identifier is required'; exit 2; }; sdk install java "$version" && sdk default java "$version"`,
+				InstallScript:   `[ -s "$HOME/.sdkman/bin/sdkman-init.sh" ] || { echo 'SDKMAN! is required to manage Java versions'; exit 1; }; . "$HOME/.sdkman/bin/sdkman-init.sh"; version="{{version}}"; [ -n "$version" ] || { echo 'a Java identifier is required'; exit 2; }; sdk install java "$version" && sdk default java "$version"`,
+				UpgradeScript:   `[ -s "$HOME/.sdkman/bin/sdkman-init.sh" ] || { echo 'SDKMAN! is required to manage Java versions'; exit 1; }; . "$HOME/.sdkman/bin/sdkman-init.sh"; version="{{version}}"; [ -n "$version" ] || { echo 'a Java identifier is required'; exit 2; }; sdk install java "$version" && sdk default java "$version"`,
 				UninstallScript: `[ -s "$HOME/.sdkman/bin/sdkman-init.sh" ] || { echo 'SDKMAN! is required to manage Java versions'; exit 1; }; . "$HOME/.sdkman/bin/sdkman-init.sh"; version="{{version}}"; [ -n "$version" ] || { echo 'a Java identifier is required'; exit 2; }; sdk uninstall java "$version"`,
-				SwitchScript: `[ -s "$HOME/.sdkman/bin/sdkman-init.sh" ] || { echo 'SDKMAN! is required to manage Java versions'; exit 1; }; . "$HOME/.sdkman/bin/sdkman-init.sh"; version="{{version}}"; [ -n "$version" ] || { echo 'a Java identifier is required'; exit 2; }; sdk default java "$version"`,
+				SwitchScript:    `[ -s "$HOME/.sdkman/bin/sdkman-init.sh" ] || { echo 'SDKMAN! is required to manage Java versions'; exit 1; }; . "$HOME/.sdkman/bin/sdkman-init.sh"; version="{{version}}"; [ -n "$version" ] || { echo 'a Java identifier is required'; exit 2; }; sdk default java "$version"`,
 			},
 			Sources: []devEnvInstallSourceMigrationModel{
 				{Name: "sdkman candidates", BaseURL: "https://api.sdkman.io/2", Priority: 10, Enabled: true},
@@ -159,10 +159,10 @@ func builtinDevEnvironments() []seededDevEnv {
 			Env: devEnvironmentMigrationModel{
 				Name: "Python", Kind: "builtin", Executable: "python3", Description: "Python 运行时（需要 pyenv）",
 				DetectScript: "python3 --version", VersionsScript: "pyenv versions",
-				InstallScript: `command -v pyenv >/dev/null 2>&1 || { echo 'pyenv is required to manage Python versions'; exit 1; }; version="{{version}}"; [ -n "$version" ] || { echo 'a Python version is required'; exit 2; }; export PYTHON_BUILD_MIRROR_URL="{{source_url}}"; pyenv install --skip-existing "$version" && pyenv global "$version"`,
-				UpgradeScript: `command -v pyenv >/dev/null 2>&1 || { echo 'pyenv is required to manage Python versions'; exit 1; }; version="{{version}}"; [ -n "$version" ] || { echo 'a Python version is required'; exit 2; }; export PYTHON_BUILD_MIRROR_URL="{{source_url}}"; pyenv install --skip-existing "$version" && pyenv global "$version"`,
+				InstallScript:   `command -v pyenv >/dev/null 2>&1 || { echo 'pyenv is required to manage Python versions'; exit 1; }; version="{{version}}"; [ -n "$version" ] || { echo 'a Python version is required'; exit 2; }; export PYTHON_BUILD_MIRROR_URL="{{source_url}}"; pyenv install --skip-existing "$version" && pyenv global "$version"`,
+				UpgradeScript:   `command -v pyenv >/dev/null 2>&1 || { echo 'pyenv is required to manage Python versions'; exit 1; }; version="{{version}}"; [ -n "$version" ] || { echo 'a Python version is required'; exit 2; }; export PYTHON_BUILD_MIRROR_URL="{{source_url}}"; pyenv install --skip-existing "$version" && pyenv global "$version"`,
 				UninstallScript: `command -v pyenv >/dev/null 2>&1 || { echo 'pyenv is required to manage Python versions'; exit 1; }; version="{{version}}"; [ -n "$version" ] || { echo 'a Python version is required'; exit 2; }; pyenv uninstall -f "$version"`,
-				SwitchScript: `command -v pyenv >/dev/null 2>&1 || { echo 'pyenv is required to manage Python versions'; exit 1; }; version="{{version}}"; [ -n "$version" ] || { echo 'a Python version is required'; exit 2; }; pyenv global "$version"`,
+				SwitchScript:    `command -v pyenv >/dev/null 2>&1 || { echo 'pyenv is required to manage Python versions'; exit 1; }; version="{{version}}"; [ -n "$version" ] || { echo 'a Python version is required'; exit 2; }; pyenv global "$version"`,
 			},
 			Sources: []devEnvInstallSourceMigrationModel{
 				{Name: "python.org", BaseURL: "https://www.python.org/ftp/python", Priority: 10, Enabled: true},

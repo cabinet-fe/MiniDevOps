@@ -7,6 +7,7 @@ import {
   DArrowLeft,
   DArrowRight,
   HouseFilled,
+  FolderOpened,
   Layers,
   Logout,
   Monitor,
@@ -39,6 +40,7 @@ const nameInitial = computed(() => {
 const ROOT_ICONS: Record<string, DefineComponent> = {
   dashboard: HouseFilled as DefineComponent,
   ops: Tools as DefineComponent,
+  resource: FolderOpened as DefineComponent,
   cicd: Layers as DefineComponent,
   project: Books as DefineComponent,
   system: Setting as DefineComponent,

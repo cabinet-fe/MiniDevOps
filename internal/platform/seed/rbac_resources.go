@@ -32,13 +32,18 @@ func EnsureRBACResources(db *gorm.DB) error {
 			},
 		},
 		{
+			Path: "resource", Title: "资源管理", Route: "/resource", SortKey: 25,
+			Children: []seedMenu{
+				{Path: "resource.repositories", Title: "代码仓库", Route: "/resource/repositories", SortKey: 10},
+				{Path: "resource.servers", Title: "服务器", Route: "/resource/servers", SortKey: 20},
+				{Path: "resource.credentials", Title: "凭证", Route: "/resource/credentials", SortKey: 30},
+			},
+		},
+		{
 			Path: "cicd", Title: "CI/CD", Route: "/cicd", SortKey: 30,
 			Children: []seedMenu{
-				{Path: "cicd.repositories", Title: "代码仓库", Route: "/cicd/repositories", SortKey: 10},
-				{Path: "cicd.build_jobs", Title: "构建任务", Route: "/cicd/build-jobs", SortKey: 20},
-				{Path: "cicd.build_runs", Title: "构建记录", Route: "/cicd/build-runs", SortKey: 30},
-				{Path: "cicd.servers", Title: "服务器", Route: "/cicd/servers", SortKey: 40},
-				{Path: "cicd.credentials", Title: "凭证", Route: "/cicd/credentials", SortKey: 50},
+				{Path: "cicd.build_jobs", Title: "构建任务", Route: "/cicd/build-jobs", SortKey: 10},
+				{Path: "cicd.build_runs", Title: "构建记录", Route: "/cicd/build-runs", SortKey: 20},
 			},
 		},
 		{

@@ -123,7 +123,10 @@ watch(
       </template>
       <template #column:trigger_type="{ rowData }">
         <u-tag size="small" :type="tagType((rowData as AgentRun).trigger_type, TRIGGER_TYPE_TAG)">
-          {{ TRIGGER_TYPE_LABEL[(rowData as AgentRun).trigger_type] ?? (rowData as AgentRun).trigger_type }}
+          {{
+            TRIGGER_TYPE_LABEL[(rowData as AgentRun).trigger_type] ??
+            (rowData as AgentRun).trigger_type
+          }}
         </u-tag>
       </template>
       <template #column:status="{ rowData }">

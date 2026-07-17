@@ -31,20 +31,20 @@ echo "==> menus / RBAC"
 ME="$(curl -fsS "$BASE/api/v1/auth/me" "${AUTH[@]}")"
 json_get "$ME" "len(o['data']['menus'])" >/dev/null
 
-echo "==> CI/CD list surfaces"
+echo "==> resource + CI/CD list surfaces"
 for path in \
-  /repositories \
+  /resource/repositories \
+  /resource/servers \
+  /resource/credentials \
   /build-jobs \
-  /build-runs \
-  /servers \
-  /credentials
+  /build-runs
 do
   CODE="$(curl -sS -o /tmp/smoke-body.json -w '%{http_code}' "$BASE/api/v1$path" -H "Authorization: Bearer $TOKEN")"
   [[ "$CODE" == "200" ]] || { echo "GET $path → $CODE $(cat /tmp/smoke-body.json)" >&2; exit 1; }
 done
 
 echo "==> create local repo + job (build path)"
-REPO="$(curl -fsS -X POST "$BASE/api/v1/repositories" "${AUTH[@]}" \
+REPO="$(curl -fsS -X POST "$BASE/api/v1/resource/repositories" "${AUTH[@]}" \
   -d '{"name":"smoke-repo","repo_url":"https://example.com/smoke.git"}')"
 REPO_ID="$(json_get "$REPO" "o['data']['id']")"
 

@@ -148,38 +148,55 @@ func appendFullPermissionArgs(cliKey string, args []string) []string {
 	}
 }
 
-// agentWorkspaceScopeHint asks the CLI to stay inside BEDROCK_AGENT_WORKDIR
-// (softlinks like ./job-{id} are in scope) and write deliverables to OUTPUT.
+// agentWorkspaceScopeHint asks the CLI to stay inside the persistent
+// BEDROCK_AGENT_WORKDIR and write deliverables into BEDROCK_AGENT_OUTPUT.
 func agentWorkspaceScopeHint() string {
 	return "你的工作目录是 $BEDROCK_AGENT_WORKDIR（agents 下本智能体目录）。" +
+		"该目录是跨 Run 复用的持久工作区；不要删除其中已有文件，除非明确需要。" +
 		"只能在该目录内读写；通过 ./job-{id} 软链访问构建任务代码。" +
 		"禁止访问该目录之外的任意路径。" +
+		"请将需交付的文件写入 $BEDROCK_AGENT_OUTPUT（本智能体固定产出目录，默认 ./output）。" +
 		" Your working directory is $BEDROCK_AGENT_WORKDIR (this agent under agents/)." +
+		" This persistent workspace is reused across runs; do not delete existing files unless required." +
 		" Read/write only inside it; access bound build-job code via ./job-{id} softlinks." +
 		" Do not access any path outside this directory." +
-		" Write deliverable files into $BEDROCK_AGENT_OUTPUT."
+		" Write deliverable files into $BEDROCK_AGENT_OUTPUT (this agent's fixed output directory)."
 }
 
 func (s *AgentService) removeAgentWorkspace(agentID uint) {
 	_ = os.RemoveAll(s.agentRoot(agentID))
 }
 
-func dirHasRegularFiles(dir string) (bool, error) {
-	has := false
-	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-		if info != nil && info.Mode().IsRegular() {
-			has = true
-			return filepath.SkipAll
-		}
-		return nil
-	})
-	if err != nil && !os.IsNotExist(err) {
-		return false, err
+// resolveAgentOutputDir returns the fixed per-agent output directory under the
+// persistent agent root. It never creates per-run subdirectories.
+func resolveAgentOutputDir(agentRoot, outputDir string) (string, error) {
+	rel := strings.TrimSpace(outputDir)
+	if rel == "" {
+		rel = "output"
 	}
-	return has, nil
+	rel = filepath.Clean(rel)
+	if rel == "." || filepath.IsAbs(rel) || rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
+		return "", fmt.Errorf("无效的 output_dir: %q", outputDir)
+	}
+	out := filepath.Join(agentRoot, rel)
+	relToRoot, err := filepath.Rel(agentRoot, out)
+	if err != nil {
+		return "", err
+	}
+	if relToRoot == ".." || strings.HasPrefix(relToRoot, ".."+string(os.PathSeparator)) || filepath.IsAbs(relToRoot) {
+		return "", fmt.Errorf("output_dir 越出 Agent 工作区: %q", outputDir)
+	}
+	return out, nil
+}
+
+// prepareAgentOutputDir ensures the fixed output directory exists and clears
+// its previous contents so the next run can overwrite cleanly. The agent root
+// itself is never cleared.
+func prepareAgentOutputDir(outputDir string) error {
+	if err := os.RemoveAll(outputDir); err != nil {
+		return err
+	}
+	return os.MkdirAll(outputDir, 0o755)
 }
 
 func encodeBuildJobIDs(agent *model.AiAgent, ids []uint) error {

@@ -20,7 +20,6 @@ import (
 	"bedrock/internal/ai/model"
 	"bedrock/internal/ai/repository"
 	cicdmodel "bedrock/internal/cicd/model"
-	"bedrock/internal/engine"
 	"bedrock/internal/ws"
 )
 
@@ -35,18 +34,17 @@ type TerminalNotifier interface {
 }
 
 type AgentService struct {
-	repo        *repository.AIRepository
-	cli         *CLIService
-	skills      *SkillService
-	hub         *ws.Hub
-	logger      *zap.Logger
-	workDir     string
-	artifactDir string
-	logDir      string
-	docs        DocDraftWriter
-	jobs        BuildJobFinder
-	audit       AuditWriter
-	notifier    TerminalNotifier
+	repo     *repository.AIRepository
+	cli      *CLIService
+	skills   *SkillService
+	hub      *ws.Hub
+	logger   *zap.Logger
+	workDir  string
+	logDir   string
+	docs     DocDraftWriter
+	jobs     BuildJobFinder
+	audit    AuditWriter
+	notifier TerminalNotifier
 
 	runs    chan uint
 	stop    chan struct{}
@@ -82,12 +80,12 @@ func NewAgentService(
 	skills *SkillService,
 	hub *ws.Hub,
 	logger *zap.Logger,
-	workDir, artifactDir, logDir string,
+	workDir, logDir string,
 	audit ...AuditWriter,
 ) *AgentService {
 	svc := &AgentService{
 		repo: repo, cli: cli, skills: skills, hub: hub, logger: logger,
-		workDir: workDir, artifactDir: artifactDir, logDir: logDir,
+		workDir: workDir, logDir: logDir,
 		runs: make(chan uint, 128), stop: make(chan struct{}),
 		cronIDs: make(map[uint]cron.EntryID),
 	}
@@ -143,18 +141,16 @@ func (s *AgentService) RecoverOnStartup() error {
 }
 
 type AgentInput struct {
-	Name           string `json:"name"`
-	Description    string `json:"description"`
-	Enabled        *bool  `json:"enabled"`
-	CliKey         string `json:"cli_key"`
-	SystemPrompt   string `json:"system_prompt"`
-	SkillIDs       []uint `json:"skill_ids"`
-	BuildJobIDs    []uint `json:"build_job_ids"`
-	OutputDir      string `json:"output_dir"`
-	ArtifactFormat string `json:"artifact_format"`
-	MaxArtifacts   int    `json:"max_artifacts"`
-	StreamOutput   *bool  `json:"stream_output"`
-	TimeoutSec     int    `json:"timeout_sec"`
+	Name         string `json:"name"`
+	Description  string `json:"description"`
+	Enabled      *bool  `json:"enabled"`
+	CliKey       string `json:"cli_key"`
+	SystemPrompt string `json:"system_prompt"`
+	SkillIDs     []uint `json:"skill_ids"`
+	BuildJobIDs  []uint `json:"build_job_ids"`
+	OutputDir    string `json:"output_dir"`
+	StreamOutput *bool  `json:"stream_output"`
+	TimeoutSec   int    `json:"timeout_sec"`
 }
 
 func (s *AgentService) CreateAgent(createdBy uint, in AgentInput) (*model.AiAgent, error) {
@@ -169,11 +165,9 @@ func (s *AgentService) CreateAgent(createdBy uint, in AgentInput) (*model.AiAgen
 		Name: name, Description: strings.TrimSpace(in.Description),
 		Enabled: boolOr(in.Enabled, true), CliKey: in.CliKey,
 		SystemPrompt: in.SystemPrompt,
-		OutputDir: stringOr(in.OutputDir, "output"),
-		ArtifactFormat: normalizeAgentArtifactFormat(in.ArtifactFormat),
-		MaxArtifacts: intOr(in.MaxArtifacts, 10),
+		OutputDir:    stringOr(in.OutputDir, "output"),
 		StreamOutput: boolOr(in.StreamOutput, false),
-		TimeoutSec: intOr(in.TimeoutSec, 600), CreatedBy: createdBy,
+		TimeoutSec:   intOr(in.TimeoutSec, 600), CreatedBy: createdBy,
 	}
 	if err := encodeSkillIDs(agent, in.SkillIDs); err != nil {
 		return nil, err
@@ -232,12 +226,6 @@ func (s *AgentService) UpdateAgent(id, userID uint, in AgentInput) (*model.AiAge
 	}
 	if strings.TrimSpace(in.OutputDir) != "" {
 		agent.OutputDir = strings.TrimSpace(in.OutputDir)
-	}
-	if strings.TrimSpace(in.ArtifactFormat) != "" {
-		agent.ArtifactFormat = normalizeAgentArtifactFormat(in.ArtifactFormat)
-	}
-	if in.MaxArtifacts > 0 {
-		agent.MaxArtifacts = in.MaxArtifacts
 	}
 	if in.StreamOutput != nil {
 		agent.StreamOutput = *in.StreamOutput
@@ -305,11 +293,11 @@ func (s *AgentService) CreateTrigger(agentID, userID uint, in TriggerInput) (*mo
 	}
 	t := &model.AgentTrigger{
 		AgentID: agentID, Type: strings.TrimSpace(in.Type),
-		Enabled: boolOr(in.Enabled, true),
+		Enabled:        boolOr(in.Enabled, true),
 		CronExpression: strings.TrimSpace(in.CronExpression),
-		CronTimezone: stringOr(in.CronTimezone, "UTC"),
-		BuildJobID: in.BuildJobID,
-		BuildEvent: strings.TrimSpace(in.BuildEvent),
+		CronTimezone:   stringOr(in.CronTimezone, "UTC"),
+		BuildJobID:     in.BuildJobID,
+		BuildEvent:     strings.TrimSpace(in.BuildEvent),
 	}
 	if err := validateTrigger(t); err != nil {
 		return nil, err
@@ -396,18 +384,16 @@ func (s *AgentService) CreateRun(agentID uint, in CreateRunInput) (*model.AgentR
 	decodeSkillIDs(agent)
 	decodeBuildJobIDs(agent)
 	snapshot, _ := json.Marshal(map[string]any{
-		"agent_id":        agent.ID,
-		"cli_key":         agent.CliKey,
-		"system_prompt":   agent.SystemPrompt,
-		"skill_ids":       agent.SkillIDs,
-		"build_job_ids":   agent.BuildJobIDs,
-		"output_dir":      agent.OutputDir,
-		"artifact_format": agent.ArtifactFormat,
-		"max_artifacts":   agent.MaxArtifacts,
-		"stream_output":   agent.StreamOutput,
-		"timeout_sec":     agent.TimeoutSec,
-		"context_note":    "system_prompt + skills + build_job softlinks in persistent agent workspace",
-		"risk_notice":     model.RiskNoticeSameUID,
+		"agent_id":      agent.ID,
+		"cli_key":       agent.CliKey,
+		"system_prompt": agent.SystemPrompt,
+		"skill_ids":     agent.SkillIDs,
+		"build_job_ids": agent.BuildJobIDs,
+		"output_dir":    agent.OutputDir,
+		"stream_output": agent.StreamOutput,
+		"timeout_sec":   agent.TimeoutSec,
+		"context_note":  "persistent agent workspace + fixed output_dir + skills + build_job softlinks",
+		"risk_notice":   model.RiskNoticeSameUID,
 	})
 	run := &model.AgentRun{
 		AgentID: agentID, TriggerType: in.TriggerType, TriggerID: in.TriggerID,
@@ -492,21 +478,6 @@ func (s *AgentService) dispatchBuildEvent(event string, job *cicdmodel.BuildJob,
 
 func (s *AgentService) GetRun(id uint) (*model.AgentRun, error) {
 	return s.repo.FindRun(id)
-}
-
-func (s *AgentService) ArtifactPath(id uint) (path string, filename string, err error) {
-	run, err := s.repo.FindRun(id)
-	if err != nil {
-		return "", "", err
-	}
-	path = strings.TrimSpace(run.ArtifactPath)
-	if path == "" {
-		return "", "", errors.New("制品不存在")
-	}
-	if _, err := os.Stat(path); err != nil {
-		return "", "", errors.New("制品文件不存在")
-	}
-	return path, filepath.Base(path), nil
 }
 
 func (s *AgentService) ListRuns(page, pageSize int, agentID uint, status string) ([]model.AgentRun, int64, error) {
@@ -620,17 +591,20 @@ func (s *AgentService) ExecuteRun(ctx context.Context, id uint) {
 		writeLog("bound job dirs: " + strings.Join(jobDirs, " "))
 	}
 
-	runOutput := filepath.Join(agentRoot, "runs", fmt.Sprintf("run-%d", run.ID), "output")
-	_ = os.RemoveAll(filepath.Dir(runOutput))
-	if err := os.MkdirAll(runOutput, 0o755); err != nil {
+	absRoot, _ := filepath.Abs(agentRoot)
+	outputDir, err := resolveAgentOutputDir(agentRoot, agent.OutputDir)
+	if err != nil {
 		s.failRun(run, err)
 		return
 	}
-	absOutput, _ := filepath.Abs(runOutput)
-	absRoot, _ := filepath.Abs(agentRoot)
+	if err := prepareAgentOutputDir(outputDir); err != nil {
+		s.failRun(run, err)
+		return
+	}
+	absOutput, _ := filepath.Abs(outputDir)
 	writeLog("workdir=" + absRoot)
 	writeLog("BEDROCK_AGENT_OUTPUT=" + absOutput)
-	writeLog("请将需交付的文件写入 $BEDROCK_AGENT_OUTPUT")
+	writeLog("请将需交付的文件写入 $BEDROCK_AGENT_OUTPUT（固定产出目录，跨 Run 复用）")
 
 	binary, lookErr := ResolveBinary(cli)
 	if lookErr != nil {
@@ -660,10 +634,9 @@ func (s *AgentService) ExecuteRun(ctx context.Context, id uint) {
 
 	cmd := exec.CommandContext(runCtx, binary, args...)
 	cmd.Dir = agentRoot
-	cmd.Env = BuildRuntimeEnv(cli, "", map[string]string{
-		"BEDROCK_AGENT_OUTPUT":  absOutput,
+	cmd.Env = append(removeEnv(BuildRuntimeEnv(cli, "", map[string]string{
 		"BEDROCK_AGENT_WORKDIR": absRoot,
-	})
+	}), "BEDROCK_AGENT_OUTPUT"), "BEDROCK_AGENT_OUTPUT="+absOutput)
 	stdout, _ := cmd.StdoutPipe()
 	stderr, _ := cmd.StderrPipe()
 	if err := cmd.Start(); err != nil {
@@ -711,10 +684,6 @@ func (s *AgentService) ExecuteRun(ctx context.Context, id uint) {
 		return
 	}
 
-	if err := s.archiveRunOutput(run, agent, absOutput, writeLog); err != nil {
-		writeLog("artifact archive failed: " + err.Error())
-	}
-
 	run.Status = model.JobSuccess
 	run.ErrorMessage = ""
 	writeLog("success")
@@ -732,52 +701,6 @@ func (s *AgentService) ExecuteRun(ctx context.Context, id uint) {
 		}
 	}
 	s.notifyTerminal(run, model.JobSuccess)
-}
-
-func (s *AgentService) archiveRunOutput(run *model.AgentRun, agent *model.AiAgent, runOutput string, writeLog func(string)) error {
-	hasFiles, err := dirHasRegularFiles(runOutput)
-	if err != nil {
-		return err
-	}
-	if !hasFiles {
-		writeLog("output empty; skip artifact")
-		return nil
-	}
-	format := normalizeAgentArtifactFormat(agent.ArtifactFormat)
-	dir := filepath.Join(s.artifactDir, fmt.Sprintf("agent-%d", agent.ID))
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return err
-	}
-	artifactPath := filepath.Join(dir, fmt.Sprintf("run-%d%s", run.ID, engine.ArtifactArchiveExt(format)))
-	if err := engine.CreateArtifactArchive(artifactPath, runOutput, format); err != nil {
-		return err
-	}
-	run.ArtifactPath = artifactPath
-	writeLog("artifact=" + artifactPath)
-	_ = s.repo.UpdateRunFields(run.ID, map[string]any{"artifact_path": artifactPath})
-	s.cleanupAgentArtifacts(agent)
-	return nil
-}
-
-func (s *AgentService) cleanupAgentArtifacts(agent *model.AiAgent) {
-	maxArtifacts := agent.MaxArtifacts
-	if maxArtifacts <= 0 {
-		maxArtifacts = 10
-	}
-	items, err := s.repo.ListArtifactsByAgent(agent.ID)
-	if err != nil || len(items) <= maxArtifacts {
-		return
-	}
-	for _, item := range items[maxArtifacts:] {
-		if item.ArtifactPath != "" {
-			_ = os.Remove(item.ArtifactPath)
-			_ = s.repo.UpdateRunFields(item.ID, map[string]any{"artifact_path": ""})
-		}
-	}
-}
-
-func normalizeAgentArtifactFormat(f string) string {
-	return engine.NormalizeArtifactFormat(f)
 }
 
 func (s *AgentService) failRun(run *model.AgentRun, err error) {
@@ -952,4 +875,15 @@ func stringOr(v, def string) string {
 		return def
 	}
 	return strings.TrimSpace(v)
+}
+
+func removeEnv(env []string, key string) []string {
+	prefix := key + "="
+	filtered := env[:0]
+	for _, item := range env {
+		if !strings.HasPrefix(item, prefix) {
+			filtered = append(filtered, item)
+		}
+	}
+	return filtered
 }

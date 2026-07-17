@@ -11,6 +11,7 @@ import (
 
 	"bedrock/internal/cicd/model"
 	"bedrock/internal/deployer"
+	resourcemodel "bedrock/internal/resource/model"
 )
 
 func (p *Pipeline) runDistributions(
@@ -243,7 +244,7 @@ func (p *Pipeline) deployOneTarget(
 	return nil
 }
 
-func (p *Pipeline) resolveServerSecrets(server *model.Server) (password, privateKey, agentToken string, err error) {
+func (p *Pipeline) resolveServerSecrets(server *resourcemodel.Server) (password, privateKey, agentToken string, err error) {
 	if server.CredentialID != nil && *server.CredentialID > 0 {
 		typ, _, secret, passphrase, rerr := p.secrets.Resolve(*server.CredentialID)
 		if rerr != nil {

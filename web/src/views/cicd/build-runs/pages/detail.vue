@@ -211,7 +211,9 @@ onMounted(async () => {
           >
             下载制品
           </u-button>
-          <u-button v-if="canRetry" type="primary" :disabled="acting" @click="onRetry">重试</u-button>
+          <u-button v-if="canRetry" type="primary" :disabled="acting" @click="onRetry"
+            >重试</u-button
+          >
           <u-button v-if="canRedeploy" type="primary" :disabled="acting" @click="onRedeploy">
             重新分发
           </u-button>
@@ -284,7 +286,9 @@ onMounted(async () => {
                   <span class="mono">batch {{ a.batch_no }}</span>
                   <span class="attempt__sep">·</span>
                   <span>target {{ a.deploy_target_id ?? "—" }}</span>
-                  <u-tag size="small" :type="tagType(a.status, JOB_STATUS_TAG)">{{ a.status }}</u-tag>
+                  <u-tag size="small" :type="tagType(a.status, JOB_STATUS_TAG)">{{
+                    a.status
+                  }}</u-tag>
                 </div>
                 <p v-if="a.error_message" class="attempt__error">{{ a.error_message }}</p>
               </li>

@@ -21,7 +21,8 @@
 | -------- | ----------------------------------------------------------------------- |
 | 仪表盘   | 可配置、受权限约束的总览入口                                            |
 | 运维     | 宿主机级能力，仅内置超级管理员可用                                      |
-| CI/CD    | 独立交付域：仓库、任务、执行、服务器、凭证、部署                        |
+| 资源管理 | 共享资源域：代码仓库、服务器、凭证                                              |
+| CI/CD    | 独立交付域：任务、执行、部署（引用资源管理中的仓库/服务器/凭证）                |
 | 项目管理 | 独立协作域：产品项目、需求、接口文档；与 CI/CD **解耦**，需要时手动关联 |
 | AI       | CLI 运行时、智能体编排、Skills 资产库                                   |
 | 系统管理 | 用户、角色、权限资源、字典、操作日志                                    |
@@ -59,7 +60,7 @@
 | **开发环境（DevEnvironment）**   | 宿主机上的 Go/Node/Java/Python 等运行时与包管理器                                                          | CI「环境」                            |
 | **AI CLI / CLI 运行时**         | Claude Code、OpenCode、Reasonix、Codex 等 AI 命令行工具                                                    | 网络代理                              |
 | **AI 智能体（AI Agent）**       | 平台托管的智能体定义：提示词、CLI、Skill、触发器、上下文                                                   | 部署 Agent                            |
-| **智能体运行（Agent Run）**     | 一次智能体异步执行及交互记录                                                                               | 构建执行                              |
+| **智能体运行（Agent Run）**     | 一次智能体异步执行及交互记录；记录状态、日志与文本输出，不承载文件制品                                     | 构建执行                              |
 | **开放 Agent Skill**            | 符合 [Agent Skills](https://agentskills.io/specification) 规范的技能包（含 `SKILL.md`）                    | Cursor 私有专有格式（可兼容但不限定） |
 | **权限资源（RBAC Resource）**   | 可授权对象，编码为 `{path}:action`；`path` 由一级或多级 `level` 以 `.` 连接，**不**假定固定为「模块.页面」 | CPU/磁盘等系统资源                    |
 | **菜单资源**                    | 权限资源的一种，对应左侧导航；含一级菜单（分组/入口）与二级及以下菜单项                                    | 普通 API/按钮资源                     |
@@ -189,13 +190,14 @@ level1.level2.level3:action
 | `dashboard.system_info:view`   | 查看系统信息卡片                            |
 | `dashboard.system_status:view` | 查看系统状态卡片                            |
 | `cicd:view`                    | 查看 CI/CD 一级菜单（有子项时表示分组可见） |
-| `cicd.repositories:view`       | 查看代码仓库页                              |
-| `cicd.repositories:create`     | 创建代码仓库                                |
+| `resource.repositories:view`   | 查看代码仓库页                              |
+| `resource.repositories:create` | 创建代码仓库                                |
 | `cicd.build_runs:view`         | 查看构建执行                                |
 | `cicd.build_runs:cancel`       | 取消构建执行                                |
 | `cicd.build_runs:download`     | 下载制品                                    |
-| `cicd.credentials:view`        | 查看凭证元数据                              |
-| `cicd.credentials:use`         | 在任务中引用/使用凭证                       |
+| `resource.credentials:view`    | 查看凭证元数据                              |
+| `resource.credentials:use`     | 在任务中引用/使用凭证                       |
+| `resource:view`                | 查看资源管理一级菜单                        |
 | `ops:view`                     | 运维一级菜单（仅超管实际生效）              |
 | `ops.processes:view`           | 查看进程                                    |
 | `ops.processes:delete`         | 终止进程                                    |
@@ -216,7 +218,7 @@ level1.level2.level3:action
 
 | 字段（概念） | 说明                                                                                                                                                                                                                 |
 | ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| code / path  | 资源路径，如 `dashboard`、`cicd`、`cicd.repositories`                                                                                                                                                                |
+| code / path  | 资源路径，如 `dashboard`、`resource`、`resource.repositories`、`cicd`                                                                                                                                                                |
 | type         | 至少区分 `menu` 与其它（如 `page` / `action` / `card`，实现可合并）                                                                                                                                                  |
 | title        | 显示名称                                                                                                                                                                                                             |
 | parent       | 父资源；一级菜单 parent 为空                                                                                                                                                                                         |
@@ -246,6 +248,7 @@ level1.level2.level3:action
 | ------------------------------------ | ---------- | ------------------------ | ---------------------- |
 | 运维（进程/开发环境）                | ✓          | ✗（强制）                | ✗                      |
 | 系统管理（用户/角色/资源/字典/日志） | ✓          | 按资源                   | ✗                      |
+| 资源管理（仓库/服务器/凭证）         | ✓          | 按资源                   | ✗                      |
 | CI/CD                                | ✓          | 按资源                   | ✗                      |
 | 项目管理                             | ✓          | 按资源 + 项目成员        | ✗                      |
 | AI / Skills                          | ✓          | 按资源                   | ✗                      |
@@ -275,7 +278,8 @@ level1.level2.level3:action
 | ------------- | -------- | ------------------------------------------------------------------------------------------------------------------ |
 | `dashboard`   | 仪表盘   | （可无子菜单；卡片权限见 `dashboard.system_info` 等）                                                              |
 | `ops`         | 运维     | `ops.processes`、`ops.dev_environments`                                                                            |
-| `cicd`        | CI/CD    | `cicd.repositories`、`cicd.build_jobs`、`cicd.build_runs`、`cicd.servers`、`cicd.credentials`                      |
+| `resource`    | 资源管理 | `resource.repositories`、`resource.servers`、`resource.credentials`                                               |
+| `cicd`        | CI/CD    | `cicd.build_jobs`、`cicd.build_runs`                                                                              |
 | `project`     | 项目管理 | `project.projects`、`project.requirements`、`project.docs`                                                         |
 | `ai`          | AI       | `ai.clis`、`ai.agents`、`ai.runs`、`ai.skills`、`ai.tokens`                                                          |
 | `system`      | 系统管理 | `system.users`、`system.roles`、`system.resources`、`system.dictionaries`、`system.operation_logs` |
@@ -476,6 +480,8 @@ level1.level2.level3:action
 
 **并发：** 全局最大并发可配置；超出排队。
 
+BuildRun 的输出目录、制品归档、保留与下载能力属于 CI/CD 域，不因 Agent 工作区或 AgentRun 不提供文件制品而改变。
+
 ### 9.4 服务器
 
 沿用现有能力：主机、端口、OS、认证方式（password/key/ssh-agent/deploy-agent）、连接测试、被部署目标引用保护。
@@ -529,16 +535,19 @@ level1.level2.level3:action
 | cli_key       | 使用的 AI CLI              |
 | system_prompt | 固定系统提示词             |
 | skill_ids     | 显式绑定的一个或多个 Skill |
-| repository_id | 可选默认代码仓库上下文     |
+| build_job_ids | 可选绑定构建任务工作区     |
+| output_dir    | 固定产出目录相对名（默认 `output`） |
 | timeout       | 超时                       |
 | created_by    | 创建者                     |
+
+每个 Agent 唯一对应 `{workspace}/agents/agent-{id}/` 持久根工作区。所有 Run 直接复用该目录，启动后续 Run 时不得清空根目录已有文件，也不为单次 Run 创建独立输出目录。每个 Agent 另有固定产出目录 `{agentRoot}/{output_dir}`（默认相对名 `output`），跨 Run 复用；CLI 同时接收 `BEDROCK_AGENT_WORKDIR` 与 `BEDROCK_AGENT_OUTPUT`。
 
 ### 10.3 智能体上下文（首期）
 
 仅两类：
 
 1. **静态提示词**（定义中的 system_prompt + 触发时附加输入）。
-2. **代码仓库**：克隆/拉取到运行工作区，供 CLI 操作。
+2. **代码仓库**：同步到 Agent 持久根工作区或通过绑定目录提供，供 CLI 操作。
 
 > 首期不注入需求、接口文档、历史会话作为自动上下文（接口文档生成场景由触发时显式选择仓库与目标路径）。
 
@@ -555,7 +564,9 @@ level1.level2.level3:action
 
 ### 10.5 利用 CLI 操作
 
-- 在隔离工作区准备上下文（仓库、Skill 目录注入）。
+- 在该 Agent 独占的持久根工作区准备上下文（仓库、Skill 目录注入）；隔离边界是 Agent，而不是 Run。
+- CLI 接收 `BEDROCK_AGENT_WORKDIR`（根）与 `BEDROCK_AGENT_OUTPUT`（固定产出目录 `{agentRoot}/{output_dir}`，默认 `output`）。不创建 `runs/run-{id}/output`。
+- 根工作区文件跨 Run 复用；新 Run 不清空根目录既有内容。固定产出目录可在运行前清空后覆盖写入。
 - 按绑定 Skill 将开放 Agent Skill 包展开到 CLI 可发现的目录。
 - 非交互方式调用 CLI；采集 stdout/stderr。
 - 单次运行失败不影响已成功的构建执行状态（构建事件触发场景）。
@@ -571,6 +582,9 @@ level1.level2.level3:action
 - 状态：`pending` / `running` / `success` / `failed` / `cancelled`
 - 开始/结束时间、耗时
 - 错误信息
+- 本次使用的持久根工作区 `work_dir`
+
+AgentRun 不绑定、归档或下载文件制品，不提供制品路径字段或制品下载接口。此规则只适用于 AgentRun，BuildRun 制品保持 §9 的既有语义。
 
 ### 10.7 验收标准
 
@@ -578,6 +592,7 @@ level1.level2.level3:action
 2. 构建成功事件可触发智能体，记录独立于 Build Run。
 3. API/定时触发可用。
 4. CLI 多源安装失败回退可观测。
+5. 同一 Agent 连续运行复用同一根工作区并保留根目录已有文件，使用固定产出目录且 AgentRun 不产生可下载文件制品。
 
 ---
 
@@ -641,14 +656,14 @@ level1.level2.level3:action
 - 内置超级管理员角色不可删改权限集（或仅允许改展示名）。
 - 自定义角色：绑定权限资源树勾选。
 
-### 12.5 资源管理
+### 12.5 权限资源（系统管理）
 
 维护 RBAC 权限资源目录（**含左侧菜单资源**），编码为 `{path}:action`（path 为 `level1[.level2[…]]`），供角色授权勾选。
 
 - 系统预置资源与预置菜单；在权限资源中维护 `type=menu` 节点的标题、排序、路由、启用状态与一级图标。
 - **一级菜单必须支持上传/更换图标**：图片转 Base64 后入库；**单张原始大小 ≤ 32KB**，超限拒绝（`PUT /rbac/resources/:id/icon`）。
-- 资源管理页自身权限示例：`system.resources:view` / `system.resources:update`。
-- 「资源管理」指权限/菜单资源目录，**不是**磁盘工作区管理。
+- 权限资源页自身权限示例：`system.resources:view` / `system.resources:update`。
+- 勿与一级菜单「资源管理」（`resource`：仓库/服务器/凭证）混淆；本页管理的是 RBAC 权限/菜单目录，**不是**磁盘工作区管理。
 
 ---
 
@@ -805,13 +820,22 @@ flowchart TB
 | POST   | `/ops/dev-environments/:id/sources/:sid/ping`| 源连通性     |
 | GET    | `/ops/dev-environments/:id/jobs`             | 环境内任务   |
 
+#### 资源管理
+
+| 方法 | 路径                                  | 说明     |
+| ---- | ------------------------------------- | -------- |
+| CRUD | `/resource/repositories`              | 仓库     |
+| GET  | `/resource/repositories/:id/branches` | 分支     |
+| POST | `/resource/repositories/:id/test`     | 测试拉取 |
+| CRUD | `/resource/servers`                   | 服务器   |
+| POST | `/resource/servers/:id/test`          | 测试连接 |
+| CRUD | `/resource/credentials`               | 凭证     |
+
 #### CI/CD
 
 | 方法 | 路径                         | 说明            |
 | ---- | ---------------------------- | --------------- |
-| CRUD | `/repositories`              | 仓库            |
-| GET  | `/repositories/:id/branches` | 分支            |
-| POST | `/webhook/repos/:id/:secret` | Webhook（公开） |
+| POST | `/webhook/jobs/:id/:secret`  | Webhook（公开） |
 | CRUD | `/build-jobs`                | 构建任务        |
 | POST | `/build-jobs/:id/runs`       | 触发执行        |
 | GET  | `/build-runs`                | 执行列表        |
@@ -821,9 +845,6 @@ flowchart TB
 | POST | `/build-runs/:id/redeploy`   | 重新分发        |
 | GET  | `/build-runs/:id/artifact`   | 制品            |
 | GET  | `/build-runs/:id/log`        | 日志            |
-| CRUD | `/servers`                   | 服务器          |
-| POST | `/servers/:id/test`          | 测试连接        |
-| CRUD | `/credentials`               | 凭证            |
 
 #### 项目管理
 
@@ -896,7 +917,8 @@ flowchart TB
 - RBAC：用户、角色、资源（含菜单）、操作日志、字典；一级菜单图标上传；登录按角色下发菜单
 - 仪表盘三卡片 + 用户布局 + 权限过滤
 - 运维：进程、开发环境（Go/Node/Java/Python/自定义）+ 每环境多安装源
-- CI/CD：仓库、任务、执行、服务器、凭证、部署
+- 资源管理：代码仓库、服务器、凭证
+- CI/CD：任务、执行、部署
 - 项目管理：项目成员角色、需求列表、文档树上传与智能体生成
 - AI：四类 CLI、智能体定义/触发/运行记录
 - Skills：公私、ZIP、覆盖更新、PAT 下载
@@ -925,7 +947,7 @@ flowchart TB
 | 运维 | 进程查询终止；开发环境检测安装升级卸载切版本；每环境源优先级回退 | 自定义脚本仅超管；同 UID 风险提示 |
 | CI/CD | 一仓多任务多执行；部署失败不改构建成功；凭证 RBAC | `distribution_summary`；禁止流水线内同步 Agent |
 | 项目 | 成员角色；需求 CRUD；文档树上传；智能体生成 | 生成只写 draft；publish + `expected_version` |
-| AI | 独立运行；手动/API/定时/构建事件；上下文=提示词+仓库；记录输入输出日志 | AgentRun 独立状态机；失败不改 BuildRun |
+| AI | 独立运行；手动/API/定时/构建事件；上下文=提示词+仓库；每 Agent 持久根工作区 + 固定产出目录跨 Run 复用；记录输入输出日志，不提供 Agent 文件制品 | AgentRun 独立状态机；失败不改 BuildRun；BuildRun 制品不受影响 |
 | Skills | 开放规范 ZIP；公私；覆盖更新；PAT 下载 | 无私有对象 ACL 外的非项目 ACL |
 | 系统 | 用户角色资源字典操作日志 | — |
 

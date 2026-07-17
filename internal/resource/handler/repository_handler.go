@@ -6,10 +6,10 @@ import (
 	"github.com/gin-gonic/gin"
 
 	authmiddleware "bedrock/internal/auth/middleware"
-	"bedrock/internal/cicd/service"
 	"bedrock/internal/pkg"
 	rbacmw "bedrock/internal/rbac/middleware"
 	rbacservice "bedrock/internal/rbac/service"
+	"bedrock/internal/resource/service"
 )
 
 type RepositoryHandler struct {
@@ -22,20 +22,20 @@ func NewRepositoryHandler(svc *service.RepositoryService, perm *rbacservice.Perm
 }
 
 func (h *RepositoryHandler) RegisterRoutes(rg *gin.RouterGroup, authMW gin.HandlerFunc) {
-	g := rg.Group("/repositories", authMW)
-	g.GET("", rbacmw.RequirePermission(h.perm, "cicd.repositories:view"), h.List)
-	g.GET("/:id", rbacmw.RequirePermission(h.perm, "cicd.repositories:view"), h.Get)
-	g.POST("", rbacmw.RequirePermission(h.perm, "cicd.repositories:create"), h.Create)
-	g.PUT("/:id", rbacmw.RequirePermission(h.perm, "cicd.repositories:update"), h.Update)
-	g.DELETE("/:id", rbacmw.RequirePermission(h.perm, "cicd.repositories:delete"), h.Delete)
-	g.GET("/:id/branches", rbacmw.RequirePermission(h.perm, "cicd.repositories:view"), h.Branches)
-	g.POST("/:id/test", rbacmw.RequirePermission(h.perm, "cicd.repositories:view"), h.Test)
+	g := rg.Group("/resource/repositories", authMW)
+	g.GET("", rbacmw.RequirePermission(h.perm, "resource.repositories:view"), h.List)
+	g.GET("/:id", rbacmw.RequirePermission(h.perm, "resource.repositories:view"), h.Get)
+	g.POST("", rbacmw.RequirePermission(h.perm, "resource.repositories:create"), h.Create)
+	g.PUT("/:id", rbacmw.RequirePermission(h.perm, "resource.repositories:update"), h.Update)
+	g.DELETE("/:id", rbacmw.RequirePermission(h.perm, "resource.repositories:delete"), h.Delete)
+	g.GET("/:id/branches", rbacmw.RequirePermission(h.perm, "resource.repositories:view"), h.Branches)
+	g.POST("/:id/test", rbacmw.RequirePermission(h.perm, "resource.repositories:view"), h.Test)
 }
 
 func (h *RepositoryHandler) canUseCredential(c *gin.Context) bool {
 	userID := authmiddleware.GetUserID(c)
 	isSuper := authmiddleware.IsSuperAdmin(c)
-	return h.perm.CheckAccess(userID, isSuper, "cicd.credentials:use") == nil
+	return h.perm.CheckAccess(userID, isSuper, "resource.credentials:use") == nil
 }
 
 func (h *RepositoryHandler) List(c *gin.Context) {

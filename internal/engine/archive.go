@@ -30,14 +30,6 @@ func NormalizeArtifactFormat(format string) string {
 	}
 }
 
-// ArtifactArchiveExt returns the file extension for an artifact format.
-func ArtifactArchiveExt(format string) string {
-	if NormalizeArtifactFormat(format) == "zip" {
-		return ".zip"
-	}
-	return ".tar.gz"
-}
-
 // CreateArtifactArchive packs sourceDir into targetPath as zip or tar.gz.
 func CreateArtifactArchive(targetPath, sourceDir, format string) error {
 	if NormalizeArtifactFormat(format) == "zip" {

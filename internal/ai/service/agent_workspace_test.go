@@ -37,7 +37,7 @@ func (f *stubJobFinder) FindByID(id uint) (*cicdmodel.BuildJob, error) {
 	return job, nil
 }
 
-func setupAgentWorkspace(t *testing.T) (*service.AgentService, *service.SkillService, *repository.AIRepository, string, string) {
+func setupAgentWorkspace(t *testing.T) (*service.AgentService, *service.SkillService, *repository.AIRepository, string) {
 	t.Helper()
 	gdb, err := db.Open(&config.DatabaseConfig{
 		Driver: "sqlite",
@@ -58,16 +58,15 @@ func setupAgentWorkspace(t *testing.T) (*service.AgentService, *service.SkillSer
 	}
 	skills := service.NewSkillService(repo, storageSvc)
 	work := filepath.Join(t.TempDir(), "work")
-	artifacts := filepath.Join(t.TempDir(), "artifacts")
 	logs := filepath.Join(t.TempDir(), "logs")
-	agents := service.NewAgentService(repo, cli, skills, nil, zap.NewNop(), work, artifacts, logs)
+	agents := service.NewAgentService(repo, cli, skills, nil, zap.NewNop(), work, logs)
 	agents.Start()
 	t.Cleanup(agents.Shutdown)
-	return agents, skills, repo, work, artifacts
+	return agents, skills, repo, work
 }
 
 func TestAgentWorkspaceSyncSkillsAndSoftlinks(t *testing.T) {
-	agents, skills, _, work, _ := setupAgentWorkspace(t)
+	agents, skills, _, work := setupAgentWorkspace(t)
 
 	z := zipBytes(t, map[string]string{"SKILL.md": "# workspace-skill"})
 	skill, err := skills.Create(service.SkillUploadInput{
@@ -92,7 +91,7 @@ func TestAgentWorkspaceSyncSkillsAndSoftlinks(t *testing.T) {
 	agent, err := agents.CreateAgent(1, service.AgentInput{
 		Name: "ws-agent", CliKey: "claude_code", SystemPrompt: "hello workspace",
 		SkillIDs: []uint{skill.ID}, BuildJobIDs: []uint{jobID},
-		ArtifactFormat: "gzip", MaxArtifacts: 5, TimeoutSec: 30,
+		TimeoutSec: 30,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -120,7 +119,7 @@ func TestAgentWorkspaceSyncSkillsAndSoftlinks(t *testing.T) {
 }
 
 func TestAgentWorkspaceMissingJobDirSkipped(t *testing.T) {
-	agents, _, _, work, _ := setupAgentWorkspace(t)
+	agents, _, _, work := setupAgentWorkspace(t)
 	jobID := uint(99)
 	agents.SetBuildJobFinder(&stubJobFinder{
 		jobs: map[uint]*cicdmodel.BuildJob{
@@ -140,7 +139,7 @@ func TestAgentWorkspaceMissingJobDirSkipped(t *testing.T) {
 }
 
 func TestAgentWorkspaceDeleteRemovesDir(t *testing.T) {
-	agents, _, _, work, _ := setupAgentWorkspace(t)
+	agents, _, _, work := setupAgentWorkspace(t)
 	agent, err := agents.CreateAgent(1, service.AgentInput{
 		Name: "del", CliKey: "claude_code", TimeoutSec: 10,
 	})
@@ -159,11 +158,36 @@ func TestAgentWorkspaceDeleteRemovesDir(t *testing.T) {
 	}
 }
 
-func TestAgentRunArchivesOutputArtifact(t *testing.T) {
-	agents, _, repo, work, artifacts := setupAgentWorkspace(t)
+func TestAgentRunsReusePersistentWorkspace(t *testing.T) {
+	agents, _, repo, work := setupAgentWorkspace(t)
+	t.Setenv("BEDROCK_AGENT_OUTPUT", "/must-not-leak")
 
 	script := filepath.Join(t.TempDir(), "fake-cli.sh")
-	content := "#!/bin/sh\necho ok\nprintf 'deliverable' > \"$BEDROCK_AGENT_OUTPUT/result.txt\"\n"
+	content := `#!/bin/sh
+if [ -z "$BEDROCK_AGENT_OUTPUT" ]; then
+  echo "BEDROCK_AGENT_OUTPUT missing"
+  exit 23
+fi
+case "$BEDROCK_AGENT_OUTPUT" in
+  /must-not-leak) echo "parent BEDROCK_AGENT_OUTPUT leaked"; exit 24 ;;
+esac
+if [ ! -d "$BEDROCK_AGENT_OUTPUT" ]; then
+  echo "output dir missing"
+  exit 25
+fi
+if [ -f "$BEDROCK_AGENT_WORKDIR/note.txt" ]; then
+  # Output dir was cleared between runs; previous result.txt must be gone.
+  if [ -f "$BEDROCK_AGENT_OUTPUT/result.txt" ]; then
+    echo "output dir was not cleared"
+    exit 26
+  fi
+  printf 'second' > "$BEDROCK_AGENT_OUTPUT/result.txt"
+else
+  printf 'first' > "$BEDROCK_AGENT_OUTPUT/result.txt"
+  printf 'workspace-note' > "$BEDROCK_AGENT_WORKDIR/note.txt"
+fi
+echo "persistent output"
+`
 	if err := os.WriteFile(script, []byte(content), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -180,64 +204,83 @@ func TestAgentRunArchivesOutputArtifact(t *testing.T) {
 	}
 
 	agent, err := agents.CreateAgent(1, service.AgentInput{
-		Name: "art", CliKey: "claude_code", SystemPrompt: "x",
-		ArtifactFormat: "gzip", MaxArtifacts: 10, TimeoutSec: 30,
+		Name: "persistent", CliKey: "claude_code", SystemPrompt: "x",
+		OutputDir: "deliverables", TimeoutSec: 30,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	run, err := agents.ManualRun(agent.ID, 1)
-	if err != nil {
+	if agent.OutputDir != "deliverables" {
+		t.Fatalf("output_dir=%q", agent.OutputDir)
+	}
+	wantWork := filepath.Join(work, "agents", fmt.Sprintf("agent-%d", agent.ID))
+	wantOutput := filepath.Join(wantWork, "deliverables")
+	keepPath := filepath.Join(wantWork, "keep.txt")
+	if err := os.WriteFile(keepPath, []byte("keep"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-
-	deadline := time.Now().Add(5 * time.Second)
-	var finished *model.AgentRun
-	for time.Now().Before(deadline) {
-		got, err := agents.GetRun(run.ID)
+	waitRun := func(runID uint) *model.AgentRun {
+		t.Helper()
+		deadline := time.Now().Add(5 * time.Second)
+		for time.Now().Before(deadline) {
+			got, err := agents.GetRun(runID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got.Status == model.JobSuccess || got.Status == model.JobFailed {
+				return got
+			}
+			time.Sleep(20 * time.Millisecond)
+		}
+		t.Fatal("run did not finish")
+		return nil
+	}
+	var finishedRuns []*model.AgentRun
+	for range 2 {
+		run, err := agents.ManualRun(agent.ID, 1)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if got.Status == model.JobSuccess || got.Status == model.JobFailed {
-			finished = got
-			break
+		if !strings.Contains(run.SnapshotJSON, `"output_dir":"deliverables"`) {
+			t.Fatalf("snapshot missing output_dir: %s", run.SnapshotJSON)
 		}
-		time.Sleep(20 * time.Millisecond)
+		for _, removed := range []string{"artifact_format", "max_artifacts", "artifact_path"} {
+			if strings.Contains(run.SnapshotJSON, removed) {
+				t.Fatalf("snapshot contains removed field %q: %s", removed, run.SnapshotJSON)
+			}
+		}
+		finishedRuns = append(finishedRuns, waitRun(run.ID))
 	}
-	if finished == nil {
-		t.Fatal("run did not finish")
+	for _, finished := range finishedRuns {
+		if finished.Status != model.JobSuccess {
+			t.Fatalf("status=%s err=%s", finished.Status, finished.ErrorMessage)
+		}
+		if finished.WorkDir != wantWork {
+			t.Fatalf("work_dir=%q want=%q", finished.WorkDir, wantWork)
+		}
+		if !strings.Contains(finished.OutputText, "persistent output") {
+			t.Fatalf("output_text=%q", finished.OutputText)
+		}
 	}
-	if finished.Status != model.JobSuccess {
-		t.Fatalf("status=%s err=%s", finished.Status, finished.ErrorMessage)
+	for _, path := range []string{keepPath, filepath.Join(wantWork, "note.txt"), filepath.Join(wantOutput, "result.txt")} {
+		if _, err := os.Stat(path); err != nil {
+			t.Fatalf("persistent file missing %s: %v", path, err)
+		}
 	}
-	if finished.WorkDir == "" {
-		t.Fatal("work_dir empty")
-	}
-	wantWork := filepath.Join(work, "agents", fmt.Sprintf("agent-%d", agent.ID))
-	if finished.WorkDir != wantWork {
-		t.Fatalf("work_dir=%q want=%q", finished.WorkDir, wantWork)
-	}
-	if finished.ArtifactPath == "" {
-		t.Fatal("expected artifact_path")
-	}
-	wantArt := filepath.Join(artifacts, fmt.Sprintf("agent-%d", agent.ID), fmt.Sprintf("run-%d.tar.gz", run.ID))
-	if finished.ArtifactPath != wantArt {
-		t.Fatalf("artifact_path=%q want=%q", finished.ArtifactPath, wantArt)
-	}
-	if _, err := os.Stat(finished.ArtifactPath); err != nil {
-		t.Fatal(err)
-	}
-	path, filename, err := agents.ArtifactPath(run.ID)
+	data, err := os.ReadFile(filepath.Join(wantOutput, "result.txt"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if path != finished.ArtifactPath || filename != filepath.Base(wantArt) {
-		t.Fatalf("ArtifactPath=%s %s", path, filename)
+	if string(data) != "second" {
+		t.Fatalf("output result=%q want second", data)
+	}
+	if _, err := os.Lstat(filepath.Join(wantWork, "runs")); !os.IsNotExist(err) {
+		t.Fatalf("per-run workspace must not exist, err=%v", err)
 	}
 }
 
 func TestAgentWorkspaceNoOpenCodeExternalDirs(t *testing.T) {
-	agents, _, _, work, _ := setupAgentWorkspace(t)
+	agents, _, _, work := setupAgentWorkspace(t)
 	jobID := uint(3)
 	repoID := uint(2)
 	jobDir := filepath.Join(work, fmt.Sprintf("repo-%d", repoID), fmt.Sprintf("job-%d", jobID))
@@ -265,7 +308,7 @@ func TestAgentRunPassesFullPermissionFlagsAndScopeHint(t *testing.T) {
 	if _, err := exec.LookPath("sh"); err != nil {
 		t.Skip("sh required")
 	}
-	agents, _, repo, work, _ := setupAgentWorkspace(t)
+	agents, _, repo, work := setupAgentWorkspace(t)
 	jobID := uint(11)
 	repoID := uint(9)
 	jobDir := filepath.Join(work, fmt.Sprintf("repo-%d", repoID), fmt.Sprintf("job-%d", jobID))
@@ -368,7 +411,7 @@ func TestAgentRunNonInteractiveCLIArgs(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.cliKey, func(t *testing.T) {
-			agents, _, repo, _, _ := setupAgentWorkspace(t)
+			agents, _, repo, _ := setupAgentWorkspace(t)
 			argvFile := filepath.Join(t.TempDir(), "argv.txt")
 			script := filepath.Join(t.TempDir(), "fake-cli.sh")
 			content := "#!/bin/sh\nprintf '%s\\n' \"$@\" > " + argvFile + "\n"
@@ -441,7 +484,7 @@ func TestAgentRunStreamOutputCLIArgs(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.cliKey, func(t *testing.T) {
-			agents, _, repo, _, _ := setupAgentWorkspace(t)
+			agents, _, repo, _ := setupAgentWorkspace(t)
 			argvFile := filepath.Join(t.TempDir(), "argv.txt")
 			script := filepath.Join(t.TempDir(), "fake-cli.sh")
 			content := "#!/bin/sh\nprintf '%s\\n' \"$@\" > " + argvFile + "\n"
@@ -525,7 +568,7 @@ func TestAgentRunNonStreamOutputCLIArgs(t *testing.T) {
 	if _, err := exec.LookPath("sh"); err != nil {
 		t.Skip("sh required")
 	}
-	agents, _, repo, _, _ := setupAgentWorkspace(t)
+	agents, _, repo, _ := setupAgentWorkspace(t)
 	argvFile := filepath.Join(t.TempDir(), "argv.txt")
 	script := filepath.Join(t.TempDir(), "fake-cli.sh")
 	content := "#!/bin/sh\nprintf '%s\\n' \"$@\" > " + argvFile + "\n"
@@ -582,48 +625,3 @@ func TestAgentRunNonStreamOutputCLIArgs(t *testing.T) {
 	}
 	t.Fatal("timeout")
 }
-
-func TestAgentRunZipArtifactFormat(t *testing.T) {
-	if _, err := exec.LookPath("sh"); err != nil {
-		t.Skip("sh required")
-	}
-	agents, _, repo, _, _ := setupAgentWorkspace(t)
-	script := filepath.Join(t.TempDir(), "fake-cli-zip.sh")
-	if err := os.WriteFile(script, []byte("#!/bin/sh\necho hi > \"$BEDROCK_AGENT_OUTPUT/a.txt\"\n"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	cli, err := repo.FindCLIByKey("opencode")
-	if err != nil {
-		t.Fatal(err)
-	}
-	cli.InstalledPath = script
-	cli.DefaultArgs = ""
-	_ = repo.UpdateCLI(cli)
-
-	agent, err := agents.CreateAgent(1, service.AgentInput{
-		Name: "zip-art", CliKey: "opencode", ArtifactFormat: "zip", TimeoutSec: 30,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	run, err := agents.ManualRun(agent.ID, 1)
-	if err != nil {
-		t.Fatal(err)
-	}
-	deadline := time.Now().Add(5 * time.Second)
-	for time.Now().Before(deadline) {
-		got, _ := agents.GetRun(run.ID)
-		if got != nil && (got.Status == model.JobSuccess || got.Status == model.JobFailed) {
-			if got.Status != model.JobSuccess {
-				t.Fatalf("status=%s err=%s", got.Status, got.ErrorMessage)
-			}
-			if !strings.HasSuffix(got.ArtifactPath, ".zip") {
-				t.Fatalf("want zip artifact, got %q", got.ArtifactPath)
-			}
-			return
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
-	t.Fatal("timeout")
-}
-

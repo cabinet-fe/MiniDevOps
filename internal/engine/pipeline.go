@@ -15,6 +15,7 @@ import (
 	"go.uber.org/zap"
 
 	"bedrock/internal/cicd/model"
+	resourcemodel "bedrock/internal/resource/model"
 	"bedrock/internal/ws"
 )
 
@@ -368,7 +369,7 @@ func (p *Pipeline) Execute(ctx context.Context, runID uint) {
 	}
 }
 
-func (p *Pipeline) resolveRepoGitAuth(repo *model.Repository) (authType, username, password string, err error) {
+func (p *Pipeline) resolveRepoGitAuth(repo *resourcemodel.Repository) (authType, username, password string, err error) {
 	switch strings.ToLower(strings.TrimSpace(repo.AuthType)) {
 	case "", "none":
 		return "none", "", "", nil

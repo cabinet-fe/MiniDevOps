@@ -44,6 +44,9 @@ import (
 	rbachandler "bedrock/internal/rbac/handler"
 	rbacrepo "bedrock/internal/rbac/repository"
 	rbacservice "bedrock/internal/rbac/service"
+	resourcehandler "bedrock/internal/resource/handler"
+	resourcerepo "bedrock/internal/resource/repository"
+	resourceservice "bedrock/internal/resource/service"
 	storagerepo "bedrock/internal/storage/repository"
 	storageservice "bedrock/internal/storage/service"
 	systemhandler "bedrock/internal/system/handler"
@@ -94,8 +97,23 @@ func main() {
 		logger.Fatal("Failed to open database", zap.Error(err))
 	}
 
+	agentWorkDir := cfg.Build.WorkspaceDir
+	if agentWorkDir == "" {
+		agentWorkDir = "./data/workspace"
+	}
+	agentArtifactDir := cfg.Build.ArtifactDir
+	if agentArtifactDir == "" {
+		agentArtifactDir = "./data/artifacts"
+	}
+	agentCleanup, err := migration.PrepareAgentPersistentWorkspaceCleanup(gdb, agentWorkDir, agentArtifactDir)
+	if err != nil {
+		logger.Fatal("Failed to prepare legacy Agent workspace cleanup", zap.Error(err))
+	}
 	if err := migration.Up(context.Background(), gdb, migration.Driver(cfg.Database.Driver)); err != nil {
 		logger.Fatal("Failed to apply migrations", zap.Error(err))
+	}
+	if err := agentCleanup.Finalize(); err != nil {
+		logger.Fatal("Failed to finalize legacy Agent workspace cleanup", zap.Error(err))
 	}
 	if err := seed.EnsureSuperAdmin(gdb, cfg.Admin); err != nil {
 		logger.Fatal("Failed to seed super-admin", zap.Error(err))
@@ -129,16 +147,16 @@ func main() {
 	dictHandler := systemhandler.NewDictionaryHandler(dictSvc, permSvc)
 	logHandler := systemhandler.NewOperationLogHandler(auditSvc, permSvc)
 
-	credRepo := cicdrepo.NewCredentialRepository(gdb)
-	repoRepo := cicdrepo.NewRepositoryRepository(gdb)
-	serverRepo := cicdrepo.NewServerRepository(gdb)
+	credRepo := resourcerepo.NewCredentialRepository(gdb)
+	repoRepo := resourcerepo.NewRepositoryRepository(gdb)
+	serverRepo := resourcerepo.NewServerRepository(gdb)
 	jobRepo := cicdrepo.NewBuildJobRepository(gdb)
 	runRepo := cicdrepo.NewBuildRunRepository(gdb)
 	deliveryRepo := cicdrepo.NewWebhookDeliveryRepository(gdb)
 
-	credSvc := cicdservice.NewCredentialService(credRepo)
-	repoSvc := cicdservice.NewRepositoryService(repoRepo, credSvc)
-	serverSvc := cicdservice.NewServerService(serverRepo, credSvc)
+	credSvc := resourceservice.NewCredentialService(credRepo)
+	repoSvc := resourceservice.NewRepositoryService(repoRepo, credSvc)
+	serverSvc := resourceservice.NewServerService(serverRepo, credSvc)
 	jobSvc := cicdservice.NewBuildJobService(jobRepo, repoRepo)
 	runSvc := cicdservice.NewBuildRunService(runRepo, jobRepo)
 	webhookSvc := cicdservice.NewWebhookService(jobRepo, deliveryRepo, runSvc)
@@ -177,15 +195,7 @@ func main() {
 	notifSvc := systemservice.NewNotificationService(notifRepo, hub)
 	notifHandler := systemhandler.NewNotificationHandler(notifSvc)
 
-	agentWorkDir := cfg.Build.WorkspaceDir
-	if agentWorkDir == "" {
-		agentWorkDir = "./data/workspace"
-	}
-	agentArtifactDir := cfg.Build.ArtifactDir
-	if agentArtifactDir == "" {
-		agentArtifactDir = "./data/artifacts"
-	}
-	agentSvc := aiservice.NewAgentService(aiRepo, cliSvc, skillSvc, hub, logger, agentWorkDir, agentArtifactDir, cfg.Build.LogDir, auditSvc)
+	agentSvc := aiservice.NewAgentService(aiRepo, cliSvc, skillSvc, hub, logger, agentWorkDir, cfg.Build.LogDir, auditSvc)
 	agentSvc.SetDocDraftWriter(projectSvc)
 	agentSvc.SetBuildJobFinder(jobRepo)
 	agentSvc.SetTerminalNotifier(notifSvc)
@@ -195,7 +205,7 @@ func main() {
 
 	pipeline := engine.NewPipeline(
 		runRepo, jobRepo, repoRepo, serverRepo,
-		cicdservice.NewCredentialSecretResolver(credSvc),
+		resourceservice.NewCredentialSecretResolver(credSvc),
 		hub, logger,
 		cfg.Build.WorkspaceDir, cfg.Build.ArtifactDir, cfg.Build.LogDir, cfg.Build.CacheDir,
 	)
@@ -206,9 +216,9 @@ func main() {
 	cronSched := engine.NewCronScheduler(jobRepo, runRepo, runSvc, sched, logger)
 	jobSvc.SetCron(cronSched)
 
-	credHandler := cicdhandler.NewCredentialHandler(credSvc, permSvc)
-	repoHandler := cicdhandler.NewRepositoryHandler(repoSvc, permSvc)
-	serverHandler := cicdhandler.NewServerHandler(serverSvc, permSvc)
+	credHandler := resourcehandler.NewCredentialHandler(credSvc, permSvc)
+	repoHandler := resourcehandler.NewRepositoryHandler(repoSvc, permSvc)
+	serverHandler := resourcehandler.NewServerHandler(serverSvc, permSvc)
 	jobHandler := cicdhandler.NewBuildJobHandler(jobSvc, runSvc, permSvc)
 	runHandler := cicdhandler.NewBuildRunHandler(runSvc, permSvc)
 	webhookHandler := cicdhandler.NewWebhookHandler(webhookSvc)

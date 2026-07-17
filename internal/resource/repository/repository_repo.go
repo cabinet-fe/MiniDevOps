@@ -1,7 +1,7 @@
 package repository
 
 import (
-	"bedrock/internal/cicd/model"
+	"bedrock/internal/resource/model"
 
 	"gorm.io/gorm"
 )
@@ -49,6 +49,6 @@ func (r *RepositoryRepository) List(page, pageSize int, keyword string) ([]model
 
 func (r *RepositoryRepository) CountJobs(repositoryID uint) (int64, error) {
 	var n int64
-	err := r.db.Model(&model.BuildJob{}).Where("repository_id = ?", repositoryID).Count(&n).Error
+	err := r.db.Table("build_jobs").Where("repository_id = ?", repositoryID).Count(&n).Error
 	return n, err
 }

@@ -19,6 +19,8 @@ import (
 	"bedrock/internal/platform/db"
 	"bedrock/internal/platform/migration"
 	_ "bedrock/internal/platform/migration/migrations"
+	resourcerepo "bedrock/internal/resource/repository"
+	resourceservice "bedrock/internal/resource/service"
 )
 
 func TestBuildRunHandler_ArtifactDownload(t *testing.T) {
@@ -44,16 +46,16 @@ func TestBuildRunHandler_ArtifactDownload(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	credRepo := repository.NewCredentialRepository(gdb)
-	repoRepo := repository.NewRepositoryRepository(gdb)
+	credRepo := resourcerepo.NewCredentialRepository(gdb)
+	repoRepo := resourcerepo.NewRepositoryRepository(gdb)
 	jobRepo := repository.NewBuildJobRepository(gdb)
 	runRepo := repository.NewBuildRunRepository(gdb)
 
-	repoSvc := service.NewRepositoryService(repoRepo, service.NewCredentialService(credRepo))
+	repoSvc := resourceservice.NewRepositoryService(repoRepo, resourceservice.NewCredentialService(credRepo))
 	jobSvc := service.NewBuildJobService(jobRepo, repoRepo)
 	runSvc := service.NewBuildRunService(runRepo, jobRepo)
 
-	repo, err := repoSvc.Create(1, service.CreateRepositoryInput{
+	repo, err := repoSvc.Create(1, resourceservice.CreateRepositoryInput{
 		Name: "h-art", RepoURL: "https://example.com/h.git",
 	}, false)
 	if err != nil {

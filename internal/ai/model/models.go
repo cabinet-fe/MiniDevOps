@@ -31,9 +31,9 @@ const (
 )
 
 const (
-	EventArtifactReady         = "artifact_ready"
-	EventDistributionFinished  = "distribution_finished"
-	EventNone                  = "none"
+	EventArtifactReady        = "artifact_ready"
+	EventDistributionFinished = "distribution_finished"
+	EventNone                 = "none"
 )
 
 // RiskNoticeSameUID is shown in CLI/agent APIs and UI. AI CLIs run as the
@@ -82,40 +82,38 @@ func (CliInstallSource) TableName() string { return "cli_install_sources" }
 
 // AiAgent is a configured agent bound to one CLI, skills, and build-job workspaces.
 type AiAgent struct {
-	ID               uint      `json:"id" gorm:"primaryKey"`
-	Name             string    `json:"name" gorm:"size:100;not null"`
-	Description      string    `json:"description" gorm:"size:500"`
-	Enabled          bool      `json:"enabled" gorm:"not null;default:true"`
-	CliKey           string    `json:"cli_key" gorm:"size:40;not null;index"`
-	SystemPrompt     string    `json:"system_prompt" gorm:"type:text"`
-	SkillIDsJSON     string    `json:"-" gorm:"type:text"`
-	SkillIDs         []uint    `json:"skill_ids" gorm:"-"`
-	BuildJobIDsJSON  string    `json:"-" gorm:"type:text"`
-	BuildJobIDs      []uint    `json:"build_job_ids" gorm:"-"`
-	OutputDir        string    `json:"output_dir" gorm:"size:200;not null;default:output"`
-	ArtifactFormat   string    `json:"artifact_format" gorm:"size:20;not null;default:gzip"`
-	MaxArtifacts     int       `json:"max_artifacts" gorm:"not null;default:10"`
-	StreamOutput     bool      `json:"stream_output" gorm:"not null;default:false"`
-	TimeoutSec       int       `json:"timeout_sec" gorm:"not null;default:600"`
-	CreatedBy        uint      `json:"created_by" gorm:"index"`
-	CreatedAt        time.Time `json:"created_at"`
-	UpdatedAt        time.Time `json:"updated_at"`
+	ID              uint      `json:"id" gorm:"primaryKey"`
+	Name            string    `json:"name" gorm:"size:100;not null"`
+	Description     string    `json:"description" gorm:"size:500"`
+	Enabled         bool      `json:"enabled" gorm:"not null;default:true"`
+	CliKey          string    `json:"cli_key" gorm:"size:40;not null;index"`
+	SystemPrompt    string    `json:"system_prompt" gorm:"type:text"`
+	SkillIDsJSON    string    `json:"-" gorm:"type:text"`
+	SkillIDs        []uint    `json:"skill_ids" gorm:"-"`
+	BuildJobIDsJSON string    `json:"-" gorm:"type:text"`
+	BuildJobIDs     []uint    `json:"build_job_ids" gorm:"-"`
+	OutputDir       string    `json:"output_dir" gorm:"size:200;not null;default:output"`
+	StreamOutput    bool      `json:"stream_output" gorm:"not null;default:false"`
+	TimeoutSec      int       `json:"timeout_sec" gorm:"not null;default:600"`
+	CreatedBy       uint      `json:"created_by" gorm:"index"`
+	CreatedAt       time.Time `json:"created_at"`
+	UpdatedAt       time.Time `json:"updated_at"`
 }
 
 func (AiAgent) TableName() string { return "ai_agents" }
 
 // AgentTrigger configures how an agent may be started.
 type AgentTrigger struct {
-	ID                uint      `json:"id" gorm:"primaryKey"`
-	AgentID           uint      `json:"agent_id" gorm:"not null;index"`
-	Type              string    `json:"type" gorm:"size:40;not null"`
-	Enabled           bool      `json:"enabled" gorm:"not null;default:true"`
-	CronExpression    string    `json:"cron_expression" gorm:"size:100"`
-	CronTimezone      string    `json:"cron_timezone" gorm:"size:100;default:UTC"`
-	BuildJobID        *uint     `json:"build_job_id" gorm:"index"`
-	BuildEvent        string    `json:"build_event" gorm:"size:40"`
-	CreatedAt         time.Time `json:"created_at"`
-	UpdatedAt         time.Time `json:"updated_at"`
+	ID             uint      `json:"id" gorm:"primaryKey"`
+	AgentID        uint      `json:"agent_id" gorm:"not null;index"`
+	Type           string    `json:"type" gorm:"size:40;not null"`
+	Enabled        bool      `json:"enabled" gorm:"not null;default:true"`
+	CronExpression string    `json:"cron_expression" gorm:"size:100"`
+	CronTimezone   string    `json:"cron_timezone" gorm:"size:100;default:UTC"`
+	BuildJobID     *uint     `json:"build_job_id" gorm:"index"`
+	BuildEvent     string    `json:"build_event" gorm:"size:40"`
+	CreatedAt      time.Time `json:"created_at"`
+	UpdatedAt      time.Time `json:"updated_at"`
 }
 
 func (AgentTrigger) TableName() string { return "agent_triggers" }
@@ -134,7 +132,6 @@ type AgentRun struct {
 	SnapshotJSON    string     `json:"snapshot_json,omitempty" gorm:"type:text"`
 	SkillDigestJSON string     `json:"skill_digest_json,omitempty" gorm:"type:text"`
 	WorkDir         string     `json:"work_dir" gorm:"size:500"`
-	ArtifactPath    string     `json:"artifact_path" gorm:"size:500"`
 	LogPath         string     `json:"log_path" gorm:"size:500"`
 	OutputText      string     `json:"output_text,omitempty" gorm:"type:text"`
 	ErrorMessage    string     `json:"error_message" gorm:"type:text"`
@@ -167,17 +164,17 @@ func (SkillPackage) TableName() string { return "skill_packages" }
 
 // PersonalAccessToken stores only the hash; plaintext is returned once on create.
 type PersonalAccessToken struct {
-	ID         uint       `json:"id" gorm:"primaryKey"`
-	UserID     uint       `json:"user_id" gorm:"not null;index"`
-	Name       string     `json:"name" gorm:"size:100;not null"`
-	TokenPrefix string    `json:"token_prefix" gorm:"size:16;not null"`
-	TokenHash  string     `json:"-" gorm:"size:128;not null;uniqueIndex"`
-	ScopesJSON string     `json:"-" gorm:"type:text;not null"`
-	Scopes     []string   `json:"scopes" gorm:"-"`
-	ExpiresAt  *time.Time `json:"expires_at,omitempty"`
-	RevokedAt  *time.Time `json:"revoked_at,omitempty"`
-	LastUsedAt *time.Time `json:"last_used_at,omitempty"`
-	CreatedAt  time.Time  `json:"created_at"`
+	ID          uint       `json:"id" gorm:"primaryKey"`
+	UserID      uint       `json:"user_id" gorm:"not null;index"`
+	Name        string     `json:"name" gorm:"size:100;not null"`
+	TokenPrefix string     `json:"token_prefix" gorm:"size:16;not null"`
+	TokenHash   string     `json:"-" gorm:"size:128;not null;uniqueIndex"`
+	ScopesJSON  string     `json:"-" gorm:"type:text;not null"`
+	Scopes      []string   `json:"scopes" gorm:"-"`
+	ExpiresAt   *time.Time `json:"expires_at,omitempty"`
+	RevokedAt   *time.Time `json:"revoked_at,omitempty"`
+	LastUsedAt  *time.Time `json:"last_used_at,omitempty"`
+	CreatedAt   time.Time  `json:"created_at"`
 }
 
 func (PersonalAccessToken) TableName() string { return "personal_access_tokens" }

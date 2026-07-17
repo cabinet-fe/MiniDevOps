@@ -11,8 +11,6 @@ import (
 	"testing"
 	"time"
 
-	"bedrock/internal/cicd/model"
-	"bedrock/internal/cicd/repository"
 	dashboardmodel "bedrock/internal/dashboard/model"
 	dashboardrepo "bedrock/internal/dashboard/repository"
 	opsmodel "bedrock/internal/ops/model"
@@ -23,6 +21,8 @@ import (
 	_ "bedrock/internal/platform/migration/migrations"
 	projectmodel "bedrock/internal/project/model"
 	projectrepo "bedrock/internal/project/repository"
+	resourcemodel "bedrock/internal/resource/model"
+	resourcerepo "bedrock/internal/resource/repository"
 	storagemodel "bedrock/internal/storage/model"
 	storagerepo "bedrock/internal/storage/repository"
 
@@ -61,17 +61,17 @@ func TestContract_MigrationsAndCICDTables(t *testing.T) {
 			}
 
 			suffix := fmt.Sprintf("%s-%d", driver, time.Now().UnixNano())
-			credRepo := repository.NewCredentialRepository(gdb)
-			repoRepo := repository.NewRepositoryRepository(gdb)
+			credRepo := resourcerepo.NewCredentialRepository(gdb)
+			repoRepo := resourcerepo.NewRepositoryRepository(gdb)
 			dashboardRepo := dashboardrepo.NewDashboardRepository(gdb)
 			opsRepo := opsrepo.NewOpsRepository(gdb)
 			projectRepo := projectrepo.NewProjectRepository(gdb)
 			storageRepo := storagerepo.NewStorageRepository(gdb)
-			cred := &model.Credential{Name: "db-contract-" + suffix, Type: "token", SecretCipher: "x", CreatedBy: 99}
+			cred := &resourcemodel.Credential{Name: "db-contract-" + suffix, Type: "token", SecretCipher: "x", CreatedBy: 99}
 			if err := credRepo.Create(cred); err != nil {
 				t.Fatalf("create credential: %v", err)
 			}
-			repo := &model.Repository{
+			repo := &resourcemodel.Repository{
 				Name: "db-contract-repo-" + suffix, RepoURL: "https://example.com/" + suffix + ".git",
 				AuthType: "none", CreatedBy: 99,
 			}

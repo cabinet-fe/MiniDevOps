@@ -1,7 +1,7 @@
 package repository
 
 import (
-	"bedrock/internal/cicd/model"
+	"bedrock/internal/resource/model"
 
 	"gorm.io/gorm"
 )

@@ -5,7 +5,7 @@ import { computed, onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { message } from "@veltra/desktop";
 
-import { agentRunArtifactURL, agentRunLogsWSURL, cancelRun, getRun } from "@/api/ai";
+import { agentRunLogsWSURL, cancelRun, getRun } from "@/api/ai";
 import { getAccessToken } from "@/api/http";
 import type { AgentRun } from "@/api/types";
 import BuildLogViewer, { resolveBuildLogStatus } from "@/components/build-log-viewer";
@@ -43,10 +43,6 @@ const canCancel = computed(() => {
   if (!canExecute.value || !run.value) return false;
   return run.value.status === "queued" || run.value.status === "running";
 });
-
-const canDownloadArtifact = computed(
-  () => run.value?.status === "success" && !!run.value.artifact_path,
-);
 
 const logsWsURL = computed(() => {
   if (runId == null) return undefined;
@@ -93,30 +89,6 @@ async function onCancel() {
   }
 }
 
-async function onDownloadArtifact() {
-  const token = getAccessToken();
-  if (!token || !run.value) return;
-  try {
-    const res = await fetch(agentRunArtifactURL(run.value.id), {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    if (!res.ok) {
-      throw new Error((await res.text()) || `HTTP ${res.status}`);
-    }
-    const blob = await res.blob();
-    const cd = res.headers.get("Content-Disposition") || "";
-    const m = /filename="?([^"]+)"?/.exec(cd);
-    const name = m?.[1] || `agent-run-${run.value.id}.tar.gz`;
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = name;
-    a.click();
-    URL.revokeObjectURL(a.href);
-  } catch (err) {
-    message.error(err instanceof Error ? err.message : "下载失败");
-  }
-}
-
 onMounted(async () => {
   await load();
 });
@@ -136,15 +108,6 @@ onMounted(async () => {
         <div v-if="run" class="page-header__actions">
           <u-button v-if="canCancel" plain type="danger" :disabled="acting" @click="onCancel">
             取消
-          </u-button>
-          <u-button
-            v-if="canDownloadArtifact"
-            plain
-            type="primary"
-            :disabled="acting"
-            @click="onDownloadArtifact"
-          >
-            下载制品
           </u-button>
         </div>
       </header>

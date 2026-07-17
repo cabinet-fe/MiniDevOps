@@ -28,6 +28,23 @@ func TestContract_AI_CRUD(t *testing.T) {
 			if err := migration.Up(context.Background(), gdb, migration.Driver(db.NormalizeDriver(driver))); err != nil {
 				t.Fatalf("migration.Up(%s): %v", driver, err)
 			}
+			if err := migration.Up(context.Background(), gdb, migration.Driver(db.NormalizeDriver(driver))); err != nil {
+				t.Fatalf("idempotent migration.Up(%s): %v", driver, err)
+			}
+			for _, column := range []string{"artifact_format", "max_artifacts"} {
+				if gdb.Migrator().HasColumn("ai_agents", column) {
+					t.Fatalf("ai_agents.%s still exists on %s", column, driver)
+				}
+			}
+			if !gdb.Migrator().HasColumn("ai_agents", "output_dir") {
+				t.Fatalf("ai_agents.output_dir missing on %s", driver)
+			}
+			if gdb.Migrator().HasColumn("agent_runs", "artifact_path") {
+				t.Fatalf("agent_runs.artifact_path still exists on %s", driver)
+			}
+			if !gdb.Migrator().HasColumn("agent_runs", "work_dir") {
+				t.Fatalf("agent_runs.work_dir missing on %s", driver)
+			}
 			repo := repository.NewAIRepository(gdb)
 
 			clis, err := repo.ListCLIs()
@@ -38,7 +55,7 @@ func TestContract_AI_CRUD(t *testing.T) {
 			agent := &model.AiAgent{
 				Name: "a", CliKey: "claude_code", Enabled: true, TimeoutSec: 60,
 				SkillIDsJSON: "[]", BuildJobIDsJSON: "[]",
-				OutputDir: "output", ArtifactFormat: "gzip", MaxArtifacts: 10,
+				OutputDir: "output",
 			}
 			if err := repo.CreateAgent(agent); err != nil {
 				t.Fatal(err)

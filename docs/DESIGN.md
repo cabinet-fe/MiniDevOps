@@ -35,7 +35,7 @@
 | --- | --- | --- |
 | D12 | 命令执行 | 构建与 AI CLI **同 Bedrock 进程 UID** 直接运行；**无 OS/容器沙箱**；产品不得声称沙箱安全 |
 | D13 | Web 会话 | 允许 HTTP；`access_token` 存 **Web Storage** + Bearer；`refresh_token` 仅服务端 **Set-Cookie**（HttpOnly，不设 Secure） |
-| D14 | 凭证授权时点 | **绑定/修改**时校验 `credential:use`；之后执行仅需任务 `execute` |
+| D14 | 凭证授权时点 | **绑定/修改**时校验 `resource.credentials:use`；之后执行仅需任务 `execute` |
 | D15 | Webhook | 优先平台签名头 + delivery ID 去重；保留 URL secret 兼容；日志脱敏 |
 | D16 | Cron | 每任务 IANA 时区；禁止同任务重叠；停机错过的触发**跳过** |
 | D17 | PAT scope | 固定白名单：`skills:read`、`agents:run`；哈希存储、一次性回显、可过期/吊销；**不替代 HTTPS/TLS**；供 Skill 安装器与 `agents:run` API 对接 |
@@ -57,6 +57,7 @@
 | D28 | 前端迁移 | 原 React `web/` 已移除；Vue 3 `web/` 为唯一 embed 源 |
 | D29 | Run 快照 | 创建运行时强制写入最小配置快照（只读复现） |
 | D30 | 状态字段 | `status`（结果）与 `stage`（活动阶段）分离；流水线**无**内嵌 agent 阶段 |
+| D31 | Agent 工作区与制品 | 每个 Agent 有一个持久根工作区与一个固定 `output_dir` 产出目录，跨 Run 复用且不清空根目录；AgentRun 不绑定、归档或下载文件制品，BuildRun 制品能力不变 |
 
 ### 1.4 已接受风险（必须对外声明）
 
@@ -107,8 +108,9 @@ internal/
   auth/                   # JWT、PAT、login cipher
   rbac/                   # 资源树、权限合并、中间件
   system/                 # User、Role、Dictionary、OperationLog、Menu 维护
-  cicd/                   # Repository、BuildJob、BuildRun、Server、Credential
-  engine/                 # Pipeline、Scheduler、Cron、Git（依赖 cicd 接口）
+  resource/               # Repository、Server、Credential（共享资源）
+  cicd/                   # BuildJob、BuildRun、Webhook
+  engine/                 # Pipeline、Scheduler、Cron、Git（依赖 cicd / resource 接口）
   deployer/               # rsync/sftp/scp/agent/local
   ops/                    # Process、DevEnvironment
   project/                # ProductProject、Requirement、ApiDoc
@@ -118,7 +120,7 @@ internal/
   ws/                     # Hub + 频道
   pkg/                    # response、crypto、errors、id
 api/                      # HTTP 契约（Markdown，按域拆分）
-  README.md / auth.md / system.md / cicd.md / ops.md / project.md / ai.md
+  README.md / auth.md / system.md / resource.md / cicd.md / ops.md / project.md / ai.md
 web/                      # Vue 3 前端
 docs/
   PRD.md / DESIGN.md / ROADMAP.md
@@ -198,7 +200,7 @@ RbacResource (type=menu|page|action|card, path, parent, enabled, sort_key)
 ### 4.5 凭证
 
 - 密文 AES-GCM；API 永不回显明文。
-- 引用绑定（仓库认证、服务器认证、任务变量等）时校验操作者 `cicd.credentials:use`。
+- 引用绑定（仓库认证、服务器认证、任务变量等）时校验操作者 `resource.credentials:use`。
 - Cron/Webhook 执行使用绑定快照；不要求「触发者」现场具备 `use`。
 - 删除保护：仍被引用时拦截并提示。
 
@@ -274,6 +276,13 @@ flowchart TB
 
 构建事件默认：`artifact_ready`（归档成功且制品路径有效）。BuildJob.`agent_trigger_event` 可覆盖为 `distribution_finished`（本轮分发流程结束，无论成功失败）或 `none`。可选 `agent_id` 绑定默认智能体；亦可在 AgentTrigger 中按 Job 过滤。事件**异步**创建独立 AgentRun；Agent 失败**不**修改 BuildRun.status。流水线**禁止**内嵌同步 agent 阶段。
 
+Agent 工作区与记录规则：
+
+1. 每个 Agent 的唯一执行目录为 `{workspace}/agents/agent-{id}/`。同一 Agent 的所有 Run 直接复用该持久根工作区，开始新 Run 时不清空根目录已有文件；不同 Agent 以各自根目录为边界。
+2. 每个 Agent 另有一个固定产出目录 `{agentRoot}/{output_dir}`（配置字段 `output_dir`，默认相对名 `output`）。CLI 注入 `BEDROCK_AGENT_WORKDIR`（根）与 `BEDROCK_AGENT_OUTPUT`（固定产出目录）。不创建 `runs/run-{id}/output` 或任何 per-run 输出子目录；后续 Run 可覆盖同一产出目录（运行前可清空该产出子目录内容，但不删除 Agent 根下其他文件）。
+3. AgentRun 保留状态、日志、文本输出、`work_dir` 与关联上下文，不含 `artifact_path`，不创建归档，也没有文件制品下载 API。
+4. AgentRun 的无制品语义不影响 CI/CD：BuildRun 仍按 §5.2 完成输出归档、保留、下载与重新分发。
+
 ### 5.4 文档节点双态
 
 ```text
@@ -331,6 +340,17 @@ database:
 
 修改 `driver` 并重启 = 连接**另一空库或已有 2.0 库**；不会从 SQLite「搬家」到 Postgres。产品文案与启动日志必须写明。
 
+### 6.4 旧 Agent 运行目录与归档清理
+
+从带有旧 Agent 单 Run 输出/归档能力的 2.0 版本升级时，必须在迁移前完整备份数据库、工作区与制品目录。升级清理只处理以下旧数据：
+
+- `{workspace}/agents/agent-{id}/runs/`
+- Agent 归档根下的 `agent-{id}/run-{runID}.zip` 与 `agent-{id}/run-{runID}.tar.gz`
+
+清理采用可恢复的隔离流程：严格校验目标位于预期根目录内且路径祖先不是软链，将旧路径原子移入同一文件系统的隔离区；数据库 schema 迁移提交后再删除隔离区。任一路径越界、校验、移动或删除失败都拒绝升级，并允许下次启动幂等续做。
+
+该流程绝不删除 `{workspace}/agents/agent-{id}/` 根目录中的其他文件，也不触碰 BuildRun 工作区或制品。这里描述的是 2.0 内部版本升级，不构成 1.x → 2.0 数据迁移支持。
+
 ---
 
 ## 7. API 契约
@@ -367,7 +387,8 @@ database:
 - Auth / Users / Roles / RBAC resources / Menus / Dictionaries / Operation logs / Tokens
 - Dashboard layout + card data
 - Ops processes / dev-environments / per-environment sources
-- Repositories / webhook / build-jobs / build-runs / servers / credentials
+- Resource: repositories / servers / credentials
+- CI/CD: webhook / build-jobs / build-runs
 - Projects / members / requirements / docs（含 generate、publish、diff）
 - AI CLIs / agents / triggers / runs / skills
 
@@ -430,7 +451,7 @@ API/Cron/Webhook/Event
 | 字段（概念） | 说明 |
 | --- | --- |
 | id | 主键 |
-| kind | attachment / doc_import / skill_zip / artifact / other |
+| kind | attachment / doc_import / skill_zip / artifact / other；`artifact` 仅用于 BuildRun 等支持制品的域，不用于 AgentRun |
 | sha256 | 内容摘要 |
 | size | 字节 |
 | content_type | MIME |
@@ -451,7 +472,7 @@ API/Cron/Webhook/Event
 | Skill ZIP | 50MB |
 | 制品单件 | 5GB |
 | 日志保留 | 30 天 |
-| 工作区保留 | 7 天（终态后） |
+| 临时工作区保留 | 7 天（终态后）；不适用于跨 Run 持续复用的 Agent 根工作区 |
 | 软删后 GC | 24 小时 |
 
 ### 10.3 安全
@@ -489,7 +510,7 @@ web/src/
   composables/     # usePermission, useWebSocket, ...
   layouts/
   components/
-  views/           # 按域：cicd, project, ai, ops, system, dashboard
+  views/           # 按域：resource, cicd, project, ai, ops, system, dashboard
   lib/             # constants, login-crypto, ...
 ```
 
@@ -525,7 +546,7 @@ web/src/
 
 | 层级 | 内容 |
 | --- | --- |
-| 单元 | migration、权限合并、状态机、签名校验、存储路径安全 |
+| 单元 | migration、旧 Agent 目录/归档安全清理、权限合并、状态机、签名校验、存储路径安全 |
 | 合同 | 三数据库 repository；契约文档中的响应形状 |
 | 集成 | Pipeline 分发失败、redeploy attempt、重启恢复、Webhook 幂等 |
 | E2E | Playwright 冒烟：登录→菜单→构建→日志→（GA）Agent/文档发布 |
@@ -543,7 +564,8 @@ web/src/
 3. **备份**：SQLite 可用文件复制/专用备份命令；Postgres/MySQL 使用各自工具——平台可提供「备份指引」，**不假装统一物理备份**。
 4. **前端回滚**：保留上一版 `web` 产物 tag；替换 `cmd/server/dist` 后重打包。见 [release-checklist.md](./release-checklist.md)。
 5. **无** 1.x 升级通道；文档与登录页显著位置声明。
-6. **检查单**：[release-checklist.md](./release-checklist.md)；冒烟：`make smoke*`。
+6. **2.0 内部升级**：若来源版本仍有旧 Agent `runs/` 与归档，升级会按 §6.4 安全清理；操作前必须备份数据库、工作区与制品目录。
+7. **检查单**：[release-checklist.md](./release-checklist.md)；冒烟：`make smoke*`。
 
 ---
 

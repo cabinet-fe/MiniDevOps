@@ -65,11 +65,11 @@ func TestPermissionUnion(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	r1, err := roles.Create("A", "role_a", "", []string{"system.users:view", "cicd.repositories:view"})
+	r1, err := roles.Create("A", "role_a", "", []string{"system.users:view", "resource.repositories:view"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	r2, err := roles.Create("B", "role_b", "", []string{"system.roles:view", "cicd.repositories:create"})
+	r2, err := roles.Create("B", "role_b", "", []string{"system.roles:view", "resource.repositories:create"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -83,7 +83,7 @@ func TestPermissionUnion(t *testing.T) {
 	}
 	set := rbac.ToSet(codes)
 	for _, want := range []string{
-		"system.users:view", "cicd.repositories:view", "system.roles:view", "cicd.repositories:create",
+		"system.users:view", "resource.repositories:view", "system.roles:view", "resource.repositories:create",
 	} {
 		if !rbac.HasPermission(set, want) {
 			t.Fatalf("missing %s in %v", want, codes)

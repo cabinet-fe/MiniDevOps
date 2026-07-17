@@ -54,4 +54,18 @@ func TestUp_idempotent(t *testing.T) {
 	if !gdb.Migrator().HasTable("schema_migrations") {
 		t.Fatal("schema_migrations table missing")
 	}
+	for _, column := range []string{"artifact_format", "max_artifacts"} {
+		if gdb.Migrator().HasColumn("ai_agents", column) {
+			t.Fatalf("ai_agents.%s should be removed", column)
+		}
+	}
+	if !gdb.Migrator().HasColumn("ai_agents", "output_dir") {
+		t.Fatal("ai_agents.output_dir should be retained")
+	}
+	if gdb.Migrator().HasColumn("agent_runs", "artifact_path") {
+		t.Fatal("agent_runs.artifact_path should be removed")
+	}
+	if !gdb.Migrator().HasColumn("agent_runs", "work_dir") {
+		t.Fatal("agent_runs.work_dir should be retained")
+	}
 }

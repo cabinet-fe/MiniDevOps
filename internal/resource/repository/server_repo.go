@@ -1,7 +1,7 @@
 package repository
 
 import (
-	"bedrock/internal/cicd/model"
+	"bedrock/internal/resource/model"
 
 	"gorm.io/gorm"
 )
@@ -56,6 +56,6 @@ func (r *ServerRepository) UpdateStatus(id uint, status string) error {
 
 func (r *ServerRepository) CountDeployTargets(serverID uint) (int64, error) {
 	var n int64
-	err := r.db.Model(&model.DeployTarget{}).Where("server_id = ?", serverID).Count(&n).Error
+	err := r.db.Table("deploy_targets").Where("server_id = ?", serverID).Count(&n).Error
 	return n, err
 }

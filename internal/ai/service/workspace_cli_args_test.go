@@ -50,12 +50,32 @@ func TestAgentWorkspaceScopeHint(t *testing.T) {
 		"$BEDROCK_AGENT_WORKDIR",
 		"$BEDROCK_AGENT_OUTPUT",
 		"./job-{id}",
+		"固定产出目录",
 		"只能在该目录内读写",
 		"禁止访问该目录之外的任意路径",
 		"Do not access any path outside this directory",
+		"Write deliverable files into $BEDROCK_AGENT_OUTPUT",
 	} {
 		if !strings.Contains(hint, want) {
 			t.Fatalf("scope hint missing %q; got:\n%s", want, hint)
 		}
+	}
+}
+
+func TestResolveAgentOutputDir(t *testing.T) {
+	root := "/tmp/agent-root"
+	got, err := resolveAgentOutputDir(root, "")
+	if err != nil || got != "/tmp/agent-root/output" {
+		t.Fatalf("default output=%q err=%v", got, err)
+	}
+	got, err = resolveAgentOutputDir(root, "deliverables")
+	if err != nil || got != "/tmp/agent-root/deliverables" {
+		t.Fatalf("custom output=%q err=%v", got, err)
+	}
+	if _, err := resolveAgentOutputDir(root, "../escape"); err == nil {
+		t.Fatal("expected escape rejection")
+	}
+	if _, err := resolveAgentOutputDir(root, "/abs"); err == nil {
+		t.Fatal("expected absolute rejection")
 	}
 }

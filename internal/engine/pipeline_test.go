@@ -13,6 +13,7 @@ import (
 	"go.uber.org/zap"
 
 	"bedrock/internal/cicd/model"
+	resourcemodel "bedrock/internal/resource/model"
 )
 
 type memRunStore struct {
@@ -190,9 +191,9 @@ func (m *memJobStore) ListByRepositoryID(uint) ([]model.BuildJob, error) {
 	return nil, nil
 }
 
-type memRepoStore struct{ repo *model.Repository }
+type memRepoStore struct{ repo *resourcemodel.Repository }
 
-func (m *memRepoStore) FindByID(id uint) (*model.Repository, error) {
+func (m *memRepoStore) FindByID(id uint) (*resourcemodel.Repository, error) {
 	if m.repo == nil || m.repo.ID != id {
 		return nil, os.ErrNotExist
 	}
@@ -202,7 +203,7 @@ func (m *memRepoStore) FindByID(id uint) (*model.Repository, error) {
 
 type memServerStore struct{}
 
-func (m *memServerStore) FindByID(uint) (*model.Server, error) { return nil, os.ErrNotExist }
+func (m *memServerStore) FindByID(uint) (*resourcemodel.Server, error) { return nil, os.ErrNotExist }
 
 type nopSecrets struct{}
 
@@ -313,7 +314,7 @@ func TestArchiveMarksSuccessAndArtifactDownloadable(t *testing.T) {
 		},
 	}
 	repoStore := &memRepoStore{
-		repo: &model.Repository{ID: 1, RepoURL: repoDir, AuthType: "none"},
+		repo: &resourcemodel.Repository{ID: 1, RepoURL: repoDir, AuthType: "none"},
 	}
 	p := NewPipeline(store, jobStore, repoStore, &memServerStore{}, nopSecrets{}, nil, zap.NewNop(),
 		workspace, artifactRoot, logDir, cacheDir)

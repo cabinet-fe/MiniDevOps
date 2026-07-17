@@ -11,9 +11,9 @@ import (
 
 	"golang.org/x/crypto/ssh"
 
-	"bedrock/internal/cicd/model"
-	"bedrock/internal/cicd/repository"
 	"bedrock/internal/deployer"
+	"bedrock/internal/resource/model"
+	"bedrock/internal/resource/repository"
 )
 
 type ServerService struct {
@@ -80,7 +80,7 @@ func (s *ServerService) buildServer(id uint, in CreateServerInput, canUseCredent
 	}
 	if (in.CredentialID != nil && *in.CredentialID > 0) || (in.AgentCredentialID != nil && *in.AgentCredentialID > 0) {
 		if !canUseCredential {
-			return nil, NewForbidden("绑定凭证需要 cicd.credentials:use 权限")
+			return nil, NewForbidden("绑定凭证需要 resource.credentials:use 权限")
 		}
 	}
 	if in.CredentialID != nil && *in.CredentialID > 0 {
@@ -158,7 +158,7 @@ func (s *ServerService) Update(id uint, in UpdateServerInput, canUseCredential b
 		existing.CredentialID = nil
 	} else if in.CredentialID != nil {
 		if !credentialIDEqual(prevCred, in.CredentialID) && !canUseCredential {
-			return nil, NewForbidden("绑定/修改凭证需要 cicd.credentials:use 权限")
+			return nil, NewForbidden("绑定/修改凭证需要 resource.credentials:use 权限")
 		}
 		if *in.CredentialID == 0 {
 			existing.CredentialID = nil
@@ -173,7 +173,7 @@ func (s *ServerService) Update(id uint, in UpdateServerInput, canUseCredential b
 		existing.AgentCredentialID = nil
 	} else if in.AgentCredentialID != nil {
 		if !credentialIDEqual(prevAgent, in.AgentCredentialID) && !canUseCredential {
-			return nil, NewForbidden("绑定/修改凭证需要 cicd.credentials:use 权限")
+			return nil, NewForbidden("绑定/修改凭证需要 resource.credentials:use 权限")
 		}
 		if *in.AgentCredentialID == 0 {
 			existing.AgentCredentialID = nil

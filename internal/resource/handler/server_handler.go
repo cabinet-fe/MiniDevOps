@@ -6,10 +6,10 @@ import (
 	"github.com/gin-gonic/gin"
 
 	authmiddleware "bedrock/internal/auth/middleware"
-	"bedrock/internal/cicd/service"
 	"bedrock/internal/pkg"
 	rbacmw "bedrock/internal/rbac/middleware"
 	rbacservice "bedrock/internal/rbac/service"
+	"bedrock/internal/resource/service"
 )
 
 type ServerHandler struct {
@@ -22,17 +22,17 @@ func NewServerHandler(svc *service.ServerService, perm *rbacservice.PermissionSe
 }
 
 func (h *ServerHandler) RegisterRoutes(rg *gin.RouterGroup, authMW gin.HandlerFunc) {
-	g := rg.Group("/servers", authMW)
-	g.GET("", rbacmw.RequirePermission(h.perm, "cicd.servers:view"), h.List)
-	g.GET("/:id", rbacmw.RequirePermission(h.perm, "cicd.servers:view"), h.Get)
-	g.POST("", rbacmw.RequirePermission(h.perm, "cicd.servers:create"), h.Create)
-	g.PUT("/:id", rbacmw.RequirePermission(h.perm, "cicd.servers:update"), h.Update)
-	g.DELETE("/:id", rbacmw.RequirePermission(h.perm, "cicd.servers:delete"), h.Delete)
-	g.POST("/:id/test", rbacmw.RequirePermission(h.perm, "cicd.servers:view"), h.Test)
+	g := rg.Group("/resource/servers", authMW)
+	g.GET("", rbacmw.RequirePermission(h.perm, "resource.servers:view"), h.List)
+	g.GET("/:id", rbacmw.RequirePermission(h.perm, "resource.servers:view"), h.Get)
+	g.POST("", rbacmw.RequirePermission(h.perm, "resource.servers:create"), h.Create)
+	g.PUT("/:id", rbacmw.RequirePermission(h.perm, "resource.servers:update"), h.Update)
+	g.DELETE("/:id", rbacmw.RequirePermission(h.perm, "resource.servers:delete"), h.Delete)
+	g.POST("/:id/test", rbacmw.RequirePermission(h.perm, "resource.servers:view"), h.Test)
 }
 
 func (h *ServerHandler) canUseCredential(c *gin.Context) bool {
-	return h.perm.CheckAccess(authmiddleware.GetUserID(c), authmiddleware.IsSuperAdmin(c), "cicd.credentials:use") == nil
+	return h.perm.CheckAccess(authmiddleware.GetUserID(c), authmiddleware.IsSuperAdmin(c), "resource.credentials:use") == nil
 }
 
 func (h *ServerHandler) List(c *gin.Context) {

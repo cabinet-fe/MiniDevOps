@@ -2,15 +2,14 @@ package handler
 
 import (
 	"net/http"
-	"strconv"
 
 	"github.com/gin-gonic/gin"
 
 	authmiddleware "bedrock/internal/auth/middleware"
-	"bedrock/internal/cicd/service"
 	"bedrock/internal/pkg"
 	rbacmw "bedrock/internal/rbac/middleware"
 	rbacservice "bedrock/internal/rbac/service"
+	"bedrock/internal/resource/service"
 )
 
 type CredentialHandler struct {
@@ -23,12 +22,12 @@ func NewCredentialHandler(svc *service.CredentialService, perm *rbacservice.Perm
 }
 
 func (h *CredentialHandler) RegisterRoutes(rg *gin.RouterGroup, authMW gin.HandlerFunc) {
-	g := rg.Group("/credentials", authMW)
-	g.GET("", rbacmw.RequirePermission(h.perm, "cicd.credentials:view"), h.List)
-	g.GET("/:id", rbacmw.RequirePermission(h.perm, "cicd.credentials:view"), h.Get)
-	g.POST("", rbacmw.RequirePermission(h.perm, "cicd.credentials:create"), h.Create)
-	g.PUT("/:id", rbacmw.RequirePermission(h.perm, "cicd.credentials:update"), h.Update)
-	g.DELETE("/:id", rbacmw.RequirePermission(h.perm, "cicd.credentials:delete"), h.Delete)
+	g := rg.Group("/resource/credentials", authMW)
+	g.GET("", rbacmw.RequirePermission(h.perm, "resource.credentials:view"), h.List)
+	g.GET("/:id", rbacmw.RequirePermission(h.perm, "resource.credentials:view"), h.Get)
+	g.POST("", rbacmw.RequirePermission(h.perm, "resource.credentials:create"), h.Create)
+	g.PUT("/:id", rbacmw.RequirePermission(h.perm, "resource.credentials:update"), h.Update)
+	g.DELETE("/:id", rbacmw.RequirePermission(h.perm, "resource.credentials:delete"), h.Delete)
 }
 
 func (h *CredentialHandler) List(c *gin.Context) {
@@ -99,9 +98,4 @@ func (h *CredentialHandler) Delete(c *gin.Context) {
 		return
 	}
 	pkg.Success(c, nil)
-}
-
-func parseID(c *gin.Context) (uint, error) {
-	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
-	return uint(id), err
 }

@@ -51,7 +51,7 @@ func setupAI(t *testing.T) (*gorm.DB, *service.CLIService, *service.AgentService
 	pats := service.NewPATService(repo)
 	work := filepath.Join(t.TempDir(), "work")
 	logs := filepath.Join(t.TempDir(), "logs")
-	agents := service.NewAgentService(repo, cli, skills, nil, zap.NewNop(), work, filepath.Join(t.TempDir(), "artifacts"), logs)
+	agents := service.NewAgentService(repo, cli, skills, nil, zap.NewNop(), work, logs)
 	agents.Start()
 	t.Cleanup(agents.Shutdown)
 
@@ -468,11 +468,11 @@ func TestDetectClearsStaleWhenMissing(t *testing.T) {
 	if err := gdb.Model(&model.CliRuntimeDefinition{}).
 		Where("key = ?", "codex").
 		Updates(map[string]any{
-			"detect_command":      "false",
-			"installed_path":      "/stale/codex",
-			"installed_version":   "9.9.9",
-			"install_status":      "installed",
-			"healthy":             true,
+			"detect_command":    "false",
+			"installed_path":    "/stale/codex",
+			"installed_version": "9.9.9",
+			"install_status":    "installed",
+			"healthy":           true,
 		}).Error; err != nil {
 		t.Fatal(err)
 	}

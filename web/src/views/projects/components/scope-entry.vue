@@ -75,4 +75,3 @@ function openProject(project: ProductProject) {
     </ProTable>
   </div>
 </template>
-

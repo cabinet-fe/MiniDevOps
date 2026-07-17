@@ -16,6 +16,8 @@ import (
 	"bedrock/internal/platform/db"
 	"bedrock/internal/platform/migration"
 	_ "bedrock/internal/platform/migration/migrations"
+	resourcemodel "bedrock/internal/resource/model"
+	resourcerepo "bedrock/internal/resource/repository"
 
 	"gorm.io/driver/mysql"
 	"gorm.io/driver/postgres"
@@ -112,12 +114,12 @@ func runCICDCRUD(t *testing.T, gdb *gorm.DB, driver string) {
 	t.Helper()
 	suffix := fmt.Sprintf("%s-%d", driver, time.Now().UnixNano())
 
-	credRepo := repository.NewCredentialRepository(gdb)
-	repoRepo := repository.NewRepositoryRepository(gdb)
+	credRepo := resourcerepo.NewCredentialRepository(gdb)
+	repoRepo := resourcerepo.NewRepositoryRepository(gdb)
 	jobRepo := repository.NewBuildJobRepository(gdb)
 	runRepo := repository.NewBuildRunRepository(gdb)
 
-	cred := &model.Credential{
+	cred := &resourcemodel.Credential{
 		Name:         "cred-" + suffix,
 		Type:         "token",
 		SecretCipher: "cipher-placeholder",
@@ -131,7 +133,7 @@ func runCICDCRUD(t *testing.T, gdb *gorm.DB, driver string) {
 		t.Fatalf("credential find: %+v %v", gotCred, err)
 	}
 
-	repo := &model.Repository{
+	repo := &resourcemodel.Repository{
 		Name:      "repo-" + suffix,
 		RepoURL:   "https://example.com/" + suffix + ".git",
 		AuthType:  "none",

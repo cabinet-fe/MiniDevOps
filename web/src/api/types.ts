@@ -508,8 +508,6 @@ export interface AiAgent {
   skill_ids: number[];
   build_job_ids: number[];
   output_dir: string;
-  artifact_format: "zip" | "gzip";
-  max_artifacts: number;
   stream_output: boolean;
   timeout_sec: number;
   created_by: number;
@@ -534,7 +532,6 @@ export interface AgentRun {
   trigger_type: string;
   status: string;
   work_dir?: string;
-  artifact_path?: string;
   build_run_id?: number | null;
   project_id?: number | null;
   doc_node_id?: number | null;

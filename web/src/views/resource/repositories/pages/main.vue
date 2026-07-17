@@ -1,5 +1,5 @@
 <script setup lang="ts">
-defineOptions({ name: "CicdRepositories" });
+defineOptions({ name: "ResourceRepositories" });
 
 import { onMounted, reactive, ref, useTemplateRef } from "vue";
 import { o } from "@cat-kit/core";
@@ -11,7 +11,7 @@ import {
   listCredentials,
   testRepository,
   updateRepository,
-} from "@/api/cicd";
+} from "@/api/resource";
 import type { Credential, Repository } from "@/api/types";
 import FormDialog from "@/components/form-dialog";
 import ProTable, { defineProTableColumns } from "@/components/pro-table";
@@ -47,7 +47,7 @@ const columns = defineProTableColumns([
 ]);
 
 onMounted(async () => {
-  if (hasPermission("cicd.credentials:view") || hasPermission("cicd.credentials:use")) {
+  if (hasPermission("resource.credentials:view") || hasPermission("resource.credentials:use")) {
     try {
       const res = await listCredentials({ page: 1, page_size: 100 });
       credOptions.value = (res.items ?? []).map((c: Credential) => ({
@@ -120,11 +120,17 @@ async function onTest(row: Repository) {
 
 <template>
   <div>
-    <ProTable ref="list" url="/repositories" v-model:query="query" :columns="columns" pagination>
+    <ProTable
+      ref="list"
+      url="/resource/repositories"
+      v-model:query="query"
+      :columns="columns"
+      pagination
+    >
       <template #filters>
         <u-input v-model="query.keyword" placeholder="名称/URL" style="width: 200px" />
         <u-button
-          v-if="hasPermission('cicd.repositories:create')"
+          v-if="hasPermission('resource.repositories:create')"
           type="primary"
           style="margin-left: auto"
           @click.prevent="openCreate"
@@ -140,19 +146,19 @@ async function onTest(row: Repository) {
       <template #column:action="{ rowData }">
         <u-action-group :max="4">
           <u-action
-            v-if="hasPermission('cicd.repositories:update')"
+            v-if="hasPermission('resource.repositories:update')"
             @run="openEdit(rowData as Repository)"
           >
             编辑
           </u-action>
           <u-action
-            v-if="hasPermission('cicd.repositories:view')"
+            v-if="hasPermission('resource.repositories:view')"
             @run="onTest(rowData as Repository)"
           >
             测试
           </u-action>
           <u-action
-            v-if="hasPermission('cicd.repositories:delete')"
+            v-if="hasPermission('resource.repositories:delete')"
             @run="remove(rowData as Repository)"
           >
             删除
@@ -190,4 +196,3 @@ async function onTest(row: Repository) {
     </FormDialog>
   </div>
 </template>
-

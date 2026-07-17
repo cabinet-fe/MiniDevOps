@@ -68,8 +68,6 @@ const form = reactive({
   skill_ids: [] as number[],
   build_job_ids: [] as number[],
   output_dir: "output",
-  artifact_format: "gzip" as "zip" | "gzip",
-  max_artifacts: 10,
   stream_output: false,
   timeout_sec: 600,
 });
@@ -152,8 +150,6 @@ function resetFormFields() {
   form.skill_ids = [];
   form.build_job_ids = [];
   form.output_dir = "output";
-  form.artifact_format = "gzip";
-  form.max_artifacts = 10;
   form.stream_output = false;
   form.timeout_sec = 600;
 }
@@ -173,8 +169,6 @@ async function openEdit(row: AiAgent) {
   form.skill_ids = [...(row.skill_ids ?? [])];
   form.build_job_ids = [...(row.build_job_ids ?? [])];
   form.output_dir = row.output_dir || "output";
-  form.artifact_format = row.artifact_format === "zip" ? "zip" : "gzip";
-  form.max_artifacts = row.max_artifacts || 10;
   resetTriggerDraft();
   try {
     const items = await listTriggers(row.id);
@@ -274,8 +268,6 @@ async function save() {
     skill_ids: form.skill_ids,
     build_job_ids: form.build_job_ids,
     output_dir: form.output_dir || "output",
-    artifact_format: form.artifact_format,
-    max_artifacts: form.max_artifacts,
     stream_output: form.stream_output,
     timeout_sec: form.timeout_sec,
   };
@@ -405,17 +397,7 @@ async function remove(row: AiAgent) {
         filterable
         clearable
       />
-      <u-select
-        label="制品格式"
-        field="artifact_format"
-        :options="[
-          { label: 'gzip (tar.gz)', value: 'gzip' },
-          { label: 'zip', value: 'zip' },
-        ]"
-        :rules="{ required: '必填' }"
-      />
       <u-input label="产出目录名" field="output_dir" placeholder="默认 output" />
-      <u-number-input label="保留制品数" field="max_artifacts" :min="1" />
       <u-number-input label="超时(秒)" field="timeout_sec" :min="30" />
       <u-switch label="流式输出" field="stream_output" />
 

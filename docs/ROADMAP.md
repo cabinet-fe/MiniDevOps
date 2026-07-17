@@ -18,7 +18,7 @@
 3. **前端**：旁路新建 `web/`（Vue 3 + Veltra + CatKit + Vite+）；达标后一次切换 embed，旧 `web/` 保留回滚窗口。
 4. **安全边界（已接受风险）**：允许 HTTP；`access_token` Web Storage + Bearer，`refresh_token` HttpOnly Cookie（不设 Secure）；构建/AI CLI **同 Bedrock UID** 直接执行。
 5. **CI/CD 状态**：归档成功后 BuildRun 保持 `success`；`distribution_summary` 反映最新分发；重新分发**追加** `BuildDeployAttempt`，不新建 BuildRun。
-6. **ACL**：仅**产品项目**使用对象级成员 ACL；CI/CD / AI / 凭证等依赖全局 RBAC；显式 `view_all` / `manage_all` 绕过成员范围。
+6. **ACL**：仅**产品项目**使用对象级成员 ACL；资源管理 / CI/CD / AI 等依赖全局 RBAC；显式 `view_all` / `manage_all` 绕过成员范围。
 7. **验收**：仅功能 Gate；不设容量与延迟 SLO。
 
 ```mermaid
@@ -97,10 +97,10 @@ flowchart LR
 | 类别 | 内容 |
 | --- | --- |
 | 权限 | Role、RolePermission、RbacResource、MenuMetadata；多角色并集；`RequirePermission`；登录/me 下发裁剪菜单树；父级由可见后代自动补齐；一级菜单图标 Base64 ≤32KB；运维 path 仅超管 |
-| CI/CD | Repository、BuildJob、DeployTarget（Job 私有 1:N）、BuildRun、BuildDeployAttempt；Pipeline 适配；Scheduler/Cron（IANA 时区、禁重叠、停机跳过）；Webhook（签名优先 + URL secret fallback + delivery 去重） |
+| 资源管理 | Repository、Server、Credential；绑定/修改凭证引用时校验 `resource.credentials:use` |
+| CI/CD | BuildJob、DeployTarget（Job 私有 1:N）、BuildRun、BuildDeployAttempt；Pipeline 适配；Scheduler/Cron（IANA 时区、禁重叠、停机跳过）；Webhook（签名优先 + URL secret fallback + delivery 去重）；执行侧仅需任务 `execute` |
 | 状态机 | `status` 与 `stage` 分离；归档成功 → `status=success`；分发更新 `distribution_summary`；redeploy 追加 attempt；Run 最小配置快照；queued 恢复 / running→interrupted |
-| 凭证 | Credential 通用库 + `credential:use` **绑定/修改时**校验；执行侧仅需任务 `execute` |
-| 前端 | 菜单驱动侧栏；仓库/任务/执行/服务器/凭证页面；构建日志 WS；重新分发 UI |
+| 前端 | 菜单驱动侧栏；资源管理（仓库/服务器/凭证）与 CI/CD（任务/执行）页面；构建日志 WS；重新分发 UI |
 | 测试 | 权限矩阵；Webhook 多平台；分发失败不改构建成功；重启恢复；三库 CRUD 合同测试 |
 
 ### 3.3 明确不做

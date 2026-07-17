@@ -32,6 +32,7 @@ make ga-guardrails       # 禁止把 1.x 数据迁移当作支持路径
 
 # 测试 / GA 冒烟
 go test ./...
+go test ./internal/resource/...
 go test ./internal/cicd/...
 go test -run TestXxx ./internal/...
 go test ./internal/platform/db/... -tags=contract   # 三库合同（需 DSN）
@@ -67,6 +68,7 @@ make clean
 │   ├── auth/
 │   ├── rbac/
 │   ├── system/
+│   ├── resource/               # 资源管理：仓库、服务器、凭证
 │   ├── cicd/
 │   ├── engine/
 │   ├── deployer/
@@ -81,6 +83,7 @@ make clean
 │   ├── README.md
 │   ├── auth.md
 │   ├── system.md
+│   ├── resource.md
 │   ├── cicd.md
 │   ├── ops.md
 │   ├── project.md

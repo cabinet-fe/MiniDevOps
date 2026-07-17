@@ -48,7 +48,7 @@ const router = createRouter({
           component: () => import("@/views/system/resources/pages/main.vue"),
           meta: {
             permission: "system.resources:view",
-            title: "资源管理",
+            title: "权限资源",
             keepAliveName: "SystemResources",
           },
         },
@@ -73,13 +73,33 @@ const router = createRouter({
           },
         },
         {
-          path: "cicd/repositories",
-          name: "cicd-repositories",
-          component: () => import("@/views/cicd/repositories/pages/main.vue"),
+          path: "resource/repositories",
+          name: "resource-repositories",
+          component: () => import("@/views/resource/repositories/pages/main.vue"),
           meta: {
-            permission: "cicd.repositories:view",
+            permission: "resource.repositories:view",
             title: "代码仓库",
-            keepAliveName: "CicdRepositories",
+            keepAliveName: "ResourceRepositories",
+          },
+        },
+        {
+          path: "resource/servers",
+          name: "resource-servers",
+          component: () => import("@/views/resource/servers/pages/main.vue"),
+          meta: {
+            permission: "resource.servers:view",
+            title: "服务器",
+            keepAliveName: "ResourceServers",
+          },
+        },
+        {
+          path: "resource/credentials",
+          name: "resource-credentials",
+          component: () => import("@/views/resource/credentials/pages/main.vue"),
+          meta: {
+            permission: "resource.credentials:view",
+            title: "凭证管理",
+            keepAliveName: "ResourceCredentials",
           },
         },
         {
@@ -110,22 +130,6 @@ const router = createRouter({
             permission: "cicd.build_runs:view",
             title: "构建详情",
             keepAliveName: "CicdBuildRunDetail",
-          },
-        },
-        {
-          path: "cicd/servers",
-          name: "cicd-servers",
-          component: () => import("@/views/cicd/servers/pages/main.vue"),
-          meta: { permission: "cicd.servers:view", title: "服务器", keepAliveName: "CicdServers" },
-        },
-        {
-          path: "cicd/credentials",
-          name: "cicd-credentials",
-          component: () => import("@/views/cicd/credentials/pages/main.vue"),
-          meta: {
-            permission: "cicd.credentials:view",
-            title: "凭证管理",
-            keepAliveName: "CicdCredentials",
           },
         },
         {

@@ -2,6 +2,7 @@ package engine
 
 import (
 	"bedrock/internal/cicd/model"
+	resourcemodel "bedrock/internal/resource/model"
 )
 
 // RunStore is the BuildRun persistence surface used by Pipeline/Scheduler.
@@ -27,12 +28,12 @@ type JobStore interface {
 
 // RepoStore loads Repository.
 type RepoStore interface {
-	FindByID(id uint) (*model.Repository, error)
+	FindByID(id uint) (*resourcemodel.Repository, error)
 }
 
 // ServerStore loads Server.
 type ServerStore interface {
-	FindByID(id uint) (*model.Server, error)
+	FindByID(id uint) (*resourcemodel.Server, error)
 }
 
 // SecretResolver decrypts credentials for git/SSH/agent (never exposed via API).

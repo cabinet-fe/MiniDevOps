@@ -18,8 +18,8 @@ import (
 )
 
 const (
-	maxSkillZIPEntries      = 5000
-	maxSkillUncompressed    = 200 * 1024 * 1024
+	maxSkillZIPEntries       = 5000
+	maxSkillUncompressed     = 200 * 1024 * 1024
 	maxSkillCompressionRatio = 100
 )
 
@@ -44,14 +44,14 @@ func NewSkillService(repo *repository.AIRepository, storage *storageservice.Stor
 }
 
 type SkillUploadInput struct {
-	Name        string
-	Description string
-	Visibility  string
-	Filename    string
-	ContentType string
-	Size        int64
-	Source      io.Reader
-	UserID      uint
+	Name         string
+	Description  string
+	Visibility   string
+	Filename     string
+	ContentType  string
+	Size         int64
+	Source       io.Reader
+	UserID       uint
 	IsSuperAdmin bool
 }
 

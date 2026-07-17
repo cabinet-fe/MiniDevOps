@@ -62,7 +62,6 @@ func (h *Handler) RegisterRoutes(rg *gin.RouterGroup, authMW gin.HandlerFunc) {
 
 	ai.GET("/runs", rbacmw.RequirePermission(h.perm, "ai.runs:view"), h.ListRuns)
 	ai.GET("/runs/:id", rbacmw.RequirePermission(h.perm, "ai.runs:view"), h.GetRun)
-	ai.GET("/runs/:id/artifact", rbacmw.RequirePermission(h.perm, "ai.runs:view"), h.DownloadRunArtifact)
 	ai.POST("/runs/:id/cancel", rbacmw.RequirePermission(h.perm, "ai.agents:execute"), h.CancelRun)
 
 	skills := rg.Group("/skills", authMW)
@@ -337,20 +336,6 @@ func (h *Handler) GetRun(c *gin.Context) {
 	pkg.Success(c, run)
 }
 
-func (h *Handler) DownloadRunArtifact(c *gin.Context) {
-	id, _ := strconv.ParseUint(c.Param("id"), 10, 64)
-	path, filename, err := h.agents.ArtifactPath(uint(id))
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			pkg.Error(c, http.StatusNotFound, "资源不存在")
-			return
-		}
-		pkg.Error(c, http.StatusNotFound, err.Error())
-		return
-	}
-	c.FileAttachment(path, filename)
-}
-
 func (h *Handler) CancelRun(c *gin.Context) {
 	id, _ := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err := h.agents.CancelRun(uint(id)); err != nil {
@@ -391,7 +376,7 @@ func (h *Handler) CreateSkill(c *gin.Context) {
 	item, err := h.skills.Create(service.SkillUploadInput{
 		Name: c.PostForm("name"), Description: c.PostForm("description"),
 		Visibility: defaultStr(c.PostForm("visibility"), "private"),
-		Filename: header.Filename, ContentType: header.Header.Get("Content-Type"),
+		Filename:   header.Filename, ContentType: header.Header.Get("Content-Type"),
 		Size: header.Size, Source: file, UserID: authmiddleware.GetUserID(c),
 		IsSuperAdmin: authmiddleware.IsSuperAdmin(c),
 	})
@@ -413,7 +398,7 @@ func (h *Handler) OverwriteSkill(c *gin.Context) {
 	item, err := h.skills.Overwrite(uint(id), service.SkillUploadInput{
 		Name: c.PostForm("name"), Description: c.PostForm("description"),
 		Visibility: c.PostForm("visibility"),
-		Filename: header.Filename, ContentType: header.Header.Get("Content-Type"),
+		Filename:   header.Filename, ContentType: header.Header.Get("Content-Type"),
 		Size: header.Size, Source: file, UserID: authmiddleware.GetUserID(c),
 		IsSuperAdmin: authmiddleware.IsSuperAdmin(c),
 	})

@@ -3,9 +3,9 @@ package service
 import (
 	"strings"
 
-	"bedrock/internal/cicd/model"
-	"bedrock/internal/cicd/repository"
 	"bedrock/internal/pkg"
+	"bedrock/internal/resource/model"
+	"bedrock/internal/resource/repository"
 )
 
 type CredentialService struct {

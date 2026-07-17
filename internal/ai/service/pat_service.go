@@ -15,9 +15,9 @@ import (
 )
 
 var (
-	ErrPATInvalid     = errors.New("invalid or expired token")
-	ErrPATWrongScope  = errors.New("token scope insufficient")
-	ErrPATBadScope    = errors.New("scope 仅允许 skills:read 与 agents:run")
+	ErrPATInvalid    = errors.New("invalid or expired token")
+	ErrPATWrongScope = errors.New("token scope insufficient")
+	ErrPATBadScope   = errors.New("scope 仅允许 skills:read 与 agents:run")
 )
 
 type PATService struct {
@@ -40,7 +40,7 @@ type CreatePATInput struct {
 }
 
 type CreatePATResult struct {
-	Token   string                    `json:"token"` // plaintext, only in create response
+	Token    string                    `json:"token"` // plaintext, only in create response
 	Metadata model.PersonalAccessToken `json:"metadata"`
 }
 

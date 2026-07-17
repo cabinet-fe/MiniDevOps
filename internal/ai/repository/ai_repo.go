@@ -197,13 +197,6 @@ func (r *AIRepository) ListRuns(page, pageSize int, agentID uint, status string)
 	return items, total, err
 }
 
-func (r *AIRepository) ListArtifactsByAgent(agentID uint) ([]model.AgentRun, error) {
-	var items []model.AgentRun
-	err := r.db.Where("agent_id = ? AND artifact_path <> '' AND artifact_path IS NOT NULL", agentID).
-		Order("id DESC").Find(&items).Error
-	return items, err
-}
-
 func (r *AIRepository) ListRunsByStatuses(statuses ...string) ([]model.AgentRun, error) {
 	var items []model.AgentRun
 	err := r.db.Where("status IN ?", statuses).Order("id ASC").Find(&items).Error

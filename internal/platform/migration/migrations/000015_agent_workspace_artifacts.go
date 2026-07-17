@@ -72,12 +72,12 @@ func upAgentWorkspaceFields(ctx context.Context, db *gorm.DB, driver migration.D
 }
 
 type aiAgentWorkspaceMigrationModel struct {
-	ID               uint   `gorm:"primaryKey"`
-	RepositoryID     *uint  `gorm:"index"`
-	BuildJobIDsJSON  string `gorm:"type:text"`
-	OutputDir        string `gorm:"size:200;not null;default:output"`
-	ArtifactFormat   string `gorm:"size:20;not null;default:gzip"`
-	MaxArtifacts     int    `gorm:"not null;default:10"`
+	ID              uint   `gorm:"primaryKey"`
+	RepositoryID    *uint  `gorm:"index"`
+	BuildJobIDsJSON string `gorm:"type:text"`
+	OutputDir       string `gorm:"size:200;not null;default:output"`
+	ArtifactFormat  string `gorm:"size:20;not null;default:gzip"`
+	MaxArtifacts    int    `gorm:"not null;default:10"`
 }
 
 func (aiAgentWorkspaceMigrationModel) TableName() string { return "ai_agents" }

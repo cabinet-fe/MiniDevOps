@@ -10,13 +10,14 @@ import (
 	"bedrock/internal/cicd/model"
 	"bedrock/internal/cicd/repository"
 	"bedrock/internal/cicd/service"
+	resourceservice "bedrock/internal/resource/service"
 	"gorm.io/gorm"
 )
 
 func TestWebhook_SignatureFailRejects(t *testing.T) {
 	_, repoSvc, _, jobSvc, runSvc, gdb := setupCICD(t)
 
-	repo, err := repoSvc.Create(1, service.CreateRepositoryInput{
+	repo, err := repoSvc.Create(1, resourceservice.CreateRepositoryInput{
 		Name: "wh-sig", RepoURL: "https://example.com/a.git", AuthType: "none",
 	}, false)
 	if err != nil {
@@ -40,7 +41,7 @@ func TestWebhook_SignatureFailRejects(t *testing.T) {
 func TestWebhook_GenericSecretAndDedup(t *testing.T) {
 	_, repoSvc, _, jobSvc, runSvc, gdb := setupCICD(t)
 
-	repo, err := repoSvc.Create(1, service.CreateRepositoryInput{
+	repo, err := repoSvc.Create(1, resourceservice.CreateRepositoryInput{
 		Name: "wh-gen", RepoURL: "https://example.com/b.git", AuthType: "none",
 	}, false)
 	if err != nil {
@@ -84,7 +85,7 @@ func TestWebhook_LogsNoSecret(t *testing.T) {
 func TestWebhook_BranchMatching_FixedMissDoesNotEnqueue(t *testing.T) {
 	_, repoSvc, _, jobSvc, runSvc, gdb := setupCICD(t)
 
-	repo, err := repoSvc.Create(1, service.CreateRepositoryInput{
+	repo, err := repoSvc.Create(1, resourceservice.CreateRepositoryInput{
 		Name: "wh-branch-miss", RepoURL: "https://example.com/miss.git", AuthType: "none",
 	}, false)
 	if err != nil {
@@ -106,7 +107,7 @@ func TestWebhook_BranchMatching_FixedMissDoesNotEnqueue(t *testing.T) {
 func TestWebhook_BranchMatching_JobScopedOnlySelf(t *testing.T) {
 	_, repoSvc, _, jobSvc, runSvc, gdb := setupCICD(t)
 
-	repo, err := repoSvc.Create(1, service.CreateRepositoryInput{
+	repo, err := repoSvc.Create(1, resourceservice.CreateRepositoryInput{
 		Name: "wh-branch-multi", RepoURL: "https://example.com/multi.git", AuthType: "none",
 	}, false)
 	if err != nil {
@@ -139,7 +140,7 @@ func TestWebhook_BranchMatching_JobScopedOnlySelf(t *testing.T) {
 func TestWebhook_BranchMatching_MismatchDoesNotEnqueue(t *testing.T) {
 	_, repoSvc, _, jobSvc, runSvc, gdb := setupCICD(t)
 
-	repo, err := repoSvc.Create(1, service.CreateRepositoryInput{
+	repo, err := repoSvc.Create(1, resourceservice.CreateRepositoryInput{
 		Name: "wh-branch-mismatch", RepoURL: "https://example.com/mismatch.git", AuthType: "none",
 	}, false)
 	if err != nil {
@@ -162,7 +163,7 @@ func TestWebhook_BranchMatching_MismatchDoesNotEnqueue(t *testing.T) {
 func TestWebhook_ValidGitHubSignature(t *testing.T) {
 	_, repoSvc, _, jobSvc, runSvc, gdb := setupCICD(t)
 
-	repo, err := repoSvc.Create(1, service.CreateRepositoryInput{
+	repo, err := repoSvc.Create(1, resourceservice.CreateRepositoryInput{
 		Name: "wh-ok", RepoURL: "https://example.com/c.git", AuthType: "none",
 	}, false)
 	if err != nil {

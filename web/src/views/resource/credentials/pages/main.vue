@@ -1,11 +1,11 @@
 <script setup lang="ts">
-defineOptions({ name: "CicdCredentials" });
+defineOptions({ name: "ResourceCredentials" });
 
 import { reactive, ref, useTemplateRef } from "vue";
 import { o } from "@cat-kit/core";
 import { message } from "@veltra/desktop";
 
-import { createCredential, deleteCredential, updateCredential } from "@/api/cicd";
+import { createCredential, deleteCredential, updateCredential } from "@/api/resource";
 import type { Credential } from "@/api/types";
 import FormDialog from "@/components/form-dialog";
 import ProTable, { defineProTableColumns } from "@/components/pro-table";
@@ -99,11 +99,17 @@ async function remove(row: Credential) {
 
 <template>
   <div>
-    <ProTable ref="list" url="/credentials" v-model:query="query" :columns="columns" pagination>
+    <ProTable
+      ref="list"
+      url="/resource/credentials"
+      v-model:query="query"
+      :columns="columns"
+      pagination
+    >
       <template #filters>
         <u-input v-model="query.keyword" placeholder="名称关键词" style="width: 200px" />
         <u-button
-          v-if="hasPermission('cicd.credentials:create')"
+          v-if="hasPermission('resource.credentials:create')"
           type="primary"
           style="margin-left: auto"
           @click.prevent="openCreate"
@@ -124,13 +130,13 @@ async function remove(row: Credential) {
       <template #column:action="{ rowData }">
         <u-action-group :max="3">
           <u-action
-            v-if="hasPermission('cicd.credentials:update')"
+            v-if="hasPermission('resource.credentials:update')"
             @run="openEdit(rowData as Credential)"
           >
             编辑
           </u-action>
           <u-action
-            v-if="hasPermission('cicd.credentials:delete')"
+            v-if="hasPermission('resource.credentials:delete')"
             @run="remove(rowData as Credential)"
           >
             删除
@@ -176,4 +182,3 @@ async function remove(row: Credential) {
     </FormDialog>
   </div>
 </template>
-

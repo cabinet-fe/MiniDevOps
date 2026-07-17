@@ -15,6 +15,8 @@ import (
 	"bedrock/internal/platform/db"
 	"bedrock/internal/platform/migration"
 	_ "bedrock/internal/platform/migration/migrations"
+	resourcerepo "bedrock/internal/resource/repository"
+	resourceservice "bedrock/internal/resource/service"
 
 	"gorm.io/gorm"
 )
@@ -32,9 +34,9 @@ func (s stubGit) ListBranches(repoURL, authType, username, password string) ([]s
 }
 
 func setupCICD(t *testing.T) (
-	*service.CredentialService,
-	*service.RepositoryService,
-	*service.ServerService,
+	*resourceservice.CredentialService,
+	*resourceservice.RepositoryService,
+	*resourceservice.ServerService,
 	*service.BuildJobService,
 	*service.BuildRunService,
 	*gorm.DB,
@@ -61,16 +63,16 @@ func setupCICD(t *testing.T) (
 		t.Fatal(err)
 	}
 
-	credRepo := repository.NewCredentialRepository(gdb)
-	repoRepo := repository.NewRepositoryRepository(gdb)
-	serverRepo := repository.NewServerRepository(gdb)
+	credRepo := resourcerepo.NewCredentialRepository(gdb)
+	repoRepo := resourcerepo.NewRepositoryRepository(gdb)
+	serverRepo := resourcerepo.NewServerRepository(gdb)
 	jobRepo := repository.NewBuildJobRepository(gdb)
 	runRepo := repository.NewBuildRunRepository(gdb)
 
-	credSvc := service.NewCredentialService(credRepo)
-	repoSvc := service.NewRepositoryService(repoRepo, credSvc)
+	credSvc := resourceservice.NewCredentialService(credRepo)
+	repoSvc := resourceservice.NewRepositoryService(repoRepo, credSvc)
 	repoSvc.SetGitLister(stubGit{branches: []string{"main", "develop"}})
-	serverSvc := service.NewServerService(serverRepo, credSvc)
+	serverSvc := resourceservice.NewServerService(serverRepo, credSvc)
 	jobSvc := service.NewBuildJobService(jobRepo, repoRepo)
 	runSvc := service.NewBuildRunService(runRepo, jobRepo)
 	return credSvc, repoSvc, serverSvc, jobSvc, runSvc, gdb
@@ -79,7 +81,7 @@ func setupCICD(t *testing.T) (
 func TestCredential_CRUD_neverReturnsPlaintext(t *testing.T) {
 	credSvc, _, _, _, _, _ := setupCICD(t)
 
-	created, err := credSvc.Create(1, service.CreateCredentialInput{
+	created, err := credSvc.Create(1, resourceservice.CreateCredentialInput{
 		Name:   "gh-token",
 		Type:   "token",
 		Secret: "super-secret-token",
@@ -104,7 +106,7 @@ func TestCredential_CRUD_neverReturnsPlaintext(t *testing.T) {
 		t.Fatalf("plaintext leaked on get: %s", raw)
 	}
 
-	updated, err := credSvc.Update(created.ID, service.UpdateCredentialInput{
+	updated, err := credSvc.Update(created.ID, resourceservice.UpdateCredentialInput{
 		Description: strPtr("desc"),
 		Secret:      strPtr(""), // keep
 	})
@@ -128,21 +130,21 @@ func TestCredential_CRUD_neverReturnsPlaintext(t *testing.T) {
 func TestCredential_DeleteProtection(t *testing.T) {
 	credSvc, repoSvc, _, _, _, _ := setupCICD(t)
 
-	cred, err := credSvc.Create(1, service.CreateCredentialInput{
+	cred, err := credSvc.Create(1, resourceservice.CreateCredentialInput{
 		Name: "repo-cred", Type: "password", Username: "u", Secret: "p",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	cid := cred.ID
-	_, err = repoSvc.Create(1, service.CreateRepositoryInput{
+	_, err = repoSvc.Create(1, resourceservice.CreateRepositoryInput{
 		Name: "r1", RepoURL: "https://example.com/a.git", AuthType: "credential", CredentialID: &cid,
 	}, true)
 	if err != nil {
 		t.Fatal(err)
 	}
 	err = credSvc.Delete(cid)
-	if err == nil || !service.IsConflict(err) {
+	if err == nil || !resourceservice.IsConflict(err) {
 		t.Fatalf("expected conflict, got %v", err)
 	}
 }
@@ -150,7 +152,7 @@ func TestCredential_DeleteProtection(t *testing.T) {
 func TestRepository_CRUD_and_deleteProtection(t *testing.T) {
 	_, repoSvc, _, jobSvc, _, _ := setupCICD(t)
 
-	repo, err := repoSvc.Create(1, service.CreateRepositoryInput{
+	repo, err := repoSvc.Create(1, resourceservice.CreateRepositoryInput{
 		Name: "demo", RepoURL: "https://example.com/demo.git",
 	}, false)
 	if err != nil {
@@ -174,27 +176,27 @@ func TestRepository_CRUD_and_deleteProtection(t *testing.T) {
 		t.Fatal(err)
 	}
 	err = repoSvc.Delete(repo.ID)
-	if err == nil || !service.IsConflict(err) {
+	if err == nil || !resourceservice.IsConflict(err) {
 		t.Fatalf("expected conflict when jobs reference repo, got %v", err)
 	}
 }
 
 func TestRepository_credentialsUseEnforcedOnBind(t *testing.T) {
 	credSvc, repoSvc, _, _, _, _ := setupCICD(t)
-	cred, err := credSvc.Create(1, service.CreateCredentialInput{
+	cred, err := credSvc.Create(1, resourceservice.CreateCredentialInput{
 		Name: "c1", Type: "token", Secret: "tok",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	cid := cred.ID
-	_, err = repoSvc.Create(1, service.CreateRepositoryInput{
+	_, err = repoSvc.Create(1, resourceservice.CreateRepositoryInput{
 		Name: "r", RepoURL: "https://example.com/x.git", AuthType: "credential", CredentialID: &cid,
 	}, false)
-	if err == nil || !service.IsForbidden(err) {
+	if err == nil || !resourceservice.IsForbidden(err) {
 		t.Fatalf("expected forbidden without credentials:use, got %v", err)
 	}
-	_, err = repoSvc.Create(1, service.CreateRepositoryInput{
+	_, err = repoSvc.Create(1, resourceservice.CreateRepositoryInput{
 		Name: "r", RepoURL: "https://example.com/x.git", AuthType: "credential", CredentialID: &cid,
 	}, true)
 	if err != nil {
@@ -205,14 +207,14 @@ func TestRepository_credentialsUseEnforcedOnBind(t *testing.T) {
 func TestServer_CRUD_and_deleteProtection(t *testing.T) {
 	_, repoSvc, serverSvc, jobSvc, _, _ := setupCICD(t)
 
-	srv, err := serverSvc.Create(1, service.CreateServerInput{
+	srv, err := serverSvc.Create(1, resourceservice.CreateServerInput{
 		Name: "s1", Host: "10.0.0.1", Port: 22, AuthType: "password", Username: "root",
 	}, false)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	repo, err := repoSvc.Create(1, service.CreateRepositoryInput{
+	repo, err := repoSvc.Create(1, resourceservice.CreateRepositoryInput{
 		Name: "r2", RepoURL: "https://example.com/y.git",
 	}, false)
 	if err != nil {
@@ -230,31 +232,31 @@ func TestServer_CRUD_and_deleteProtection(t *testing.T) {
 		t.Fatal(err)
 	}
 	err = serverSvc.Delete(srv.ID)
-	if err == nil || !service.IsConflict(err) {
+	if err == nil || !resourceservice.IsConflict(err) {
 		t.Fatalf("expected conflict, got %v", err)
 	}
 }
 
 func TestServer_credentialsUseOnBind(t *testing.T) {
 	credSvc, _, serverSvc, _, _, _ := setupCICD(t)
-	cred, err := credSvc.Create(1, service.CreateCredentialInput{
+	cred, err := credSvc.Create(1, resourceservice.CreateCredentialInput{
 		Name: "ssh", Type: "password", Username: "root", Secret: "pw",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	cid := cred.ID
-	_, err = serverSvc.Create(1, service.CreateServerInput{
+	_, err = serverSvc.Create(1, resourceservice.CreateServerInput{
 		Name: "s2", Host: "10.0.0.2", AuthType: "password", CredentialID: &cid,
 	}, false)
-	if err == nil || !service.IsForbidden(err) {
+	if err == nil || !resourceservice.IsForbidden(err) {
 		t.Fatalf("expected forbidden, got %v", err)
 	}
 }
 
 func TestBuildJob_and_BuildRun_enqueue(t *testing.T) {
 	_, repoSvc, _, jobSvc, runSvc, _ := setupCICD(t)
-	repo, err := repoSvc.Create(1, service.CreateRepositoryInput{
+	repo, err := repoSvc.Create(1, resourceservice.CreateRepositoryInput{
 		Name: "r3", RepoURL: "https://example.com/z.git",
 	}, false)
 	if err != nil {
@@ -300,7 +302,7 @@ func TestBuildJob_and_BuildRun_enqueue(t *testing.T) {
 
 func TestBuildJob_TwoJobsSameRepo_EachEnqueue(t *testing.T) {
 	_, repoSvc, _, jobSvc, runSvc, _ := setupCICD(t)
-	repo, err := repoSvc.Create(1, service.CreateRepositoryInput{
+	repo, err := repoSvc.Create(1, resourceservice.CreateRepositoryInput{
 		Name: "r-multi-job", RepoURL: "https://example.com/multi-job.git",
 	}, false)
 	if err != nil {
@@ -340,7 +342,7 @@ func TestBuildJob_TwoJobsSameRepo_EachEnqueue(t *testing.T) {
 
 func TestBuildRun_RetryAfterInterrupted(t *testing.T) {
 	_, repoSvc, _, jobSvc, runSvc, gdb := setupCICD(t)
-	repo, err := repoSvc.Create(1, service.CreateRepositoryInput{
+	repo, err := repoSvc.Create(1, resourceservice.CreateRepositoryInput{
 		Name: "r-retry", RepoURL: "https://example.com/retry.git",
 	}, false)
 	if err != nil {
@@ -383,7 +385,7 @@ func TestBuildRun_RetryAfterInterrupted(t *testing.T) {
 
 func TestBuildRun_ArtifactPathDownloadable(t *testing.T) {
 	_, repoSvc, _, jobSvc, runSvc, gdb := setupCICD(t)
-	repo, err := repoSvc.Create(1, service.CreateRepositoryInput{
+	repo, err := repoSvc.Create(1, resourceservice.CreateRepositoryInput{
 		Name: "r-art", RepoURL: "https://example.com/art.git",
 	}, false)
 	if err != nil {
