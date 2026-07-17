@@ -1,16 +1,16 @@
 <script setup lang="ts">
 defineOptions({ name: "AiTokens" });
 
-import { onMounted, reactive, ref } from "vue";
-import { defineTableColumns, message } from "@veltra/desktop";
+import { reactive, ref, useTemplateRef } from "vue";
+import { message } from "@veltra/desktop";
 
-import { createToken, deleteToken, listTokens } from "@/api/ai";
+import { createToken, deleteToken } from "@/api/ai";
 import type { PersonalAccessToken } from "@/api/types";
 import FormDialog from "@/components/form-dialog";
+import ProTable, { defineProTableColumns } from "@/components/pro-table";
 import { formatDateTime } from "@/lib/datetime";
 
-const items = ref<PersonalAccessToken[]>([]);
-const loading = ref(false);
+const table = useTemplateRef("table");
 const dialogOpen = ref(false);
 const plaintext = ref("");
 const form = reactive({
@@ -19,7 +19,7 @@ const form = reactive({
   scopeAgents: false,
 });
 
-const columns = defineTableColumns([
+const columns = defineProTableColumns([
   { key: "id", name: "ID", width: 70 },
   { key: "name", name: "名称", minWidth: 120 },
   { key: "token_prefix", name: "前缀", width: 140 },
@@ -31,19 +31,8 @@ const columns = defineTableColumns([
     minWidth: 160,
     render: ({ val }) => formatDateTime(val),
   },
-  { key: "action", name: "操作", width: 100, fixed: "right" },
+  { key: "action", name: "操作", width: 100, align: "center", fixed: "right" },
 ]);
-
-async function reload() {
-  loading.value = true;
-  try {
-    items.value = await listTokens();
-  } catch (error) {
-    message.error(error instanceof Error ? error.message : "加载失败");
-  } finally {
-    loading.value = false;
-  }
-}
 
 function openCreate() {
   form.name = "";
@@ -65,7 +54,7 @@ async function save() {
     const result = await createToken({ name: form.name, scopes });
     plaintext.value = result.token;
     message.success("令牌已创建，请立即复制明文（仅显示一次）");
-    await reload();
+    table.value?.reload();
   } catch (error) {
     message.error(error instanceof Error ? error.message : "创建失败");
   }
@@ -75,24 +64,21 @@ async function remove(row: PersonalAccessToken) {
   try {
     await deleteToken(row.id);
     message.success("已删除");
-    await reload();
+    table.value?.reload();
   } catch (error) {
     message.error(error instanceof Error ? error.message : "删除失败");
   }
 }
-
-onMounted(() => {
-  void reload();
-});
 </script>
 
 <template>
   <div>
-    <div class="page-toolbar">
-      <u-button type="primary" @click="openCreate">创建令牌</u-button>
-    </div>
-
-    <u-table :columns="columns" :data="items" v-loading="loading">
+    <ProTable ref="table" url="/tokens" pagination :columns="columns">
+      <template #filters>
+        <u-button type="primary" style="margin-left: auto" @click.prevent="openCreate">
+          创建令牌
+        </u-button>
+      </template>
       <template #column:scopes="{ rowData }">
         <span class="tag-cell">
           <u-tag
@@ -120,7 +106,7 @@ onMounted(() => {
           </u-action>
         </u-action-group>
       </template>
-    </u-table>
+    </ProTable>
 
     <FormDialog
       v-model="dialogOpen"
@@ -146,10 +132,6 @@ onMounted(() => {
 </template>
 
 <style scoped lang="scss">
-.page-toolbar {
-  display: flex;
-  justify-content: flex-end;
-}
 .scope-row {
   display: flex;
   flex-wrap: wrap;

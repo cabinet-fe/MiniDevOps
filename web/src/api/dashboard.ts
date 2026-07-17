@@ -1,5 +1,11 @@
 import { http } from "./http";
-import type { BuildSummary, DashboardLayout, SystemInfo, SystemStatus } from "./types";
+import type {
+  AgentRunSummary,
+  BuildSummary,
+  DashboardLayout,
+  SystemInfo,
+  SystemStatus,
+} from "./types";
 
 export async function getDashboardLayout(): Promise<DashboardLayout> {
   const { body } = await http.get<DashboardLayout>("/dashboard/layout");
@@ -13,6 +19,11 @@ export async function saveDashboardLayout(layout: DashboardLayout): Promise<Dash
 
 export async function getBuildSummary(): Promise<BuildSummary> {
   const { body } = await http.get<BuildSummary>("/dashboard/build-summary");
+  return body;
+}
+
+export async function getAgentRunSummary(): Promise<AgentRunSummary> {
+  const { body } = await http.get<AgentRunSummary>("/dashboard/agent-run-summary");
   return body;
 }
 

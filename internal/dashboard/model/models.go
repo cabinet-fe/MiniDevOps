@@ -43,6 +43,22 @@ type RecentRun struct {
 	CreatedAt   time.Time `json:"created_at"`
 }
 
+type AgentRunSummary struct {
+	Running     int64            `json:"running"`
+	Queued      int64            `json:"queued"`
+	SuccessRate float64          `json:"success_rate"`
+	Recent      []RecentAgentRun `json:"recent"`
+}
+
+type RecentAgentRun struct {
+	ID          uint      `json:"id"`
+	AgentID     uint      `json:"agent_id"`
+	AgentName   string    `json:"agent_name"`
+	TriggerType string    `json:"trigger_type"`
+	Status      string    `json:"status"`
+	CreatedAt   time.Time `json:"created_at"`
+}
+
 type SystemInfo struct {
 	Version   string    `json:"version"`
 	OS        string    `json:"os"`

@@ -14,13 +14,14 @@ import (
 )
 
 func artifactArchiveName(buildNumber int, format string) string {
-	if normalizeArtifactFormat(format) == "zip" {
+	if NormalizeArtifactFormat(format) == "zip" {
 		return fmt.Sprintf("build-%03d.zip", buildNumber)
 	}
 	return fmt.Sprintf("build-%03d.tar.gz", buildNumber)
 }
 
-func normalizeArtifactFormat(format string) string {
+// NormalizeArtifactFormat returns "zip" or "gzip" (default).
+func NormalizeArtifactFormat(format string) string {
 	switch strings.ToLower(strings.TrimSpace(format)) {
 	case "zip":
 		return "zip"
@@ -29,8 +30,17 @@ func normalizeArtifactFormat(format string) string {
 	}
 }
 
-func createArtifactArchive(targetPath, sourceDir, format string) error {
-	if normalizeArtifactFormat(format) == "zip" {
+// ArtifactArchiveExt returns the file extension for an artifact format.
+func ArtifactArchiveExt(format string) string {
+	if NormalizeArtifactFormat(format) == "zip" {
+		return ".zip"
+	}
+	return ".tar.gz"
+}
+
+// CreateArtifactArchive packs sourceDir into targetPath as zip or tar.gz.
+func CreateArtifactArchive(targetPath, sourceDir, format string) error {
+	if NormalizeArtifactFormat(format) == "zip" {
 		return createZip(targetPath, sourceDir)
 	}
 	return createTarGz(targetPath, sourceDir)
@@ -133,7 +143,7 @@ func extractArtifactArchive(archivePath, destDir, format string) error {
 	if err := os.MkdirAll(destDir, 0755); err != nil {
 		return err
 	}
-	if normalizeArtifactFormat(format) == "zip" {
+	if NormalizeArtifactFormat(format) == "zip" {
 		return extractZipArchiveFile(archivePath, destDir)
 	}
 	return extractTarGzArchiveFile(archivePath, destDir)

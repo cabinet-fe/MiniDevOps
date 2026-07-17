@@ -22,9 +22,10 @@ import (
 )
 
 const (
-	CardBuildSummary = "build_summary"
-	CardSystemInfo   = "system_info"
-	CardSystemStatus = "system_status"
+	CardBuildSummary    = "build_summary"
+	CardAgentRunSummary = "agent_run_summary"
+	CardSystemInfo      = "system_info"
+	CardSystemStatus    = "system_status"
 )
 
 var ErrUnauthorizedCard = errors.New("仪表盘包含无权限卡片")
@@ -118,6 +119,30 @@ func (s *DashboardService) BuildSummary() (*model.BuildSummary, error) {
 	return &model.BuildSummary{Running: running, Queued: queued, SuccessRate: rate, Recent: recent}, nil
 }
 
+func (s *DashboardService) AgentRunSummary() (*model.AgentRunSummary, error) {
+	running, err := s.repo.CountAgentRunsByStatus("running")
+	if err != nil {
+		return nil, err
+	}
+	queued, err := s.repo.CountAgentRunsByStatuses([]string{"queued", "pending"})
+	if err != nil {
+		return nil, err
+	}
+	total, success, err := s.repo.CountFinishedAgentRuns()
+	if err != nil {
+		return nil, err
+	}
+	recent, err := s.repo.ListRecentAgentRuns(8)
+	if err != nil {
+		return nil, err
+	}
+	rate := float64(0)
+	if total > 0 {
+		rate = float64(success) * 100 / float64(total)
+	}
+	return &model.AgentRunSummary{Running: running, Queued: queued, SuccessRate: rate, Recent: recent}, nil
+}
+
 func (s *DashboardService) SystemInfo() (*model.SystemInfo, error) {
 	hostname, err := os.Hostname()
 	if err != nil {
@@ -200,6 +225,9 @@ func allowedCards(isSuperAdmin bool, permissions []string) map[string]struct{} {
 	if isSuperAdmin || hasPermission(permissions, "cicd.build_runs:view") {
 		allowed[CardBuildSummary] = struct{}{}
 	}
+	if isSuperAdmin || hasPermission(permissions, "ai.runs:view") {
+		allowed[CardAgentRunSummary] = struct{}{}
+	}
 	if isSuperAdmin || hasPermission(permissions, "dashboard.system_info:view") {
 		allowed[CardSystemInfo] = struct{}{}
 	}
@@ -214,7 +242,7 @@ func hasPermission(codes []string, required string) bool {
 }
 
 func defaultLayout(allowed map[string]struct{}) []model.CardLayout {
-	all := []string{CardBuildSummary, CardSystemInfo, CardSystemStatus}
+	all := []string{CardBuildSummary, CardAgentRunSummary, CardSystemInfo, CardSystemStatus}
 	cards := make([]model.CardLayout, 0, len(all))
 	for _, id := range all {
 		if _, ok := allowed[id]; ok {

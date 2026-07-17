@@ -181,9 +181,13 @@ func main() {
 	if agentWorkDir == "" {
 		agentWorkDir = "./data/workspace"
 	}
-	agentSvc := aiservice.NewAgentService(aiRepo, cliSvc, skillSvc, hub, logger, agentWorkDir, cfg.Build.LogDir, auditSvc)
+	agentArtifactDir := cfg.Build.ArtifactDir
+	if agentArtifactDir == "" {
+		agentArtifactDir = "./data/artifacts"
+	}
+	agentSvc := aiservice.NewAgentService(aiRepo, cliSvc, skillSvc, hub, logger, agentWorkDir, agentArtifactDir, cfg.Build.LogDir, auditSvc)
 	agentSvc.SetDocDraftWriter(projectSvc)
-	agentSvc.SetRepoCloner(aiservice.NewSimpleRepoCloner(repoRepo))
+	agentSvc.SetBuildJobFinder(jobRepo)
 	agentSvc.SetTerminalNotifier(notifSvc)
 	docsBridge := aiservice.NewDocsBridge(agentSvc)
 	projectSvc.SetDocsAIBridge(docsBridge)

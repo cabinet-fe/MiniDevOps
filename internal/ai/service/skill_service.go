@@ -168,13 +168,13 @@ func (s *SkillService) OpenPackage(id, userID uint, isSuperAdmin bool) (*model.S
 	return skill, f, skill.Name + ".zip", nil
 }
 
-// InjectSkills extracts bound skills into workspaceDir/skills/<id>/ for agent runs.
+// InjectSkills extracts bound skills into workspaceDir/.agents/skills/<id>/ for agent runs.
 func (s *SkillService) InjectSkills(workspaceDir string, skillIDs []uint, userID uint, isSuperAdmin bool) (map[uint]string, error) {
 	digests := map[uint]string{}
 	if len(skillIDs) == 0 {
 		return digests, nil
 	}
-	skillsRoot := filepath.Join(workspaceDir, "skills")
+	skillsRoot := filepath.Join(workspaceDir, ".agents", "skills")
 	if err := os.MkdirAll(skillsRoot, 0o755); err != nil {
 		return nil, err
 	}

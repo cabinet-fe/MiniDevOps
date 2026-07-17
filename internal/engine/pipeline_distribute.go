@@ -74,7 +74,7 @@ func (p *Pipeline) runDistributions(
 		_ = p.runs.CreateAttempt(attempt)
 		p.broadcastRunRefresh(run.ID)
 		writeLine(fmt.Sprintf("--- Target #%d (%s → %s) ---", t.ID, t.Method, t.RemotePath))
-		err := p.deployOneTarget(ctx, &t, sourceDir, normalizeArtifactFormat(job.ArtifactFormat), writeLine)
+		err := p.deployOneTarget(ctx, &t, sourceDir, NormalizeArtifactFormat(job.ArtifactFormat), writeLine)
 		fin := time.Now()
 		attempt.FinishedAt = &fin
 		if err != nil {
@@ -296,7 +296,7 @@ func (p *Pipeline) executeRedeployOnly(ctx context.Context, run *model.BuildRun,
 	}
 	defer os.RemoveAll(tmpDir)
 
-	format := normalizeArtifactFormat(job.ArtifactFormat)
+	format := NormalizeArtifactFormat(job.ArtifactFormat)
 	if err := extractArtifactArchive(artifactPath, tmpDir, format); err != nil {
 		writeLine("ERROR: " + err.Error())
 		_ = p.runs.UpdateFields(run.ID, map[string]interface{}{"distribution_summary": "all_failed", "stage": "idle"})

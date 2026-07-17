@@ -75,8 +75,9 @@ AI CLI、Agents、运行记录、Skills。
 ### POST /ai/agents — 创建 Agent
 
 权限：`ai.agents:create`
-请求：{ name, description, enabled, cli_key, system_prompt, skill_ids, repository_id, timeout_sec }
+请求：{ name, description, enabled, cli_key, system_prompt, skill_ids, build_job_ids, output_dir, artifact_format, max_artifacts, timeout_sec }
 响应 201
+说明：创建后同步持久工作区 `{workspace}/agents/agent-{id}/`（技能解压到 `.agents/skills`，`job-{id}` 软链到构建任务工作区）。
 
 ### GET /ai/agents/{id} — 获取 Agent
 
@@ -88,14 +89,16 @@ AI CLI、Agents、运行记录、Skills。
 
 权限：`ai.agents:update`
 路径参数：id*: integer
-请求：{ name, description, enabled, cli_key, system_prompt, skill_ids, repository_id, timeout_sec }
+请求：{ name, description, enabled, cli_key, system_prompt, skill_ids, build_job_ids, output_dir, artifact_format, max_artifacts, timeout_sec }
 响应 200
+说明：更新后重新同步持久工作区。
 
 ### DELETE /ai/agents/{id} — 删除 Agent
 
 权限：`ai.agents:delete`
 路径参数：id*: integer
 响应 200
+说明：删除记录并清理 `{workspace}/agents/agent-{id}/`。
 
 ### GET /ai/agents/{id}/triggers — 列出触发器
 
@@ -129,7 +132,7 @@ AI CLI、Agents、运行记录、Skills。
 权限：`ai.agents:execute`
 路径参数：id*: integer
 响应 202
-说明：需要 `ai.agents:execute`。上下文仅为 system_prompt + 所选仓库。
+说明：在 Agent 持久工作区执行；产出目录为 `runs/run-{id}/output`（环境变量 `BEDROCK_AGENT_OUTPUT`）；成功且非空时打包制品并写入 `artifact_path`。
 
 ### POST /ai/agents/{id}/api-runs — API 触发 Agent 运行（需 PAT scope）
 
@@ -141,15 +144,23 @@ AI CLI、Agents、运行记录、Skills。
 
 ### GET /ai/runs — 列出 Agent 运行记录
 
-权限：`ai.agents:view`
+权限：`ai.runs:view`
 查询参数：page: integer, page_size: integer, agent_id: integer, status: string
 响应 200
 
 ### GET /ai/runs/{id} — 获取 Agent 运行记录
 
-权限：`ai.agents:view`
+权限：`ai.runs:view`
 路径参数：id*: integer
 响应 200
+
+### GET /ai/runs/{id}/artifact — 下载 Agent 运行制品
+
+权限：`ai.runs:view`
+路径参数：id*: integer
+响应 200：data = binary
+错误：404
+说明：仅当运行成功且存在 `artifact_path` 时可下载（zip 或 tar.gz，由 Agent 的 `artifact_format` 决定）。
 
 ### POST /ai/runs/{id}/cancel — 取消 Agent 运行
 
@@ -223,9 +234,29 @@ AI CLI、Agents、运行记录、Skills。
 | `enabled` | `boolean` |  |  |
 | `cli_key` | `string` |  |  |
 | `system_prompt` | `string` |  |  |
-| `skill_ids` | `integer[]` |  |  |
-| `repository_id` | `integer` |  |  |
+| `skill_ids` | `integer[]` |  | 解压到工作区 `.agents/skills/{id}/` |
+| `build_job_ids` | `integer[]` |  | 软链 `job-{id}` → `{workspace}/repo-{repoID}/job-{jobID}` |
+| `output_dir` | `string` |  | 相对名提示，默认 `output`；实际每次 run 使用独立 `runs/run-{id}/output` |
+| `artifact_format` | `'zip' \| 'gzip'` |  | 默认 `gzip` |
+| `max_artifacts` | `integer` |  | 按 Agent 保留最近 N 个制品文件，默认 10 |
 | `timeout_sec` | `integer` |  |  |
+
+### AgentRun
+
+| 字段 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `id` | `integer` |  |  |
+| `agent_id` | `integer` |  |  |
+| `trigger_type` | `string` |  |  |
+| `status` | `string` |  |  |
+| `work_dir` | `string` |  | 本次使用的 Agent 根目录 |
+| `artifact_path` | `string` |  | 打包后的制品路径；空表示无制品 |
+| `build_run_id` | `integer` |  |  |
+| `project_id` | `integer` |  |  |
+| `doc_node_id` | `integer` |  |  |
+| `error_message` | `string` |  |  |
+| `output_text` | `string` |  |  |
+| `created_at` | `string` |  |  |
 
 ### CliDetectResult
 

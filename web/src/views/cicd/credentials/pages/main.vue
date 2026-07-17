@@ -100,9 +100,8 @@ async function remove(row: Credential) {
 <template>
   <div>
     <ProTable ref="list" url="/credentials" v-model:query="query" :columns="columns" pagination>
-      <template #filters="{ search }">
+      <template #filters>
         <u-input v-model="query.keyword" placeholder="名称关键词" style="width: 200px" />
-        <u-button type="primary" @click="search">查询</u-button>
         <u-button
           v-if="hasPermission('cicd.credentials:create')"
           type="primary"

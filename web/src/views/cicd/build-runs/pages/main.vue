@@ -82,7 +82,7 @@ onMounted(async () => {
       :auto-query-fields="['status', 'build_job_id']"
       pagination
     >
-      <template #filters="{ search }">
+      <template #filters>
         <u-select
           v-model="query.build_job_id"
           clearable
@@ -104,7 +104,6 @@ onMounted(async () => {
             { label: 'interrupted', value: 'interrupted' },
           ]"
         />
-        <u-button type="primary" @click="search">查询</u-button>
       </template>
       <template #column:build_job_id="{ rowData }">
         {{ jobLabel((rowData as BuildRun).build_job_id) }}

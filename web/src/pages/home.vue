@@ -7,6 +7,7 @@ import { Edit } from "@veltra/icons/normal";
 import { useRouter } from "vue-router";
 
 import {
+  getAgentRunSummary,
   getBuildSummary,
   getDashboardLayout,
   getSystemInfo,
@@ -14,12 +15,14 @@ import {
   saveDashboardLayout,
 } from "@/api/dashboard";
 import type {
+  AgentRunSummary,
   BuildSummary,
   DashboardCardID,
   DashboardCardLayout,
   SystemInfo,
   SystemStatus,
 } from "@/api/types";
+import DashboardAgentRunCard from "@/components/dashboard-agent-run-card";
 import DashboardBuildCard from "@/components/dashboard-build-card";
 import DashboardSystemInfoCard from "@/components/dashboard-system-info-card";
 import DashboardSystemStatusCard from "@/components/dashboard-system-status-card";
@@ -33,6 +36,7 @@ const editorOpen = ref(false);
 const saving = ref(false);
 const loading = ref(true);
 const buildSummary = ref<BuildSummary | null>(null);
+const agentRunSummary = ref<AgentRunSummary | null>(null);
 const systemInfo = ref<SystemInfo | null>(null);
 const systemStatus = ref<SystemStatus | null>(null);
 let statusTimer: ReturnType<typeof setInterval> | undefined;
@@ -43,6 +47,7 @@ const visibleCards = computed(() =>
 
 const cardTitles: Record<DashboardCardID, string> = {
   build_summary: "构建摘要",
+  agent_run_summary: "智能体运行摘要",
   system_info: "系统信息",
   system_status: "系统状态",
 };
@@ -58,6 +63,15 @@ async function loadCardData() {
       getBuildSummary()
         .then((result) => {
           buildSummary.value = result;
+        })
+        .catch(showLoadError),
+    );
+  }
+  if (isVisible("agent_run_summary")) {
+    requests.push(
+      getAgentRunSummary()
+        .then((result) => {
+          agentRunSummary.value = result;
         })
         .catch(showLoadError),
     );
@@ -131,6 +145,10 @@ function openBuildRun(id: number) {
   void router.push({ name: "cicd-build-run-detail", params: { id: String(id) } });
 }
 
+function openAgentRun(id: number) {
+  void router.push({ name: "ai-run-detail", params: { id: String(id) } });
+}
+
 function showLoadError(error: unknown) {
   message.error(error instanceof Error ? error.message : "加载失败");
 }
@@ -163,7 +181,11 @@ onUnmounted(() => {
         </label>
         <span class="dashboard__editor-actions">
           <u-button text :disabled="index === 0" @click="moveDraftCard(index, -1)">上移</u-button>
-          <u-button text :disabled="index === draftCards.length - 1" @click="moveDraftCard(index, 1)">
+          <u-button
+            text
+            :disabled="index === draftCards.length - 1"
+            @click="moveDraftCard(index, 1)"
+          >
             下移
           </u-button>
         </span>
@@ -181,6 +203,11 @@ onUnmounted(() => {
           v-if="card.id === 'build_summary'"
           :data="buildSummary"
           @open-run="openBuildRun"
+        />
+        <DashboardAgentRunCard
+          v-else-if="card.id === 'agent_run_summary'"
+          :data="agentRunSummary"
+          @open-run="openAgentRun"
         />
         <DashboardSystemInfoCard v-else-if="card.id === 'system_info'" :data="systemInfo" />
         <DashboardSystemStatusCard v-else-if="card.id === 'system_status'" :data="systemStatus" />

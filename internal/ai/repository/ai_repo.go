@@ -197,6 +197,13 @@ func (r *AIRepository) ListRuns(page, pageSize int, agentID uint, status string)
 	return items, total, err
 }
 
+func (r *AIRepository) ListArtifactsByAgent(agentID uint) ([]model.AgentRun, error) {
+	var items []model.AgentRun
+	err := r.db.Where("agent_id = ? AND artifact_path <> '' AND artifact_path IS NOT NULL", agentID).
+		Order("id DESC").Find(&items).Error
+	return items, err
+}
+
 func (r *AIRepository) ListRunsByStatuses(statuses ...string) ([]model.AgentRun, error) {
 	var items []model.AgentRun
 	err := r.db.Where("status IN ?", statuses).Order("id ASC").Find(&items).Error
@@ -283,10 +290,21 @@ func (r *AIRepository) FindPAT(id uint) (*model.PersonalAccessToken, error) {
 	return &token, nil
 }
 
-func (r *AIRepository) ListPATs(userID uint) ([]model.PersonalAccessToken, error) {
+func (r *AIRepository) ListPATs(userID uint, page, pageSize int) ([]model.PersonalAccessToken, int64, error) {
+	q := r.db.Model(&model.PersonalAccessToken{}).Where("user_id = ?", userID)
+	var total int64
+	if err := q.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 {
+		pageSize = 20
+	}
 	var items []model.PersonalAccessToken
-	err := r.db.Where("user_id = ?", userID).Order("id DESC").Find(&items).Error
-	return items, err
+	err := q.Order("id DESC").Offset((page - 1) * pageSize).Limit(pageSize).Find(&items).Error
+	return items, total, err
 }
 
 func (r *AIRepository) UpdatePAT(token *model.PersonalAccessToken) error {

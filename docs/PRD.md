@@ -277,7 +277,7 @@ level1.level2.level3:action
 | `ops`         | 运维     | `ops.processes`、`ops.dev_environments`                                                                            |
 | `cicd`        | CI/CD    | `cicd.repositories`、`cicd.build_jobs`、`cicd.build_runs`、`cicd.servers`、`cicd.credentials`                      |
 | `project`     | 项目管理 | `project.projects`、`project.requirements`、`project.docs`                                                         |
-| `ai`          | AI       | `ai.clis`、`ai.agents`、`ai.skills`                                                                                |
+| `ai`          | AI       | `ai.clis`、`ai.agents`、`ai.runs`、`ai.skills`、`ai.tokens`                                                          |
 | `system`      | 系统管理 | `system.users`、`system.roles`、`system.resources`、`system.dictionaries`、`system.operation_logs` |
 
 进入页所需权限示例：叶子菜单对应 `{path}:view`；一级分组可见性见 §4.2.2。

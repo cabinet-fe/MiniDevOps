@@ -127,9 +127,8 @@ async function onTest(row: Server) {
 <template>
   <div>
     <ProTable ref="list" url="/servers" v-model:query="query" :columns="columns" pagination>
-      <template #filters="{ search }">
+      <template #filters>
         <u-input v-model="query.keyword" placeholder="名称/主机" style="width: 200px" />
-        <u-button type="primary" @click="search">查询</u-button>
         <u-button
           v-if="hasPermission('cicd.servers:create')"
           type="primary"

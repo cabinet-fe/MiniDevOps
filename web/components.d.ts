@@ -15,6 +15,7 @@ declare module 'vue' {
     AppWorkspaceTabs: typeof import('./src/components/app-workspace-tabs/app-workspace-tabs.vue')['default']
     BrandLogo: typeof import('./src/components/brand-logo/brand-logo.vue')['default']
     BuildLogViewer: typeof import('./src/components/build-log-viewer/build-log-viewer.vue')['default']
+    DashboardAgentRunCard: typeof import('./src/components/dashboard-agent-run-card/dashboard-agent-run-card.vue')['default']
     DashboardBuildCard: typeof import('./src/components/dashboard-build-card/dashboard-build-card.vue')['default']
     DashboardSystemInfoCard: typeof import('./src/components/dashboard-system-info-card/dashboard-system-info-card.vue')['default']
     DashboardSystemStatusCard: typeof import('./src/components/dashboard-system-status-card/dashboard-system-status-card.vue')['default']

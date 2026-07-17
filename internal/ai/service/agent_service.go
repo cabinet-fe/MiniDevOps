@@ -20,6 +20,7 @@ import (
 	"bedrock/internal/ai/model"
 	"bedrock/internal/ai/repository"
 	cicdmodel "bedrock/internal/cicd/model"
+	"bedrock/internal/engine"
 	"bedrock/internal/ws"
 )
 
@@ -28,28 +29,24 @@ type DocDraftWriter interface {
 	WriteDraftFromAgentRun(projectID, nodeID, runID uint, content string, userID uint) error
 }
 
-// RepoCloner optionally clones a repository for agent workspace context.
-type RepoCloner interface {
-	CloneForAgent(ctx context.Context, repositoryID uint, destDir string) error
-}
-
 // TerminalNotifier persists + pushes per-user inbox notifications on AgentRun terminal.
 type TerminalNotifier interface {
 	NotifyAgentRun(userID uint, agentRunID, agentID uint, status string)
 }
 
 type AgentService struct {
-	repo     *repository.AIRepository
-	cli      *CLIService
-	skills   *SkillService
-	hub      *ws.Hub
-	logger   *zap.Logger
-	workDir  string
-	logDir   string
-	docs     DocDraftWriter
-	cloner   RepoCloner
-	audit    AuditWriter
-	notifier TerminalNotifier
+	repo        *repository.AIRepository
+	cli         *CLIService
+	skills      *SkillService
+	hub         *ws.Hub
+	logger      *zap.Logger
+	workDir     string
+	artifactDir string
+	logDir      string
+	docs        DocDraftWriter
+	jobs        BuildJobFinder
+	audit       AuditWriter
+	notifier    TerminalNotifier
 
 	runs    chan uint
 	stop    chan struct{}
@@ -57,9 +54,9 @@ type AgentService struct {
 	startMu sync.Mutex
 	started bool
 
-	cronMu   sync.Mutex
-	cron     *cron.Cron
-	cronIDs  map[uint]cron.EntryID
+	cronMu  sync.Mutex
+	cron    *cron.Cron
+	cronIDs map[uint]cron.EntryID
 }
 
 // SetTerminalNotifier wires DESIGN §12 in-app notifications for agent terminal states.
@@ -85,12 +82,12 @@ func NewAgentService(
 	skills *SkillService,
 	hub *ws.Hub,
 	logger *zap.Logger,
-	workDir, logDir string,
+	workDir, artifactDir, logDir string,
 	audit ...AuditWriter,
 ) *AgentService {
 	svc := &AgentService{
 		repo: repo, cli: cli, skills: skills, hub: hub, logger: logger,
-		workDir: workDir, logDir: logDir,
+		workDir: workDir, artifactDir: artifactDir, logDir: logDir,
 		runs: make(chan uint, 128), stop: make(chan struct{}),
 		cronIDs: make(map[uint]cron.EntryID),
 	}
@@ -101,7 +98,6 @@ func NewAgentService(
 }
 
 func (s *AgentService) SetDocDraftWriter(w DocDraftWriter) { s.docs = w }
-func (s *AgentService) SetRepoCloner(c RepoCloner)         { s.cloner = c }
 
 func (s *AgentService) Start() {
 	s.startMu.Lock()
@@ -147,14 +143,17 @@ func (s *AgentService) RecoverOnStartup() error {
 }
 
 type AgentInput struct {
-	Name         string `json:"name"`
-	Description  string `json:"description"`
-	Enabled      *bool  `json:"enabled"`
-	CliKey       string `json:"cli_key"`
-	SystemPrompt string `json:"system_prompt"`
-	SkillIDs     []uint `json:"skill_ids"`
-	RepositoryID *uint  `json:"repository_id"`
-	TimeoutSec   int    `json:"timeout_sec"`
+	Name           string `json:"name"`
+	Description    string `json:"description"`
+	Enabled        *bool  `json:"enabled"`
+	CliKey         string `json:"cli_key"`
+	SystemPrompt   string `json:"system_prompt"`
+	SkillIDs       []uint `json:"skill_ids"`
+	BuildJobIDs    []uint `json:"build_job_ids"`
+	OutputDir      string `json:"output_dir"`
+	ArtifactFormat string `json:"artifact_format"`
+	MaxArtifacts   int    `json:"max_artifacts"`
+	TimeoutSec     int    `json:"timeout_sec"`
 }
 
 func (s *AgentService) CreateAgent(createdBy uint, in AgentInput) (*model.AiAgent, error) {
@@ -168,16 +167,28 @@ func (s *AgentService) CreateAgent(createdBy uint, in AgentInput) (*model.AiAgen
 	agent := &model.AiAgent{
 		Name: name, Description: strings.TrimSpace(in.Description),
 		Enabled: boolOr(in.Enabled, true), CliKey: in.CliKey,
-		SystemPrompt: in.SystemPrompt, RepositoryID: in.RepositoryID,
+		SystemPrompt: in.SystemPrompt,
+		OutputDir: stringOr(in.OutputDir, "output"),
+		ArtifactFormat: normalizeAgentArtifactFormat(in.ArtifactFormat),
+		MaxArtifacts: intOr(in.MaxArtifacts, 10),
 		TimeoutSec: intOr(in.TimeoutSec, 600), CreatedBy: createdBy,
 	}
 	if err := encodeSkillIDs(agent, in.SkillIDs); err != nil {
+		return nil, err
+	}
+	if err := encodeBuildJobIDs(agent, in.BuildJobIDs); err != nil {
 		return nil, err
 	}
 	if err := s.repo.CreateAgent(agent); err != nil {
 		return nil, err
 	}
 	decodeSkillIDs(agent)
+	decodeBuildJobIDs(agent)
+	if _, _, err := s.SyncAgentWorkspace(agent, createdBy, true); err != nil {
+		_ = s.repo.DeleteAgent(agent.ID)
+		s.removeAgentWorkspace(agent.ID)
+		return nil, fmt.Errorf("同步工作区失败: %w", err)
+	}
 	if s.audit != nil {
 		_ = s.audit.Write(createdBy, "", "agent_create", "ai_agent", fmt.Sprintf("%d", agent.ID), agent.Name, "")
 	}
@@ -212,8 +223,19 @@ func (s *AgentService) UpdateAgent(id, userID uint, in AgentInput) (*model.AiAge
 			return nil, err
 		}
 	}
-	if in.RepositoryID != nil {
-		agent.RepositoryID = in.RepositoryID
+	if in.BuildJobIDs != nil {
+		if err := encodeBuildJobIDs(agent, in.BuildJobIDs); err != nil {
+			return nil, err
+		}
+	}
+	if strings.TrimSpace(in.OutputDir) != "" {
+		agent.OutputDir = strings.TrimSpace(in.OutputDir)
+	}
+	if strings.TrimSpace(in.ArtifactFormat) != "" {
+		agent.ArtifactFormat = normalizeAgentArtifactFormat(in.ArtifactFormat)
+	}
+	if in.MaxArtifacts > 0 {
+		agent.MaxArtifacts = in.MaxArtifacts
 	}
 	if in.TimeoutSec > 0 {
 		agent.TimeoutSec = in.TimeoutSec
@@ -222,6 +244,10 @@ func (s *AgentService) UpdateAgent(id, userID uint, in AgentInput) (*model.AiAge
 		return nil, err
 	}
 	decodeSkillIDs(agent)
+	decodeBuildJobIDs(agent)
+	if _, _, err := s.SyncAgentWorkspace(agent, userID, true); err != nil {
+		return nil, fmt.Errorf("同步工作区失败: %w", err)
+	}
 	if s.audit != nil {
 		_ = s.audit.Write(userID, "", "agent_update", "ai_agent", fmt.Sprintf("%d", agent.ID), agent.Name, "")
 	}
@@ -232,6 +258,7 @@ func (s *AgentService) DeleteAgent(id, userID uint) error {
 	if err := s.repo.DeleteAgent(id); err != nil {
 		return err
 	}
+	s.removeAgentWorkspace(id)
 	if s.audit != nil {
 		_ = s.audit.Write(userID, "", "agent_delete", "ai_agent", fmt.Sprintf("%d", id), "", "")
 	}
@@ -245,6 +272,7 @@ func (s *AgentService) GetAgent(id uint) (*model.AiAgent, error) {
 		return nil, err
 	}
 	decodeSkillIDs(agent)
+	decodeBuildJobIDs(agent)
 	return agent, nil
 }
 
@@ -252,6 +280,7 @@ func (s *AgentService) ListAgents(page, pageSize int) ([]model.AiAgent, int64, e
 	items, total, err := s.repo.ListAgents(page, pageSize)
 	for i := range items {
 		decodeSkillIDs(&items[i])
+		decodeBuildJobIDs(&items[i])
 	}
 	return items, total, err
 }
@@ -360,21 +389,26 @@ func (s *AgentService) CreateRun(agentID uint, in CreateRunInput) (*model.AgentR
 		return nil, errors.New("智能体未启用")
 	}
 	decodeSkillIDs(agent)
+	decodeBuildJobIDs(agent)
 	snapshot, _ := json.Marshal(map[string]any{
-		"agent_id":      agent.ID,
-		"cli_key":       agent.CliKey,
-		"system_prompt": agent.SystemPrompt,
-		"skill_ids":     agent.SkillIDs,
-		"repository_id": agent.RepositoryID,
-		"timeout_sec":   agent.TimeoutSec,
-		"context_note":  "system_prompt + repository only; no requirements/history injection",
-		"risk_notice":   model.RiskNoticeSameUID,
+		"agent_id":        agent.ID,
+		"cli_key":         agent.CliKey,
+		"system_prompt":   agent.SystemPrompt,
+		"skill_ids":       agent.SkillIDs,
+		"build_job_ids":   agent.BuildJobIDs,
+		"output_dir":      agent.OutputDir,
+		"artifact_format": agent.ArtifactFormat,
+		"max_artifacts":   agent.MaxArtifacts,
+		"timeout_sec":     agent.TimeoutSec,
+		"context_note":    "system_prompt + skills + build_job softlinks in persistent agent workspace",
+		"risk_notice":     model.RiskNoticeSameUID,
 	})
 	run := &model.AgentRun{
 		AgentID: agentID, TriggerType: in.TriggerType, TriggerID: in.TriggerID,
 		Status: model.JobQueued, TriggeredBy: in.TriggeredBy,
 		BuildRunID: in.BuildRunID, ProjectID: in.ProjectID, DocNodeID: in.DocNodeID,
 		SnapshotJSON: string(snapshot),
+		WorkDir:      s.agentRoot(agentID),
 	}
 	if err := s.repo.CreateRun(run); err != nil {
 		return nil, err
@@ -454,6 +488,21 @@ func (s *AgentService) GetRun(id uint) (*model.AgentRun, error) {
 	return s.repo.FindRun(id)
 }
 
+func (s *AgentService) ArtifactPath(id uint) (path string, filename string, err error) {
+	run, err := s.repo.FindRun(id)
+	if err != nil {
+		return "", "", err
+	}
+	path = strings.TrimSpace(run.ArtifactPath)
+	if path == "" {
+		return "", "", errors.New("制品不存在")
+	}
+	if _, err := os.Stat(path); err != nil {
+		return "", "", errors.New("制品文件不存在")
+	}
+	return path, filepath.Base(path), nil
+}
+
 func (s *AgentService) ListRuns(page, pageSize int, agentID uint, status string) ([]model.AgentRun, int64, error) {
 	return s.repo.ListRuns(page, pageSize, agentID, status)
 }
@@ -511,6 +560,7 @@ func (s *AgentService) ExecuteRun(ctx context.Context, id uint) {
 		return
 	}
 	decodeSkillIDs(agent)
+	decodeBuildJobIDs(agent)
 	cli, err := s.repo.FindCLIByKey(agent.CliKey)
 	if err != nil {
 		s.failRun(run, err)
@@ -523,6 +573,8 @@ func (s *AgentService) ExecuteRun(ctx context.Context, id uint) {
 	logDir := filepath.Join(s.logDir, "ai-runs")
 	_ = os.MkdirAll(logDir, 0o755)
 	run.LogPath = filepath.Join(logDir, fmt.Sprintf("run-%d.log", run.ID))
+	agentRoot := s.agentRoot(agent.ID)
+	run.WorkDir = agentRoot
 	_ = s.repo.UpdateRun(run)
 
 	logFile, err := os.OpenFile(run.LogPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
@@ -539,7 +591,7 @@ func (s *AgentService) ExecuteRun(ctx context.Context, id uint) {
 	}
 	writeLog(model.RiskNoticeSameUID)
 	writeLog(fmt.Sprintf("agent=%s cli=%s trigger=%s", agent.Name, agent.CliKey, run.TriggerType))
-	writeLog("context: system_prompt + selected repository only (no requirements/history)")
+	writeLog("context: persistent agent workspace (skills + build_job softlinks)")
 
 	timeout := time.Duration(agent.TimeoutSec) * time.Second
 	if timeout <= 0 {
@@ -548,24 +600,7 @@ func (s *AgentService) ExecuteRun(ctx context.Context, id uint) {
 	runCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	workRoot := filepath.Join(s.workDir, fmt.Sprintf("agent-run-%d", run.ID))
-	_ = os.RemoveAll(workRoot)
-	if err := os.MkdirAll(workRoot, 0o755); err != nil {
-		s.failRun(run, err)
-		return
-	}
-	defer os.RemoveAll(workRoot)
-
-	if agent.RepositoryID != nil && s.cloner != nil {
-		repoDir := filepath.Join(workRoot, "repo")
-		writeLog(fmt.Sprintf("cloning repository_id=%d", *agent.RepositoryID))
-		if err := s.cloner.CloneForAgent(runCtx, *agent.RepositoryID, repoDir); err != nil {
-			writeLog("clone failed: " + err.Error())
-			// Continue with prompt-only context when clone fails (observable failure path).
-		}
-	}
-
-	digests, err := s.skills.InjectSkills(workRoot, agent.SkillIDs, run.TriggeredBy, true)
+	digests, jobDirs, err := s.SyncAgentWorkspace(agent, run.TriggeredBy, true)
 	if err != nil {
 		s.failRun(run, err)
 		return
@@ -575,29 +610,48 @@ func (s *AgentService) ExecuteRun(ctx context.Context, id uint) {
 		run.SkillDigestJSON = string(b)
 		writeLog("injected skills: " + run.SkillDigestJSON)
 	}
+	if len(jobDirs) > 0 {
+		writeLog("bound job dirs: " + strings.Join(jobDirs, " "))
+	}
 
-	promptPath := filepath.Join(workRoot, "SYSTEM_PROMPT.md")
-	_ = os.WriteFile(promptPath, []byte(agent.SystemPrompt), 0o644)
+	runOutput := filepath.Join(agentRoot, "runs", fmt.Sprintf("run-%d", run.ID), "output")
+	_ = os.RemoveAll(filepath.Dir(runOutput))
+	if err := os.MkdirAll(runOutput, 0o755); err != nil {
+		s.failRun(run, err)
+		return
+	}
+	absOutput, _ := filepath.Abs(runOutput)
+	absRoot, _ := filepath.Abs(agentRoot)
+	writeLog("workdir=" + absRoot)
+	writeLog("BEDROCK_AGENT_OUTPUT=" + absOutput)
+	writeLog("请将需交付的文件写入 $BEDROCK_AGENT_OUTPUT")
 
 	binary, lookErr := ResolveBinary(cli)
 	if lookErr != nil {
 		writeLog("CLI binary not found: " + lookErr.Error())
-		// Reference run path: observable failure when CLI missing.
 		s.failRun(run, fmt.Errorf("CLI %s 未安装或不可用: %w", agent.CliKey, lookErr))
 		return
 	}
 	writeLog("binary=" + binary)
 
 	args := strings.Fields(cli.DefaultArgs)
+	args = appendFullPermissionArgs(agent.CliKey, args)
+	writeLog("cli full-permission flags enabled for softlink access (scope via prompt)")
+	hint := agentWorkspaceScopeHint()
 	if run.TriggerType == model.TriggerDocsGen {
-		args = append(args, "Generate API documentation draft based on the repository. Output Markdown only.")
+		args = append(args, "Generate API documentation draft based on the workspace. Output Markdown only. "+hint)
 	} else if strings.TrimSpace(agent.SystemPrompt) != "" {
-		args = append(args, agent.SystemPrompt)
+		args = append(args, agent.SystemPrompt+"\n\n"+hint)
+	} else {
+		args = append(args, hint)
 	}
 
 	cmd := exec.CommandContext(runCtx, binary, args...)
-	cmd.Dir = workRoot
-	cmd.Env = BuildRuntimeEnv(cli, "", nil)
+	cmd.Dir = agentRoot
+	cmd.Env = BuildRuntimeEnv(cli, "", map[string]string{
+		"BEDROCK_AGENT_OUTPUT":  absOutput,
+		"BEDROCK_AGENT_WORKDIR": absRoot,
+	})
 	stdout, _ := cmd.StdoutPipe()
 	stderr, _ := cmd.StderrPipe()
 	if err := cmd.Start(); err != nil {
@@ -623,7 +677,6 @@ func (s *AgentService) ExecuteRun(ctx context.Context, id uint) {
 	err = cmd.Wait()
 	wg.Wait()
 
-	// Check cancellation
 	latest, _ := s.repo.FindRun(run.ID)
 	if latest != nil && latest.Status == model.JobCancelled {
 		writeLog("run cancelled")
@@ -645,6 +698,11 @@ func (s *AgentService) ExecuteRun(ctx context.Context, id uint) {
 		s.notifyTerminal(run, model.JobFailed)
 		return
 	}
+
+	if err := s.archiveRunOutput(run, agent, absOutput, writeLog); err != nil {
+		writeLog("artifact archive failed: " + err.Error())
+	}
+
 	run.Status = model.JobSuccess
 	run.ErrorMessage = ""
 	writeLog("success")
@@ -662,6 +720,52 @@ func (s *AgentService) ExecuteRun(ctx context.Context, id uint) {
 		}
 	}
 	s.notifyTerminal(run, model.JobSuccess)
+}
+
+func (s *AgentService) archiveRunOutput(run *model.AgentRun, agent *model.AiAgent, runOutput string, writeLog func(string)) error {
+	hasFiles, err := dirHasRegularFiles(runOutput)
+	if err != nil {
+		return err
+	}
+	if !hasFiles {
+		writeLog("output empty; skip artifact")
+		return nil
+	}
+	format := normalizeAgentArtifactFormat(agent.ArtifactFormat)
+	dir := filepath.Join(s.artifactDir, fmt.Sprintf("agent-%d", agent.ID))
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	artifactPath := filepath.Join(dir, fmt.Sprintf("run-%d%s", run.ID, engine.ArtifactArchiveExt(format)))
+	if err := engine.CreateArtifactArchive(artifactPath, runOutput, format); err != nil {
+		return err
+	}
+	run.ArtifactPath = artifactPath
+	writeLog("artifact=" + artifactPath)
+	_ = s.repo.UpdateRunFields(run.ID, map[string]any{"artifact_path": artifactPath})
+	s.cleanupAgentArtifacts(agent)
+	return nil
+}
+
+func (s *AgentService) cleanupAgentArtifacts(agent *model.AiAgent) {
+	maxArtifacts := agent.MaxArtifacts
+	if maxArtifacts <= 0 {
+		maxArtifacts = 10
+	}
+	items, err := s.repo.ListArtifactsByAgent(agent.ID)
+	if err != nil || len(items) <= maxArtifacts {
+		return
+	}
+	for _, item := range items[maxArtifacts:] {
+		if item.ArtifactPath != "" {
+			_ = os.Remove(item.ArtifactPath)
+			_ = s.repo.UpdateRunFields(item.ID, map[string]any{"artifact_path": ""})
+		}
+	}
+}
+
+func normalizeAgentArtifactFormat(f string) string {
+	return engine.NormalizeArtifactFormat(f)
 }
 
 func (s *AgentService) failRun(run *model.AgentRun, err error) {

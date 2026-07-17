@@ -78,15 +78,15 @@ func (s *PATService) Create(userID uint, in CreatePATInput) (*CreatePATResult, e
 	return &CreatePATResult{Token: plain, Metadata: *item}, nil
 }
 
-func (s *PATService) List(userID uint) ([]model.PersonalAccessToken, error) {
-	items, err := s.repo.ListPATs(userID)
+func (s *PATService) List(userID uint, page, pageSize int) ([]model.PersonalAccessToken, int64, error) {
+	items, total, err := s.repo.ListPATs(userID, page, pageSize)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	for i := range items {
 		decodeScopes(&items[i])
 	}
-	return items, nil
+	return items, total, nil
 }
 
 func (s *PATService) Delete(userID uint, id uint) error {

@@ -113,7 +113,7 @@ function splitTags(raw?: string | null): string[] {
       pagination
       :auto-query-fields="['status']"
     >
-      <template #filters="{ search }">
+      <template #filters>
         <u-input v-model="query.keyword" placeholder="名称、Slug 或标签" style="width: 240px" />
         <u-select
           v-model="query.status"
@@ -125,7 +125,6 @@ function splitTags(raw?: string | null): string[] {
           ]"
           style="width: 130px"
         />
-        <u-button type="primary" @click="search">查询</u-button>
         <u-button
           v-if="hasPermission('project.projects:create')"
           type="primary"

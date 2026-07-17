@@ -53,3 +53,35 @@ func (r *DashboardRepository) ListRecentRuns(limit int) ([]model.RecentRun, erro
 		Order("id DESC").Limit(limit).Scan(&rows).Error
 	return rows, err
 }
+
+func (r *DashboardRepository) CountAgentRunsByStatus(status string) (int64, error) {
+	var total int64
+	err := r.db.Table("agent_runs").Where("status = ?", status).Count(&total).Error
+	return total, err
+}
+
+func (r *DashboardRepository) CountAgentRunsByStatuses(statuses []string) (int64, error) {
+	var total int64
+	err := r.db.Table("agent_runs").Where("status IN ?", statuses).Count(&total).Error
+	return total, err
+}
+
+func (r *DashboardRepository) CountFinishedAgentRuns() (total, success int64, err error) {
+	err = r.db.Table("agent_runs").
+		Where("status IN ?", []string{"success", "failed", "cancelled", "interrupted"}).
+		Count(&total).Error
+	if err != nil {
+		return 0, 0, err
+	}
+	err = r.db.Table("agent_runs").Where("status = ?", "success").Count(&success).Error
+	return total, success, err
+}
+
+func (r *DashboardRepository) ListRecentAgentRuns(limit int) ([]model.RecentAgentRun, error) {
+	var rows []model.RecentAgentRun
+	err := r.db.Table("agent_runs").
+		Select("agent_runs.id, agent_runs.agent_id, ai_agents.name AS agent_name, agent_runs.trigger_type, agent_runs.status, agent_runs.created_at").
+		Joins("LEFT JOIN ai_agents ON ai_agents.id = agent_runs.agent_id").
+		Order("agent_runs.id DESC").Limit(limit).Scan(&rows).Error
+	return rows, err
+}

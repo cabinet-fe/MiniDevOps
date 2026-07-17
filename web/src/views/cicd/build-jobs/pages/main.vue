@@ -352,7 +352,7 @@ async function rotateWebhookSecret() {
       :auto-query-fields="['repository_id']"
       pagination
     >
-      <template #filters="{ search }">
+      <template #filters>
         <u-select
           v-model="query.repository_id"
           :options="repoOptions"
@@ -361,7 +361,6 @@ async function rotateWebhookSecret() {
           style="width: 180px"
         />
         <u-input v-model="query.keyword" placeholder="名称" style="width: 160px" />
-        <u-button type="primary" @click="search">查询</u-button>
         <u-button
           v-if="hasPermission('cicd.build_jobs:create')"
           type="primary"

@@ -318,7 +318,7 @@ onMounted(() => void loadRequirementStatuses());
       pagination
       :auto-query-fields="['status', 'priority']"
     >
-      <template #filters="{ search }">
+      <template #filters>
         <u-input v-model="query.keyword" placeholder="标题或标签" style="width: 200px" />
         <u-select v-model="query.status" :options="filterStatusOptions" style="width: 120px" />
         <u-select
@@ -332,7 +332,6 @@ onMounted(() => void loadRequirementStatuses());
           ]"
           style="width: 120px"
         />
-        <u-button type="primary" @click="search">查询</u-button>
       </template>
       <template #column:title="{ rowData }">
         <u-action @run="showDetail(rowData as Requirement)">

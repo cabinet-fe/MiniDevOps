@@ -44,11 +44,19 @@ const props = withDefaults(
     status?: BuildLogStatus;
     initialLogs?: string;
     height?: string;
+    /**
+     * Override log WebSocket URL. When omitted, uses build-run logs WS.
+     * Pass a full `ws(s)://…` URL (e.g. agent run logs).
+     */
+    wsUrl?: string;
+    /** When false, skip HTTP log hydrate (WS / initialLogs only). Default true. */
+    hydrateHttp?: boolean;
   }>(),
   {
     live: false,
     status: "pending",
     height: "480px",
+    hydrateHttp: true,
   },
 );
 
@@ -194,7 +202,7 @@ function setLogs(text: string) {
 }
 
 async function hydrateLogHTTP() {
-  if (!props.runId) return;
+  if (!props.hydrateHttp || !props.runId) return;
   try {
     const text = await getBuildRunLog(props.runId);
     if (text) {
@@ -205,6 +213,12 @@ async function hydrateLogHTTP() {
   }
 }
 
+function isControlMessage(text: string): boolean {
+  return (
+    text === "__REFRESH__" || text.startsWith("__REFRESH__") || text.startsWith("__TERMINAL__:")
+  );
+}
+
 function disconnectWS() {
   if (ws) {
     ws.close();
@@ -212,18 +226,25 @@ function disconnectWS() {
   }
 }
 
+function shouldConnectWS(): boolean {
+  if (!props.runId) return false;
+  if (props.live) return true;
+  // Agent runs (and similar): no HTTP log API — open WS once for file replay.
+  return !props.hydrateHttp && !!props.wsUrl;
+}
+
 function connectWS() {
   disconnectWS();
-  if (!props.live || !props.runId) return;
+  if (!shouldConnectWS()) return;
 
   const token = getAccessToken();
   if (!token) return;
 
-  const url = buildRunLogsWSURL(props.runId, token);
+  const url = props.wsUrl || buildRunLogsWSURL(props.runId, token);
   ws = new WebSocket(url);
   ws.onmessage = (ev) => {
     const text = String(ev.data);
-    if (text === "__REFRESH__" || text.startsWith("__REFRESH__")) {
+    if (isControlMessage(text)) {
       emit("refresh");
       return;
     }
@@ -337,11 +358,23 @@ watch(
 
 watch(
   () => props.live,
-  (live) => {
+  (live, wasLive) => {
     if (live) {
       connectWS();
-    } else {
+      return;
+    }
+    // Was streaming → stop. Avoid reconnecting on live→false (would replay duplicates).
+    if (wasLive) {
       disconnectWS();
+    }
+  },
+);
+
+watch(
+  () => props.wsUrl,
+  () => {
+    if (shouldConnectWS()) {
+      connectWS();
     }
   },
 );
@@ -390,7 +423,9 @@ onBeforeUnmount(() => {
       </div>
       <div class="build-log-viewer__actions">
         <div v-if="searchOpen" class="build-log-viewer__search">
-          <Search class="build-log-viewer__search-icon" />
+          <u-icon :size="14" class="build-log-viewer__search-icon">
+            <Search />
+          </u-icon>
           <input
             class="build-log-viewer__search-input"
             :value="searchQuery"
@@ -405,41 +440,52 @@ onBeforeUnmount(() => {
             {{ matchCount > 0 ? `${currentMatch}/${matchCount}` : "无匹配" }}
           </span>
           <u-button
-            variant="ghost"
+            text
+            circle
             size="small"
+            :icon="ArrowUp"
+            :icon-size="14"
             :disabled="matchCount === 0"
             @click="performSearch('prev')"
-          >
-            <ArrowUp />
-          </u-button>
+          />
           <u-button
-            variant="ghost"
+            text
+            circle
             size="small"
+            :icon="ArrowDown"
+            :icon-size="14"
             :disabled="matchCount === 0"
             @click="performSearch('next')"
-          >
-            <ArrowDown />
-          </u-button>
-          <u-button variant="ghost" size="small" @click="closeSearch">
-            <Close />
-          </u-button>
+          />
+          <u-button text circle size="small" :icon="Close" :icon-size="14" @click="closeSearch" />
         </div>
         <template v-else>
-          <u-button variant="ghost" size="small" @click="searchOpen = true">
-            <Search />
-          </u-button>
+          <u-button
+            text
+            circle
+            size="small"
+            :icon="Search"
+            :icon-size="14"
+            @click="searchOpen = true"
+          />
         </template>
-        <u-button v-if="!autoScroll" variant="ghost" size="small" @click="enableAutoScroll">
-          跟随
-        </u-button>
-        <u-button variant="ghost" size="small" @click="copyAll">
-          <Check v-if="copied" />
-          <Copy v-else />
-        </u-button>
-        <u-button variant="ghost" size="small" @click="toggleFullscreen">
-          <ZoomOut v-if="isFullscreen" />
-          <Maximum v-else />
-        </u-button>
+        <u-button v-if="!autoScroll" text size="small" @click="enableAutoScroll">跟随</u-button>
+        <u-button
+          text
+          circle
+          size="small"
+          :icon="copied ? Check : Copy"
+          :icon-size="14"
+          @click="copyAll"
+        />
+        <u-button
+          text
+          circle
+          size="small"
+          :icon="isFullscreen ? ZoomOut : Maximum"
+          :icon-size="14"
+          @click="toggleFullscreen"
+        />
       </div>
     </div>
 
@@ -507,9 +553,8 @@ onBeforeUnmount(() => {
 }
 
 .build-log-viewer__search-icon {
-  width: 14px;
-  height: 14px;
   color: #71717a;
+  flex-shrink: 0;
 }
 
 .build-log-viewer__search-input {

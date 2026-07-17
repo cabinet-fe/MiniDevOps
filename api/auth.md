@@ -39,7 +39,8 @@
 
 ### GET /tokens — 列出个人访问令牌（仅元数据）
 
-响应 200
+查询：`page`、`page_size`（标准分页）
+响应 200：data = 分页信封（`items`、`total`、`page`、`page_size`、`total_pages`）
 
 ### POST /tokens — 创建个人访问令牌
 

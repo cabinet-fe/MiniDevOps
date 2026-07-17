@@ -91,8 +91,6 @@ const tableTree = computed(() => {
   return props.tree === true ? true : props.tree;
 });
 
-const hasFilters = computed(() => !!slots.filters);
-
 function parseSort(value: unknown): { field: string; order: SortOrder | null } {
   if (typeof value !== "string" || !value.includes("@")) {
     return { field: "", order: null };
@@ -289,10 +287,11 @@ defineExpose({ search, reload, load });
 
 <template>
   <div class="pro-table">
-    <form v-if="hasFilters" class="pro-table__toolbar" @submit.prevent="search">
+    <form class="pro-table__toolbar" @submit.prevent="search">
       <div class="pro-table__filters">
         <slot name="filters" :search="search" :reload="reload" :query="query" />
       </div>
+      <u-button type="primary" native-type="submit" class="pro-table__search">查询</u-button>
     </form>
 
     <div class="pro-table__panel" :style="height !== '100%' ? { height, flex: 'none' } : undefined">
@@ -356,6 +355,10 @@ defineExpose({ search, reload, load });
   align-items: flex-end;
   flex: 1;
   min-width: 0;
+}
+
+.pro-table__search {
+  flex-shrink: 0;
 }
 
 .pro-table__panel {

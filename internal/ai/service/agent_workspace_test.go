@@ -1,0 +1,386 @@
+package service_test
+
+import (
+	"bytes"
+	"context"
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+
+	"go.uber.org/zap"
+
+	"bedrock/internal/ai/model"
+	"bedrock/internal/ai/repository"
+	"bedrock/internal/ai/service"
+	cicdmodel "bedrock/internal/cicd/model"
+	"bedrock/internal/platform/config"
+	"bedrock/internal/platform/db"
+	"bedrock/internal/platform/migration"
+	_ "bedrock/internal/platform/migration/migrations"
+	storagerepo "bedrock/internal/storage/repository"
+	storageservice "bedrock/internal/storage/service"
+)
+
+type stubJobFinder struct {
+	jobs map[uint]*cicdmodel.BuildJob
+}
+
+func (f *stubJobFinder) FindByID(id uint) (*cicdmodel.BuildJob, error) {
+	job, ok := f.jobs[id]
+	if !ok {
+		return nil, fmt.Errorf("job %d not found", id)
+	}
+	return job, nil
+}
+
+func setupAgentWorkspace(t *testing.T) (*service.AgentService, *service.SkillService, *repository.AIRepository, string, string) {
+	t.Helper()
+	gdb, err := db.Open(&config.DatabaseConfig{
+		Driver: "sqlite",
+		Path:   filepath.Join(t.TempDir(), "ai-ws.sqlite"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := migration.Up(context.Background(), gdb, migration.Driver("sqlite")); err != nil {
+		t.Fatalf("migration: %v", err)
+	}
+	repo := repository.NewAIRepository(gdb)
+	cli := service.NewCLIService(repo)
+	storageRoot := filepath.Join(t.TempDir(), "storage")
+	storageSvc, err := storageservice.NewStorageService(storagerepo.NewStorageRepository(gdb), storageRoot, storageservice.Limits{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	skills := service.NewSkillService(repo, storageSvc)
+	work := filepath.Join(t.TempDir(), "work")
+	artifacts := filepath.Join(t.TempDir(), "artifacts")
+	logs := filepath.Join(t.TempDir(), "logs")
+	agents := service.NewAgentService(repo, cli, skills, nil, zap.NewNop(), work, artifacts, logs)
+	agents.Start()
+	t.Cleanup(agents.Shutdown)
+	return agents, skills, repo, work, artifacts
+}
+
+func TestAgentWorkspaceSyncSkillsAndSoftlinks(t *testing.T) {
+	agents, skills, _, work, _ := setupAgentWorkspace(t)
+
+	z := zipBytes(t, map[string]string{"SKILL.md": "# workspace-skill"})
+	skill, err := skills.Create(service.SkillUploadInput{
+		Name: "ws", Visibility: model.SkillPublic, Filename: "ws.zip",
+		Size: int64(len(z)), Source: bytes.NewReader(z), UserID: 1, IsSuperAdmin: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	jobID := uint(42)
+	repoID := uint(7)
+	jobDir := filepath.Join(work, fmt.Sprintf("repo-%d", repoID), fmt.Sprintf("job-%d", jobID))
+	if err := os.MkdirAll(jobDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	agents.SetBuildJobFinder(&stubJobFinder{
+		jobs: map[uint]*cicdmodel.BuildJob{
+			jobID: {ID: jobID, RepositoryID: repoID, Name: "j"},
+		},
+	})
+
+	agent, err := agents.CreateAgent(1, service.AgentInput{
+		Name: "ws-agent", CliKey: "claude_code", SystemPrompt: "hello workspace",
+		SkillIDs: []uint{skill.ID}, BuildJobIDs: []uint{jobID},
+		ArtifactFormat: "gzip", MaxArtifacts: 5, TimeoutSec: 30,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	root := filepath.Join(work, "agents", fmt.Sprintf("agent-%d", agent.ID))
+	skillMD := filepath.Join(root, ".agents", "skills", fmt.Sprintf("%d", skill.ID), "SKILL.md")
+	if _, err := os.Stat(skillMD); err != nil {
+		t.Fatalf("skill not extracted: %v", err)
+	}
+	prompt := filepath.Join(root, "SYSTEM_PROMPT.md")
+	data, err := os.ReadFile(prompt)
+	if err != nil || string(data) != "hello workspace" {
+		t.Fatalf("SYSTEM_PROMPT.md: %v %q", err, data)
+	}
+	link := filepath.Join(root, fmt.Sprintf("job-%d", jobID))
+	target, err := os.Readlink(link)
+	if err != nil {
+		t.Fatalf("softlink missing: %v", err)
+	}
+	absJob, _ := filepath.Abs(jobDir)
+	if target != absJob {
+		t.Fatalf("softlink target=%q want=%q", target, absJob)
+	}
+}
+
+func TestAgentWorkspaceMissingJobDirSkipped(t *testing.T) {
+	agents, _, _, work, _ := setupAgentWorkspace(t)
+	jobID := uint(99)
+	agents.SetBuildJobFinder(&stubJobFinder{
+		jobs: map[uint]*cicdmodel.BuildJob{
+			jobID: {ID: jobID, RepositoryID: 1, Name: "missing-ws"},
+		},
+	})
+	agent, err := agents.CreateAgent(1, service.AgentInput{
+		Name: "skip-link", CliKey: "claude_code", BuildJobIDs: []uint{jobID}, TimeoutSec: 10,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(work, "agents", fmt.Sprintf("agent-%d", agent.ID), fmt.Sprintf("job-%d", jobID))
+	if _, err := os.Lstat(link); !os.IsNotExist(err) {
+		t.Fatalf("expected missing softlink, got err=%v", err)
+	}
+}
+
+func TestAgentWorkspaceDeleteRemovesDir(t *testing.T) {
+	agents, _, _, work, _ := setupAgentWorkspace(t)
+	agent, err := agents.CreateAgent(1, service.AgentInput{
+		Name: "del", CliKey: "claude_code", TimeoutSec: 10,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := filepath.Join(work, "agents", fmt.Sprintf("agent-%d", agent.ID))
+	if _, err := os.Stat(root); err != nil {
+		t.Fatal(err)
+	}
+	if err := agents.DeleteAgent(agent.ID, 1); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(root); !os.IsNotExist(err) {
+		t.Fatalf("workspace should be removed, err=%v", err)
+	}
+}
+
+func TestAgentRunArchivesOutputArtifact(t *testing.T) {
+	agents, _, repo, work, artifacts := setupAgentWorkspace(t)
+
+	script := filepath.Join(t.TempDir(), "fake-cli.sh")
+	content := "#!/bin/sh\necho ok\nprintf 'deliverable' > \"$BEDROCK_AGENT_OUTPUT/result.txt\"\n"
+	if err := os.WriteFile(script, []byte(content), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cli, err := repo.FindCLIByKey("claude_code")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cli.InstalledPath = script
+	cli.DefaultArgs = ""
+	cli.InstallStatus = "installed"
+	cli.Healthy = true
+	if err := repo.UpdateCLI(cli); err != nil {
+		t.Fatal(err)
+	}
+
+	agent, err := agents.CreateAgent(1, service.AgentInput{
+		Name: "art", CliKey: "claude_code", SystemPrompt: "x",
+		ArtifactFormat: "gzip", MaxArtifacts: 10, TimeoutSec: 30,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	run, err := agents.ManualRun(agent.ID, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	deadline := time.Now().Add(5 * time.Second)
+	var finished *model.AgentRun
+	for time.Now().Before(deadline) {
+		got, err := agents.GetRun(run.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.Status == model.JobSuccess || got.Status == model.JobFailed {
+			finished = got
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if finished == nil {
+		t.Fatal("run did not finish")
+	}
+	if finished.Status != model.JobSuccess {
+		t.Fatalf("status=%s err=%s", finished.Status, finished.ErrorMessage)
+	}
+	if finished.WorkDir == "" {
+		t.Fatal("work_dir empty")
+	}
+	wantWork := filepath.Join(work, "agents", fmt.Sprintf("agent-%d", agent.ID))
+	if finished.WorkDir != wantWork {
+		t.Fatalf("work_dir=%q want=%q", finished.WorkDir, wantWork)
+	}
+	if finished.ArtifactPath == "" {
+		t.Fatal("expected artifact_path")
+	}
+	wantArt := filepath.Join(artifacts, fmt.Sprintf("agent-%d", agent.ID), fmt.Sprintf("run-%d.tar.gz", run.ID))
+	if finished.ArtifactPath != wantArt {
+		t.Fatalf("artifact_path=%q want=%q", finished.ArtifactPath, wantArt)
+	}
+	if _, err := os.Stat(finished.ArtifactPath); err != nil {
+		t.Fatal(err)
+	}
+	path, filename, err := agents.ArtifactPath(run.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if path != finished.ArtifactPath || filename != filepath.Base(wantArt) {
+		t.Fatalf("ArtifactPath=%s %s", path, filename)
+	}
+}
+
+func TestAgentWorkspaceNoOpenCodeExternalDirs(t *testing.T) {
+	agents, _, _, work, _ := setupAgentWorkspace(t)
+	jobID := uint(3)
+	repoID := uint(2)
+	jobDir := filepath.Join(work, fmt.Sprintf("repo-%d", repoID), fmt.Sprintf("job-%d", jobID))
+	if err := os.MkdirAll(jobDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	agents.SetBuildJobFinder(&stubJobFinder{
+		jobs: map[uint]*cicdmodel.BuildJob{
+			jobID: {ID: jobID, RepositoryID: repoID, Name: "j"},
+		},
+	})
+	agent, err := agents.CreateAgent(1, service.AgentInput{
+		Name: "oc", CliKey: "opencode", BuildJobIDs: []uint{jobID}, TimeoutSec: 10,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfgPath := filepath.Join(work, "agents", fmt.Sprintf("agent-%d", agent.ID), "opencode.json")
+	if _, err := os.Stat(cfgPath); !os.IsNotExist(err) {
+		t.Fatalf("opencode.json should not be written, err=%v", err)
+	}
+}
+
+func TestAgentRunPassesFullPermissionFlagsAndScopeHint(t *testing.T) {
+	if _, err := exec.LookPath("sh"); err != nil {
+		t.Skip("sh required")
+	}
+	agents, _, repo, work, _ := setupAgentWorkspace(t)
+	jobID := uint(11)
+	repoID := uint(9)
+	jobDir := filepath.Join(work, fmt.Sprintf("repo-%d", repoID), fmt.Sprintf("job-%d", jobID))
+	if err := os.MkdirAll(jobDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	agents.SetBuildJobFinder(&stubJobFinder{
+		jobs: map[uint]*cicdmodel.BuildJob{
+			jobID: {ID: jobID, RepositoryID: repoID, Name: "j"},
+		},
+	})
+
+	argvFile := filepath.Join(t.TempDir(), "argv.txt")
+	script := filepath.Join(t.TempDir(), "fake-cli-fullperm.sh")
+	content := "#!/bin/sh\nprintf '%s\\n' \"$@\" > " + argvFile + "\n"
+	if err := os.WriteFile(script, []byte(content), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cli, err := repo.FindCLIByKey("claude_code")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cli.InstalledPath = script
+	cli.DefaultArgs = "--print"
+	cli.InstallStatus = "installed"
+	cli.Healthy = true
+	if err := repo.UpdateCLI(cli); err != nil {
+		t.Fatal(err)
+	}
+
+	agent, err := agents.CreateAgent(1, service.AgentInput{
+		Name: "fullperm", CliKey: "claude_code", SystemPrompt: "do work",
+		BuildJobIDs: []uint{jobID}, TimeoutSec: 30,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	run, err := agents.ManualRun(agent.ID, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		got, _ := agents.GetRun(run.ID)
+		if got != nil && (got.Status == model.JobSuccess || got.Status == model.JobFailed) {
+			if got.Status != model.JobSuccess {
+				t.Fatalf("status=%s err=%s", got.Status, got.ErrorMessage)
+			}
+			raw, err := os.ReadFile(argvFile)
+			if err != nil {
+				t.Fatal(err)
+			}
+			joined := string(raw)
+			for _, want := range []string{
+				"--print",
+				"--dangerously-skip-permissions",
+				"$BEDROCK_AGENT_WORKDIR",
+				"./job-{id}",
+				"禁止访问该目录之外的任意路径",
+			} {
+				if !strings.Contains(joined, want) {
+					t.Fatalf("argv missing %q; got:\n%s", want, raw)
+				}
+			}
+			if strings.Contains(joined, "--add-dir") {
+				t.Fatalf("argv should not include --add-dir; got:\n%s", raw)
+			}
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatal("timeout")
+}
+
+func TestAgentRunZipArtifactFormat(t *testing.T) {
+	if _, err := exec.LookPath("sh"); err != nil {
+		t.Skip("sh required")
+	}
+	agents, _, repo, _, _ := setupAgentWorkspace(t)
+	script := filepath.Join(t.TempDir(), "fake-cli-zip.sh")
+	if err := os.WriteFile(script, []byte("#!/bin/sh\necho hi > \"$BEDROCK_AGENT_OUTPUT/a.txt\"\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cli, err := repo.FindCLIByKey("opencode")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cli.InstalledPath = script
+	cli.DefaultArgs = ""
+	_ = repo.UpdateCLI(cli)
+
+	agent, err := agents.CreateAgent(1, service.AgentInput{
+		Name: "zip-art", CliKey: "opencode", ArtifactFormat: "zip", TimeoutSec: 30,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	run, err := agents.ManualRun(agent.ID, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		got, _ := agents.GetRun(run.ID)
+		if got != nil && (got.Status == model.JobSuccess || got.Status == model.JobFailed) {
+			if got.Status != model.JobSuccess {
+				t.Fatalf("status=%s err=%s", got.Status, got.ErrorMessage)
+			}
+			if !strings.HasSuffix(got.ArtifactPath, ".zip") {
+				t.Fatalf("want zip artifact, got %q", got.ArtifactPath)
+			}
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatal("timeout")
+}
+

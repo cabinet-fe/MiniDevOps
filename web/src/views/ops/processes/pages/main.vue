@@ -76,11 +76,10 @@ async function terminate(row: ProcessInfo) {
       :columns="columns"
       row-key="pid"
     >
-      <template #filters="{ search }">
+      <template #filters>
         <u-input v-model="query.keyword" placeholder="名称 / 命令行" style="width: 180px" />
         <u-input v-model="query.pid" type="number" placeholder="PID" style="width: 110px" />
         <u-input v-model="query.port" type="number" placeholder="端口" style="width: 110px" />
-        <u-button type="primary" @click="search">查询</u-button>
       </template>
       <template #column:cpu_percent="{ rowData }">
         {{ (rowData as ProcessInfo).cpu_percent.toFixed(1) }}%

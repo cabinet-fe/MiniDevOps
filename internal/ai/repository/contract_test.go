@@ -35,7 +35,11 @@ func TestContract_AI_CRUD(t *testing.T) {
 				t.Fatalf("seeded CLIs: %v len=%d", err, len(clis))
 			}
 
-			agent := &model.AiAgent{Name: "a", CliKey: "claude_code", Enabled: true, TimeoutSec: 60, SkillIDsJSON: "[]"}
+			agent := &model.AiAgent{
+				Name: "a", CliKey: "claude_code", Enabled: true, TimeoutSec: 60,
+				SkillIDsJSON: "[]", BuildJobIDsJSON: "[]",
+				OutputDir: "output", ArtifactFormat: "gzip", MaxArtifacts: 10,
+			}
 			if err := repo.CreateAgent(agent); err != nil {
 				t.Fatal(err)
 			}

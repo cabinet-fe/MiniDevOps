@@ -52,7 +52,7 @@ func setupAI(t *testing.T) (*gorm.DB, *service.CLIService, *service.AgentService
 	pats := service.NewPATService(repo)
 	work := filepath.Join(t.TempDir(), "work")
 	logs := filepath.Join(t.TempDir(), "logs")
-	agents := service.NewAgentService(repo, cli, skills, nil, zap.NewNop(), work, logs)
+	agents := service.NewAgentService(repo, cli, skills, nil, zap.NewNop(), work, filepath.Join(t.TempDir(), "artifacts"), logs)
 	agents.Start()
 	t.Cleanup(agents.Shutdown)
 
@@ -233,7 +233,7 @@ func TestPATPlaintextOnceAndScopes(t *testing.T) {
 	if !strings.HasPrefix(created.Token, "br_pat_") {
 		t.Fatalf("unexpected token %s", created.Token)
 	}
-	list, err := pats.List(1)
+	list, _, err := pats.List(1, 1, 20)
 	if err != nil || len(list) != 1 {
 		t.Fatalf("list: %v %#v", err, list)
 	}
@@ -260,7 +260,7 @@ func TestPATPlaintextOnceAndScopes(t *testing.T) {
 	if _, _, err := pats.ValidateBearer(created.Token); err == nil {
 		t.Fatal("deleted PAT must be invalid")
 	}
-	list, err = pats.List(1)
+	list, _, err = pats.List(1, 1, 20)
 	if err != nil || len(list) != 0 {
 		t.Fatalf("deleted PAT must be removed from list: %v %#v", err, list)
 	}

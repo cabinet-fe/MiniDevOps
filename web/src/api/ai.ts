@@ -121,6 +121,22 @@ export async function createTrigger(
   return body;
 }
 
+export async function updateTrigger(
+  agentID: number,
+  triggerID: number,
+  input: Record<string, unknown>,
+): Promise<AgentTrigger> {
+  const { body } = await http.put<AgentTrigger>(
+    `/ai/agents/${agentID}/triggers/${triggerID}`,
+    input,
+  );
+  return body;
+}
+
+export async function deleteTrigger(agentID: number, triggerID: number): Promise<void> {
+  await http.delete(`/ai/agents/${agentID}/triggers/${triggerID}`);
+}
+
 export async function manualRunAgent(agentID: number): Promise<AgentRun> {
   const { body } = await http.post<AgentRun>(`/ai/agents/${agentID}/runs`, {});
   return body;
@@ -128,6 +144,28 @@ export async function manualRunAgent(agentID: number): Promise<AgentRun> {
 
 export async function getRun(id: number): Promise<AgentRun> {
   const { body } = await http.get<AgentRun>(`/ai/runs/${id}`);
+  return body;
+}
+
+export async function cancelRun(id: number): Promise<void> {
+  await http.post(`/ai/runs/${id}/cancel`, {});
+}
+
+/** Artifact download URL for AgentRun (open with fetch + Bearer). */
+export function agentRunArtifactURL(id: number): string {
+  return `/api/v1/ai/runs/${id}/artifact`;
+}
+
+/** Agent run log WebSocket URL (Bearer via query token). */
+export function agentRunLogsWSURL(id: number, token: string): string {
+  const proto = location.protocol === "https:" ? "wss:" : "ws:";
+  return `${proto}//${location.host}/ws/ai/runs/${id}/logs?token=${encodeURIComponent(token)}`;
+}
+
+export async function listSkills(query?: Query): Promise<PageResult<SkillPackage>> {
+  const { body } = await http.get<PageResult<SkillPackage>>("/skills", {
+    query: compactQuery(query),
+  });
   return body;
 }
 

@@ -239,7 +239,11 @@ export interface BuildRun {
   deploy_attempts?: BuildDeployAttempt[];
 }
 
-export type DashboardCardID = "build_summary" | "system_info" | "system_status";
+export type DashboardCardID =
+  | "build_summary"
+  | "agent_run_summary"
+  | "system_info"
+  | "system_status";
 
 export interface DashboardCardLayout {
   id: DashboardCardID;
@@ -265,6 +269,22 @@ export interface BuildSummary {
   queued: number;
   success_rate: number;
   recent: DashboardRecentBuildRun[];
+}
+
+export interface DashboardRecentAgentRun {
+  id: number;
+  agent_id: number;
+  agent_name: string;
+  trigger_type: string;
+  status: string;
+  created_at: string;
+}
+
+export interface AgentRunSummary {
+  running: number;
+  queued: number;
+  success_rate: number;
+  recent: DashboardRecentAgentRun[];
 }
 
 export interface SystemInfo {
@@ -486,7 +506,10 @@ export interface AiAgent {
   cli_key: string;
   system_prompt: string;
   skill_ids: number[];
-  repository_id?: number | null;
+  build_job_ids: number[];
+  output_dir: string;
+  artifact_format: "zip" | "gzip";
+  max_artifacts: number;
   timeout_sec: number;
   created_by: number;
   created_at: string;
@@ -509,6 +532,8 @@ export interface AgentRun {
   agent_id: number;
   trigger_type: string;
   status: string;
+  work_dir?: string;
+  artifact_path?: string;
   build_run_id?: number | null;
   project_id?: number | null;
   doc_node_id?: number | null;

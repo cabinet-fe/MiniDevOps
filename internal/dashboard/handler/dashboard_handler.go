@@ -28,6 +28,7 @@ func (h *DashboardHandler) RegisterRoutes(rg *gin.RouterGroup, authMW gin.Handle
 	g.GET("/layout", h.GetLayout)
 	g.PUT("/layout", h.PutLayout)
 	g.GET("/build-summary", rbacmw.RequirePermission(h.perm, "cicd.build_runs:view"), h.BuildSummary)
+	g.GET("/agent-run-summary", rbacmw.RequirePermission(h.perm, "ai.runs:view"), h.AgentRunSummary)
 	g.GET("/system-info", rbacmw.RequirePermission(h.perm, "dashboard.system_info:view"), h.SystemInfo)
 	g.GET("/system-status", rbacmw.RequirePermission(h.perm, "dashboard.system_status:view"), h.SystemStatus)
 }
@@ -71,6 +72,15 @@ func (h *DashboardHandler) BuildSummary(c *gin.Context) {
 	result, err := h.svc.BuildSummary()
 	if err != nil {
 		pkg.Error(c, http.StatusInternalServerError, "读取构建摘要失败")
+		return
+	}
+	pkg.Success(c, result)
+}
+
+func (h *DashboardHandler) AgentRunSummary(c *gin.Context) {
+	result, err := h.svc.AgentRunSummary()
+	if err != nil {
+		pkg.Error(c, http.StatusInternalServerError, "读取智能体运行摘要失败")
 		return
 	}
 	pkg.Success(c, result)

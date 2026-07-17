@@ -41,7 +41,7 @@ import ProTable, { defineProTableColumns } from "@/components/pro-table";
 
 - **列**：`defineProTableColumns`（支持 `sortable`；勿对 ProTable 再用 Veltra `defineTableColumns`）
 - **API**：`url`（相对 `/api/v1`，经 `@cat-kit/http`；信封由 envelope 插件解包）+ `v-model:query`；`dataPath` 默认 `items`（`o(body).get`）
-- **filters 插槽**：过滤表单；`autoQueryFields` 控制哪些字段变更自动查询（文本框走查询按钮 / Enter）
+- **filters 插槽**：过滤表单（勿再写「查询」按钮，组件内置）；`autoQueryFields` 控制哪些字段变更自动查询（文本框走 Enter 或内置查询按钮）
 - **模式**：`pagination` / `tree` 互斥，或二者皆无（纯列表）；列/行基于 `UTable`
 - 组件内部：请求、加载态（`v-loading`）、空态（`UEmpty`）、分页时 `UPaginator`
 - 暴露 `search()` / `reload()` 供手动刷新

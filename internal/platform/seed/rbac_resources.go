@@ -54,6 +54,7 @@ func EnsureRBACResources(db *gorm.DB) error {
 			Children: []seedMenu{
 				{Path: "ai.clis", Title: "CLI", Route: "/ai/clis", SortKey: 10},
 				{Path: "ai.agents", Title: "智能体", Route: "/ai/agents", SortKey: 20},
+				{Path: "ai.runs", Title: "运行记录", Route: "/ai/runs", SortKey: 25},
 				{Path: "ai.skills", Title: "技能", Route: "/ai/skills", SortKey: 30},
 				{Path: "ai.tokens", Title: "访问令牌", Route: "/ai/tokens", SortKey: 40},
 			},
@@ -146,6 +147,7 @@ func seedDashboardCards(tx *gorm.DB, now time.Time) error {
 	}
 	for index, path := range []string{
 		"dashboard.build_summary",
+		"dashboard.agent_run_summary",
 		"dashboard.system_info",
 		"dashboard.system_status",
 	} {

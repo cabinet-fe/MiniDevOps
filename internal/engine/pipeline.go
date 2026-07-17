@@ -337,9 +337,9 @@ func (p *Pipeline) Execute(ctx context.Context, runID uint) {
 		writeLine("=== Stage: Collecting Artifact ===")
 		artifactDir := filepath.Join(p.artifact, fmt.Sprintf("job-%d", job.ID))
 		_ = os.MkdirAll(artifactDir, 0755)
-		artifactFormat := normalizeArtifactFormat(job.ArtifactFormat)
+		artifactFormat := NormalizeArtifactFormat(job.ArtifactFormat)
 		artifactPath := filepath.Join(artifactDir, artifactArchiveName(run.BuildNumber, artifactFormat))
-		if err := createArtifactArchive(artifactPath, sourceDir, artifactFormat); err != nil {
+		if err := CreateArtifactArchive(artifactPath, sourceDir, artifactFormat); err != nil {
 			writeLine("WARNING: 打包构建产物失败: " + err.Error())
 		} else {
 			run.ArtifactPath = artifactPath

@@ -43,7 +43,7 @@ function openProject(project: ProductProject) {
       pagination
       :auto-query-fields="['status']"
     >
-      <template #filters="{ search }">
+      <template #filters>
         <u-input v-model="query.keyword" placeholder="名称、Slug 或标签" style="width: 240px" />
         <u-select
           v-model="query.status"
@@ -55,7 +55,6 @@ function openProject(project: ProductProject) {
           ]"
           style="width: 130px"
         />
-        <u-button type="primary" @click="search">查询</u-button>
       </template>
       <template #column:name="{ rowData }">
         <u-action @run="openProject(rowData as ProductProject)">

@@ -97,7 +97,7 @@ async function remove(row: SkillPackage) {
 
 <template>
   <div>
-    <ProTable ref="table" url="/skills" mode="pagination" :columns="columns">
+    <ProTable ref="table" url="/skills" pagination :columns="columns">
       <template #filters>
         <u-button
           v-if="hasPermission('ai.skills:create')"

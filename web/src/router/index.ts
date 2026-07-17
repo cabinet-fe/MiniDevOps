@@ -225,14 +225,14 @@ const router = createRouter({
           path: "ai/runs",
           name: "ai-runs",
           component: () => import("@/views/ai/runs/pages/main.vue"),
-          meta: { permission: "ai.agents:view", title: "运行记录", keepAliveName: "AiRuns" },
+          meta: { permission: "ai.runs:view", title: "运行记录", keepAliveName: "AiRuns" },
         },
         {
           path: "ai/runs/:id",
           name: "ai-run-detail",
           component: () => import("@/views/ai/runs/pages/detail.vue"),
           meta: {
-            permission: "ai.agents:view",
+            permission: "ai.runs:view",
             title: "运行详情",
             keepAliveName: "AiRunDetail",
           },

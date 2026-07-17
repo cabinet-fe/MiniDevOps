@@ -205,6 +205,7 @@ onMounted(async () => {
           <u-button
             v-if="run.status === 'success'"
             plain
+            type="primary"
             :disabled="acting"
             @click="onDownloadArtifact"
           >

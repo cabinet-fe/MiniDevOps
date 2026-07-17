@@ -35,10 +35,9 @@ const columns = defineProTableColumns([
 <template>
   <div>
     <ProTable url="/operation-logs" v-model:query="query" :columns="columns" pagination>
-      <template #filters="{ search }">
+      <template #filters>
         <u-input v-model="query.action" placeholder="动作 (POST/PUT…)" style="width: 160px" />
         <u-input v-model="query.resource_type" placeholder="资源路径" style="width: 220px" />
-        <u-button type="primary" @click="search">查询</u-button>
       </template>
       <template #column:action="{ rowData }">
         <u-tag size="small" :type="tagType((rowData as OperationLog).action, ACTION_TAG)">

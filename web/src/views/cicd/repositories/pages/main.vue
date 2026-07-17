@@ -121,9 +121,8 @@ async function onTest(row: Repository) {
 <template>
   <div>
     <ProTable ref="list" url="/repositories" v-model:query="query" :columns="columns" pagination>
-      <template #filters="{ search }">
+      <template #filters>
         <u-input v-model="query.keyword" placeholder="名称/URL" style="width: 200px" />
-        <u-button type="primary" @click="search">查询</u-button>
         <u-button
           v-if="hasPermission('cicd.repositories:create')"
           type="primary"

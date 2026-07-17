@@ -138,7 +138,7 @@ func TestGenerateDocsWiredReturnsAccepted(t *testing.T) {
 
 	aiRepo := airepository.NewAIRepository(gdb)
 	cli := aiservice.NewCLIService(aiRepo)
-	agents := aiservice.NewAgentService(aiRepo, cli, nil, nil, zap.NewNop(), t.TempDir(), t.TempDir())
+	agents := aiservice.NewAgentService(aiRepo, cli, nil, nil, zap.NewNop(), t.TempDir(), t.TempDir(), t.TempDir())
 	agents.Start()
 	t.Cleanup(agents.Shutdown)
 	agents.SetDocDraftWriter(projectSvc)

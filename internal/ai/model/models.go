@@ -80,21 +80,25 @@ type CliInstallSource struct {
 
 func (CliInstallSource) TableName() string { return "cli_install_sources" }
 
-// AiAgent is a configured agent bound to one CLI and optional skills/repo.
+// AiAgent is a configured agent bound to one CLI, skills, and build-job workspaces.
 type AiAgent struct {
-	ID           uint      `json:"id" gorm:"primaryKey"`
-	Name         string    `json:"name" gorm:"size:100;not null"`
-	Description  string    `json:"description" gorm:"size:500"`
-	Enabled      bool      `json:"enabled" gorm:"not null;default:true"`
-	CliKey       string    `json:"cli_key" gorm:"size:40;not null;index"`
-	SystemPrompt string    `json:"system_prompt" gorm:"type:text"`
-	SkillIDsJSON string    `json:"-" gorm:"type:text"`
-	SkillIDs     []uint    `json:"skill_ids" gorm:"-"`
-	RepositoryID *uint     `json:"repository_id" gorm:"index"`
-	TimeoutSec   int       `json:"timeout_sec" gorm:"not null;default:600"`
-	CreatedBy    uint      `json:"created_by" gorm:"index"`
-	CreatedAt    time.Time `json:"created_at"`
-	UpdatedAt    time.Time `json:"updated_at"`
+	ID               uint      `json:"id" gorm:"primaryKey"`
+	Name             string    `json:"name" gorm:"size:100;not null"`
+	Description      string    `json:"description" gorm:"size:500"`
+	Enabled          bool      `json:"enabled" gorm:"not null;default:true"`
+	CliKey           string    `json:"cli_key" gorm:"size:40;not null;index"`
+	SystemPrompt     string    `json:"system_prompt" gorm:"type:text"`
+	SkillIDsJSON     string    `json:"-" gorm:"type:text"`
+	SkillIDs         []uint    `json:"skill_ids" gorm:"-"`
+	BuildJobIDsJSON  string    `json:"-" gorm:"type:text"`
+	BuildJobIDs      []uint    `json:"build_job_ids" gorm:"-"`
+	OutputDir        string    `json:"output_dir" gorm:"size:200;not null;default:output"`
+	ArtifactFormat   string    `json:"artifact_format" gorm:"size:20;not null;default:gzip"`
+	MaxArtifacts     int       `json:"max_artifacts" gorm:"not null;default:10"`
+	TimeoutSec       int       `json:"timeout_sec" gorm:"not null;default:600"`
+	CreatedBy        uint      `json:"created_by" gorm:"index"`
+	CreatedAt        time.Time `json:"created_at"`
+	UpdatedAt        time.Time `json:"updated_at"`
 }
 
 func (AiAgent) TableName() string { return "ai_agents" }
@@ -128,6 +132,8 @@ type AgentRun struct {
 	DocNodeID       *uint      `json:"doc_node_id" gorm:"index"`
 	SnapshotJSON    string     `json:"snapshot_json,omitempty" gorm:"type:text"`
 	SkillDigestJSON string     `json:"skill_digest_json,omitempty" gorm:"type:text"`
+	WorkDir         string     `json:"work_dir" gorm:"size:500"`
+	ArtifactPath    string     `json:"artifact_path" gorm:"size:500"`
 	LogPath         string     `json:"log_path" gorm:"size:500"`
 	OutputText      string     `json:"output_text,omitempty" gorm:"type:text"`
 	ErrorMessage    string     `json:"error_message" gorm:"type:text"`

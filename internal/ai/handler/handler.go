@@ -60,8 +60,9 @@ func (h *Handler) RegisterRoutes(rg *gin.RouterGroup, authMW gin.HandlerFunc) {
 	// API trigger also accepts PAT scope agents:run (checked in middleware/handler).
 	ai.POST("/agents/:id/api-runs", h.APIRun)
 
-	ai.GET("/runs", rbacmw.RequirePermission(h.perm, "ai.agents:view"), h.ListRuns)
-	ai.GET("/runs/:id", rbacmw.RequirePermission(h.perm, "ai.agents:view"), h.GetRun)
+	ai.GET("/runs", rbacmw.RequirePermission(h.perm, "ai.runs:view"), h.ListRuns)
+	ai.GET("/runs/:id", rbacmw.RequirePermission(h.perm, "ai.runs:view"), h.GetRun)
+	ai.GET("/runs/:id/artifact", rbacmw.RequirePermission(h.perm, "ai.runs:view"), h.DownloadRunArtifact)
 	ai.POST("/runs/:id/cancel", rbacmw.RequirePermission(h.perm, "ai.agents:execute"), h.CancelRun)
 
 	skills := rg.Group("/skills", authMW)
@@ -336,6 +337,20 @@ func (h *Handler) GetRun(c *gin.Context) {
 	pkg.Success(c, run)
 }
 
+func (h *Handler) DownloadRunArtifact(c *gin.Context) {
+	id, _ := strconv.ParseUint(c.Param("id"), 10, 64)
+	path, filename, err := h.agents.ArtifactPath(uint(id))
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			pkg.Error(c, http.StatusNotFound, "资源不存在")
+			return
+		}
+		pkg.Error(c, http.StatusNotFound, err.Error())
+		return
+	}
+	c.FileAttachment(path, filename)
+}
+
 func (h *Handler) CancelRun(c *gin.Context) {
 	id, _ := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err := h.agents.CancelRun(uint(id)); err != nil {
@@ -441,12 +456,13 @@ func (h *Handler) DownloadSkill(c *gin.Context) {
 }
 
 func (h *Handler) ListPATs(c *gin.Context) {
-	items, err := h.pats.List(authmiddleware.GetUserID(c))
+	page := pkg.ParsePage(c)
+	items, total, err := h.pats.List(authmiddleware.GetUserID(c), page.Page, page.PageSize)
 	if err != nil {
 		pkg.Error(c, http.StatusInternalServerError, err.Error())
 		return
 	}
-	pkg.Success(c, gin.H{"items": items})
+	pkg.Paginated(c, items, total, page.Page, page.PageSize)
 }
 
 func (h *Handler) CreatePAT(c *gin.Context) {

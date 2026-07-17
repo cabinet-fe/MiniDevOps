@@ -223,7 +223,7 @@ async function remove(row: RbacResource) {
       :auto-query-fields="['type', 'enabled']"
       @loaded="onLoaded"
     >
-      <template #filters="{ search }">
+      <template #filters>
         <u-input v-model="query.keyword" placeholder="Code / 标题 / 路由" style="width: 220px" />
         <u-select
           v-model="query.type"
@@ -237,7 +237,6 @@ async function remove(row: RbacResource) {
           :options="ENABLED_OPTIONS"
           style="width: 130px"
         />
-        <u-button type="primary" @click="search">查询</u-button>
         <u-button
           v-if="hasPermission('system.resources:create')"
           type="primary"

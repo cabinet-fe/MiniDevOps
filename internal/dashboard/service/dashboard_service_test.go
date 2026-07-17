@@ -95,6 +95,34 @@ func TestLayoutFiltersStaleBuildCardAndRejectsUnauthorizedAddition(t *testing.T)
 	}
 }
 
+func TestLayoutFiltersStaleAgentRunCardAndRejectsUnauthorizedAddition(t *testing.T) {
+	repo := newDashboardRepository(t)
+	svc := NewDashboardService(repo, "test", time.Now(), []string{"."})
+	permissions := []string{"dashboard.system_info:view", "dashboard.system_status:view"}
+
+	if err := repo.CreateLayout(&model.Layout{
+		UserID:    43,
+		CardsJSON: `[{"id":"agent_run_summary","visible":true,"order":0},{"id":"system_info","visible":true,"order":1}]`,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	layout, err := svc.GetLayout(43, false, permissions)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, card := range layout.Cards {
+		if card.ID == CardAgentRunSummary {
+			t.Fatalf("stale agent run card must be filtered: %#v", layout.Cards)
+		}
+	}
+	_, err = svc.PutLayout(43, false, permissions, []model.CardLayout{
+		{ID: CardAgentRunSummary, Visible: true, Order: 0},
+	})
+	if !errors.Is(err, ErrUnauthorizedCard) {
+		t.Fatalf("expected ErrUnauthorizedCard, got %v", err)
+	}
+}
+
 func TestLayoutPersistsAfterPut(t *testing.T) {
 	repo := newDashboardRepository(t)
 	svc := NewDashboardService(repo, "test", time.Now(), []string{"."})

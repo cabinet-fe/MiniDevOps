@@ -26,6 +26,12 @@
 响应 200：data = BuildSummary
 错误：403
 
+### GET /dashboard/agent-run-summary — 智能体运行摘要卡片数据
+
+权限：`ai.runs:view`
+响应 200：data = AgentRunSummary
+错误：403
+
 ### GET /dashboard/system-info — 系统信息卡片数据
 
 权限：`dashboard.system_info:view`
@@ -193,6 +199,15 @@
 
 ## 对象形状
 
+### AgentRunSummary
+
+| 字段 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `running` | `integer` |  |  |
+| `queued` | `integer` |  | 含 queued 与 pending |
+| `success_rate` | `number` |  |  |
+| `recent` | `DashboardRecentAgentRun[]` |  |  |
+
 ### BuildSummary
 
 | 字段 | 类型 | 必填 | 说明 |
@@ -206,7 +221,7 @@
 
 | 字段 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
-| `id` | `'build_summary' \| 'system_info' \| 'system_status'` | 是 |  |
+| `id` | `'build_summary' \| 'agent_run_summary' \| 'system_info' \| 'system_status'` | 是 |  |
 | `visible` | `boolean` | 是 |  |
 | `order` | `integer` | 是 |  |
 
@@ -225,6 +240,17 @@
 | `build_number` | `integer` |  |  |
 | `status` | `string` |  |  |
 | `branch` | `string` |  |  |
+| `created_at` | `string(date-time)` |  |  |
+
+### DashboardRecentAgentRun
+
+| 字段 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `id` | `integer` |  |  |
+| `agent_id` | `integer` |  |  |
+| `agent_name` | `string` |  |  |
+| `trigger_type` | `string` |  |  |
+| `status` | `string` |  |  |
 | `created_at` | `string(date-time)` |  |  |
 
 ### DevEnvInstallSource
