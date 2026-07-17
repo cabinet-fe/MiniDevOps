@@ -24,12 +24,6 @@ func (r *RoleRepository) FindByID(id uint) (*model.Role, error) {
 	return &role, err
 }
 
-func (r *RoleRepository) FindByCode(code string) (*model.Role, error) {
-	var role model.Role
-	err := r.db.Preload("Permissions").Where("code = ?", code).First(&role).Error
-	return &role, err
-}
-
 func (r *RoleRepository) List(page, pageSize int) ([]model.Role, int64, error) {
 	var items []model.Role
 	var total int64
@@ -104,15 +98,6 @@ func (r *RoleRepository) ReplaceUserRoles(userID uint, roleIDs []uint) error {
 		}
 		return nil
 	})
-}
-
-func (r *RoleRepository) ListRolesByUserID(userID uint) ([]model.Role, error) {
-	var roles []model.Role
-	err := r.db.Joins("JOIN user_roles ON user_roles.role_id = roles.id").
-		Where("user_roles.user_id = ?", userID).
-		Preload("Permissions").
-		Find(&roles).Error
-	return roles, err
 }
 
 func (r *RoleRepository) ListDistinctPermissions() ([]string, error) {

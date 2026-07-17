@@ -76,21 +76,3 @@ func ToSet(codes []string) map[string]struct{} {
 	}
 	return set
 }
-
-// Union merges permission lists without duplicates (order not stable).
-func Union(lists ...[]string) []string {
-	set := map[string]struct{}{}
-	for _, list := range lists {
-		for _, c := range list {
-			if c == "" {
-				continue
-			}
-			set[c] = struct{}{}
-		}
-	}
-	out := make([]string, 0, len(set))
-	for c := range set {
-		out = append(out, c)
-	}
-	return out
-}

@@ -55,47 +55,6 @@ func DefaultCORSConfig() CORSConfig {
 	}
 }
 
-// CORS returns a CORS middleware. In dev (AllowOrigins empty), allows all origins.
-// In prod, only allows configured origins.
-func CORS(cfg CORSConfig) func(http.Handler) http.Handler {
-	allowAll := len(cfg.AllowOrigins) == 0
-	origins := make(map[string]bool)
-	for _, o := range cfg.AllowOrigins {
-		origins[o] = true
-	}
-
-	allowHeaders := strings.Join(cfg.AllowHeaders, ", ")
-	if allowHeaders == "" {
-		allowHeaders = "Origin, Content-Type, Accept, Authorization"
-	}
-	allowMethods := strings.Join(cfg.AllowMethods, ", ")
-	if allowMethods == "" {
-		allowMethods = "GET, POST, PUT, PATCH, DELETE, OPTIONS"
-	}
-
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			origin := r.Header.Get("Origin")
-			if origin == "" {
-				origin = "*"
-			}
-
-			if allowAll || origins[origin] || origins["*"] {
-				w.Header().Set("Access-Control-Allow-Origin", origin)
-			}
-			w.Header().Set("Access-Control-Allow-Headers", allowHeaders)
-			w.Header().Set("Access-Control-Allow-Methods", allowMethods)
-
-			if r.Method == http.MethodOptions {
-				w.WriteHeader(http.StatusNoContent)
-				return
-			}
-
-			next.ServeHTTP(w, r)
-		})
-	}
-}
-
 // CORSGin returns a Gin middleware for CORS.
 func CORSGin(cfg CORSConfig) func(*gin.Context) {
 	allowAll := len(cfg.AllowOrigins) == 0

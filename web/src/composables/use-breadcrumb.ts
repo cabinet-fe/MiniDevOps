@@ -12,7 +12,7 @@ function menuRoute(node: MenuNode): string {
 }
 
 /** Longest-prefix match through the menu tree; returns root → leaf chain. */
-export function matchMenuChain(nodes: MenuNode[], path: string): MenuNode[] | null {
+function matchMenuChain(nodes: MenuNode[], path: string): MenuNode[] | null {
   let best: MenuNode[] | null = null;
   let bestLen = -1;
 

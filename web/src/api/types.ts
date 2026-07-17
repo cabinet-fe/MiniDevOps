@@ -46,7 +46,7 @@ export interface PageResult<T> {
   total_pages: number;
 }
 
-export interface RolePermission {
+interface RolePermission {
   id: number;
   role_id: number;
   permission: string;
@@ -209,7 +209,7 @@ export interface BuildJob {
   updated_at: string;
 }
 
-export interface BuildDeployAttempt {
+interface BuildDeployAttempt {
   id: number;
   build_run_id: number;
   batch_no: number;
@@ -347,7 +347,7 @@ export interface DevEnvJob {
 
 export type ProjectRole = "owner" | "admin" | "member" | "readonly";
 
-export interface ProjectCapabilities {
+interface ProjectCapabilities {
   update: boolean;
   archive: boolean;
   delete: boolean;

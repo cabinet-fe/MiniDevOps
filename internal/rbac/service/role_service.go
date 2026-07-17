@@ -81,10 +81,6 @@ func (s *RoleService) SetUserRoles(userID uint, roleIDs []uint) error {
 	return s.roles.ReplaceUserRoles(userID, roleIDs)
 }
 
-func (s *RoleService) ListUserRoles(userID uint) ([]model.Role, error) {
-	return s.roles.ListRolesByUserID(userID)
-}
-
 func validatePermissions(permissions []string) error {
 	for _, p := range permissions {
 		if p == "" {

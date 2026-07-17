@@ -2,7 +2,6 @@ import { http } from "./http";
 import type {
   ApiDocDiff,
   ApiDocNode,
-  PageResult,
   ProductProject,
   ProjectMember,
   ProjectRole,
@@ -11,21 +10,6 @@ import type {
   RequirementComment,
   RequirementStatusOption,
 } from "./types";
-
-type Query = Record<string, string | number | boolean | undefined>;
-
-function compactQuery(query?: Query): Record<string, string | number | boolean> {
-  return Object.fromEntries(
-    Object.entries(query ?? {}).filter(([, value]) => value !== undefined && value !== ""),
-  ) as Record<string, string | number | boolean>;
-}
-
-export async function listProjects(query?: Query): Promise<PageResult<ProductProject>> {
-  const { body } = await http.get<PageResult<ProductProject>>("/projects", {
-    query: compactQuery(query),
-  });
-  return body;
-}
 
 export async function getProject(id: number): Promise<ProductProject> {
   const { body } = await http.get<ProductProject>(`/projects/${id}`);
@@ -103,16 +87,6 @@ export async function transferProjectOwner(
       user_id: userID,
     },
   );
-  return body;
-}
-
-export async function listRequirements(
-  projectID: number,
-  query?: Query,
-): Promise<PageResult<Requirement>> {
-  const { body } = await http.get<PageResult<Requirement>>(`/projects/${projectID}/requirements`, {
-    query: compactQuery(query),
-  });
   return body;
 }
 

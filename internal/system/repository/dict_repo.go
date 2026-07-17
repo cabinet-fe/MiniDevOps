@@ -26,14 +26,6 @@ func (r *DictionaryRepository) FindByID(id uint) (*model.Dictionary, error) {
 	return &d, err
 }
 
-func (r *DictionaryRepository) FindByCode(code string) (*model.Dictionary, error) {
-	var d model.Dictionary
-	err := r.db.Preload("Items", func(db *gorm.DB) *gorm.DB {
-		return db.Order("sort_order ASC, id ASC")
-	}).Where("code = ?", code).First(&d).Error
-	return &d, err
-}
-
 func (r *DictionaryRepository) List(page, pageSize int) ([]model.Dictionary, int64, error) {
 	var items []model.Dictionary
 	var total int64

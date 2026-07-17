@@ -56,14 +56,6 @@ func (r *OpsRepository) ListSources(environmentID uint) ([]model.DevEnvInstallSo
 	return items, err
 }
 
-func (r *OpsRepository) FindSource(id uint) (*model.DevEnvInstallSource, error) {
-	var item model.DevEnvInstallSource
-	if err := r.db.First(&item, id).Error; err != nil {
-		return nil, err
-	}
-	return &item, nil
-}
-
 func (r *OpsRepository) FindSourceInEnvironment(environmentID, sourceID uint) (*model.DevEnvInstallSource, error) {
 	var item model.DevEnvInstallSource
 	if err := r.db.Where("environment_id = ? AND id = ?", environmentID, sourceID).First(&item).Error; err != nil {

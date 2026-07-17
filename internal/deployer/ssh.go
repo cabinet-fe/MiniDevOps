@@ -86,66 +86,6 @@ func parsePrivateKey(pem string) (ssh.Signer, error) {
 	return nil, err
 }
 
-// ExecuteRemoteScript connects via SSH and executes a script, streaming output to logFn
-func ExecuteRemoteScript(ctx context.Context, server ServerInfo, script string, logFn func(string)) error {
-	if server.AuthType == "agent" {
-		return executeAgentScript(ctx, server, "", script, logFn)
-	}
-
-	config, err := CreateSSHClientConfig(server)
-	if err != nil {
-		return err
-	}
-
-	addr := fmt.Sprintf("%s:%d", server.Host, server.Port)
-	if server.Port == 0 {
-		addr = server.Host + ":22"
-	}
-
-	client, err := ssh.Dial("tcp", addr, config)
-	if err != nil {
-		return fmt.Errorf("ssh dial: %w", err)
-	}
-	defer client.Close()
-
-	session, err := client.NewSession()
-	if err != nil {
-		return fmt.Errorf("new session: %w", err)
-	}
-	defer session.Close()
-
-	var stdout, stderr bytes.Buffer
-	session.Stdout = &stdout
-	session.Stderr = &stderr
-
-	command := wrapRemoteScript(server, "", script)
-	if err := session.Run(command); err != nil {
-		if stdout.Len() > 0 {
-			for _, line := range strings.Split(strings.TrimSpace(stdout.String()), "\n") {
-				logFn(line)
-			}
-		}
-		if stderr.Len() > 0 {
-			for _, line := range strings.Split(strings.TrimSpace(stderr.String()), "\n") {
-				logFn("stderr: " + line)
-			}
-		}
-		return fmt.Errorf("script execution: %w", err)
-	}
-
-	if stdout.Len() > 0 {
-		for _, line := range strings.Split(strings.TrimSpace(stdout.String()), "\n") {
-			logFn(line)
-		}
-	}
-	if stderr.Len() > 0 {
-		for _, line := range strings.Split(strings.TrimSpace(stderr.String()), "\n") {
-			logFn("stderr: " + line)
-		}
-	}
-	return nil
-}
-
 func ExecuteRemoteScriptInDir(ctx context.Context, server ServerInfo, workDir, script string, logFn func(string)) error {
 	if strings.TrimSpace(script) == "" {
 		return nil

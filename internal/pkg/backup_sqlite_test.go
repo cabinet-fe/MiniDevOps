@@ -4,11 +4,67 @@ import (
 	"path/filepath"
 	"testing"
 
-	"bedrock/internal/model"
-
 	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
 )
+
+type backupTestUser struct {
+	ID           uint `gorm:"primaryKey"`
+	Username     string
+	PasswordHash string
+	Role         string
+	IsActive     bool
+}
+
+func (backupTestUser) TableName() string { return "users" }
+
+type backupTestProject struct {
+	ID        uint `gorm:"primaryKey"`
+	Name      string
+	CreatedBy uint
+}
+
+func (backupTestProject) TableName() string { return "projects" }
+
+type backupTestEnvironment struct {
+	ID        uint `gorm:"primaryKey"`
+	ProjectID uint
+	Name      string
+	Branch    string
+}
+
+func (backupTestEnvironment) TableName() string { return "environments" }
+
+type backupTestBuild struct {
+	ID            uint `gorm:"primaryKey"`
+	ProjectID     uint
+	EnvironmentID uint
+	BuildNumber   int
+	Status        string
+	CurrentStage  string
+}
+
+func (backupTestBuild) TableName() string { return "builds" }
+
+type backupTestAuditLog struct {
+	ID           uint `gorm:"primaryKey"`
+	UserID       uint
+	Action       string
+	ResourceType string
+	ResourceID   uint
+}
+
+func (backupTestAuditLog) TableName() string { return "audit_logs" }
+
+type backupTestNotification struct {
+	ID      uint `gorm:"primaryKey"`
+	UserID  uint
+	Type    string
+	Title   string
+	Message string
+}
+
+func (backupTestNotification) TableName() string { return "notifications" }
 
 func TestPrepareSlimSQLiteBackup_PrunesTables(t *testing.T) {
 	t.Parallel()
@@ -21,37 +77,37 @@ func TestPrepareSlimSQLiteBackup_PrunesTables(t *testing.T) {
 		t.Fatalf("open db: %v", err)
 	}
 	if err := db.AutoMigrate(
-		&model.User{},
-		&model.Project{},
-		&model.Environment{},
-		&model.Build{},
-		&model.AuditLog{},
-		&model.Notification{},
+		&backupTestUser{},
+		&backupTestProject{},
+		&backupTestEnvironment{},
+		&backupTestBuild{},
+		&backupTestAuditLog{},
+		&backupTestNotification{},
 	); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
 
-	u := &model.User{Username: "u1", PasswordHash: "x", Role: "admin", IsActive: true}
+	u := &backupTestUser{Username: "u1", PasswordHash: "x", Role: "admin", IsActive: true}
 	if err := db.Create(u).Error; err != nil {
 		t.Fatalf("user: %v", err)
 	}
-	p := &model.Project{Name: "p1", CreatedBy: u.ID}
+	p := &backupTestProject{Name: "p1", CreatedBy: u.ID}
 	if err := db.Create(p).Error; err != nil {
 		t.Fatalf("project: %v", err)
 	}
-	env := &model.Environment{ProjectID: p.ID, Name: "dev", Branch: "main"}
+	env := &backupTestEnvironment{ProjectID: p.ID, Name: "dev", Branch: "main"}
 	if err := db.Create(env).Error; err != nil {
 		t.Fatalf("env: %v", err)
 	}
-	if err := db.Create(&model.Build{
+	if err := db.Create(&backupTestBuild{
 		ProjectID: p.ID, EnvironmentID: env.ID, BuildNumber: 1, Status: "success", CurrentStage: "done",
 	}).Error; err != nil {
 		t.Fatalf("build: %v", err)
 	}
-	if err := db.Create(&model.AuditLog{UserID: u.ID, Action: "create", ResourceType: "project", ResourceID: p.ID}).Error; err != nil {
+	if err := db.Create(&backupTestAuditLog{UserID: u.ID, Action: "create", ResourceType: "project", ResourceID: p.ID}).Error; err != nil {
 		t.Fatalf("audit: %v", err)
 	}
-	if err := db.Create(&model.Notification{UserID: u.ID, Type: "build", Title: "t", Message: "m"}).Error; err != nil {
+	if err := db.Create(&backupTestNotification{UserID: u.ID, Type: "build", Title: "t", Message: "m"}).Error; err != nil {
 		t.Fatalf("notification: %v", err)
 	}
 
@@ -76,10 +132,10 @@ func TestPrepareSlimSQLiteBackup_PrunesTables(t *testing.T) {
 		cnt   *int64
 		want  int64
 	}{
-		{"users", &model.User{}, &users, 1},
-		{"builds", &model.Build{}, &builds, 0},
-		{"audit_logs", &model.AuditLog{}, &audits, 0},
-		{"notifications", &model.Notification{}, &notifs, 0},
+		{"users", &backupTestUser{}, &users, 1},
+		{"builds", &backupTestBuild{}, &builds, 0},
+		{"audit_logs", &backupTestAuditLog{}, &audits, 0},
+		{"notifications", &backupTestNotification{}, &notifs, 0},
 	} {
 		if err := db2.Model(tc.model).Count(tc.cnt).Error; err != nil {
 			t.Fatalf("count %s: %v", tc.name, err)

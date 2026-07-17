@@ -8,10 +8,6 @@ export function tagType(value: string | undefined | null, map: Record<string, Ta
   return map[value];
 }
 
-export function boolTagType(value: boolean, falseType?: TagType): TagType {
-  return value ? "success" : falseType;
-}
-
 /** 构建 / Agent / 安装任务等异步状态 */
 export const JOB_STATUS_TAG: Record<string, TagType> = {
   queued: "info",
@@ -30,11 +26,4 @@ export const TRIGGER_TYPE_TAG: Record<string, TagType> = {
   cron: "primary",
   build_event: "warning",
   docs_generate: "info",
-};
-
-export const INSTALL_OP_TAG: Record<string, TagType> = {
-  install: "primary",
-  upgrade: "info",
-  uninstall: "danger",
-  switch: "warning",
 };

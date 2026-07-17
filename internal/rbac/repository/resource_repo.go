@@ -24,12 +24,6 @@ func (r *ResourceRepository) FindByID(id uint) (*model.RbacResource, error) {
 	return &res, err
 }
 
-func (r *ResourceRepository) FindByPath(path string) (*model.RbacResource, error) {
-	var res model.RbacResource
-	err := r.db.Preload("MenuMetadata").Where("path = ?", path).First(&res).Error
-	return &res, err
-}
-
 func (r *ResourceRepository) ListAll() ([]model.RbacResource, error) {
 	var items []model.RbacResource
 	err := r.db.Preload("MenuMetadata").Order("sort_key ASC, id ASC").Find(&items).Error
@@ -75,19 +69,4 @@ func (r *ResourceRepository) UpsertMenuMetadata(meta *model.MenuMetadata) error 
 	}
 	meta.ID = existing.ID
 	return r.db.Save(meta).Error
-}
-
-func (r *ResourceRepository) UpdateMenuIcon(resourceID uint, iconBase64, iconMime string) error {
-	return r.db.Model(&model.MenuMetadata{}).
-		Where("resource_id = ?", resourceID).
-		Updates(map[string]interface{}{
-			"icon_base64": iconBase64,
-			"icon_mime":   iconMime,
-		}).Error
-}
-
-func (r *ResourceRepository) FindMenuMetadataByResourceID(resourceID uint) (*model.MenuMetadata, error) {
-	var meta model.MenuMetadata
-	err := r.db.Where("resource_id = ?", resourceID).First(&meta).Error
-	return &meta, err
 }

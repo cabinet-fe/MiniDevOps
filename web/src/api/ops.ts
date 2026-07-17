@@ -1,11 +1,5 @@
 import { http } from "./http";
-import type {
-  DevEnvInstallSource,
-  DevEnvJob,
-  DevEnvironment,
-  PageResult,
-  ProcessInfo,
-} from "./types";
+import type { DevEnvInstallSource, DevEnvJob, DevEnvironment, PageResult } from "./types";
 
 type Query = Record<string, string | number | boolean | undefined>;
 
@@ -13,13 +7,6 @@ function compactQuery(query?: Query): Record<string, string | number | boolean> 
   return Object.fromEntries(
     Object.entries(query ?? {}).filter(([, value]) => value !== undefined && value !== ""),
   ) as Record<string, string | number | boolean>;
-}
-
-export async function listProcesses(query?: Query): Promise<ProcessInfo[]> {
-  const { body } = await http.get<{ items: ProcessInfo[] }>("/ops/processes", {
-    query: compactQuery(query),
-  });
-  return body.items;
 }
 
 export async function killProcess(pid: number): Promise<void> {
@@ -69,13 +56,6 @@ export async function enqueueDevEnvironmentOperation(
     version,
   });
   return body;
-}
-
-export async function listDevEnvSources(envId: number): Promise<DevEnvInstallSource[]> {
-  const { body } = await http.get<{ items: DevEnvInstallSource[] }>(
-    `/ops/dev-environments/${envId}/sources`,
-  );
-  return body.items;
 }
 
 export async function createDevEnvSource(

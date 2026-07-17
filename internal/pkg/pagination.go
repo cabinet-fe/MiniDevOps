@@ -1,7 +1,6 @@
 package pkg
 
 import (
-	"fmt"
 	"math"
 	"strconv"
 
@@ -84,12 +83,6 @@ func ParsePage(c *gin.Context) PageQuery {
 	return PageQuery{Page: page, PageSize: pageSize}
 }
 
-// GetPage is retained for 1.x callers; prefer ParsePage.
-func GetPage(c *gin.Context) (int, int) {
-	q := ParsePage(c)
-	return q.Page, q.PageSize
-}
-
 // PageSuccess writes a success response with the standard pagination envelope as data.
 func PageSuccess(c *gin.Context, items interface{}, total int64, page PageQuery) {
 	Success(c, NewPageResult(items, total, page))
@@ -98,9 +91,4 @@ func PageSuccess(c *gin.Context, items interface{}, total int64, page PageQuery)
 // Paginated keeps the 1.x helper signature.
 func Paginated(c *gin.Context, items interface{}, total int64, page, pageSize int) {
 	PageSuccess(c, items, total, PageQuery{Page: page, PageSize: pageSize})
-}
-
-// FormatPageQuery is a small helper for logs/tests.
-func FormatPageQuery(p PageQuery) string {
-	return fmt.Sprintf("page=%d&page_size=%d", p.Page, p.PageSize)
 }

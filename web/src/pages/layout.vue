@@ -322,29 +322,4 @@ function toggleNav() {
 .app-main {
   padding: fn.use-var(gap, large);
 }
-
-.content-stage {
-  flex: 1;
-  min-height: 0;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  width: 100%;
-  overflow: hidden;
-  border-radius: fn.use-var(radius, large);
-  background: fn.use-var(bg-color, bottom);
-  box-shadow: fn.use-var(shadow);
-}
-
-.content-stage__scroll {
-  flex: 1;
-  min-height: 0;
-  min-width: 0;
-}
-
-.content-stage__body {
-  box-sizing: border-box;
-  min-height: 100%;
-  padding: fn.use-var(gap, large);
-}
 </style>

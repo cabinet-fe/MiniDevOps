@@ -94,11 +94,6 @@ export async function listAgents(query?: Query): Promise<PageResult<AiAgent>> {
   return body;
 }
 
-export async function getAgent(id: number): Promise<AiAgent> {
-  const { body } = await http.get<AiAgent>(`/ai/agents/${id}`);
-  return body;
-}
-
 export async function createAgent(input: Record<string, unknown>): Promise<AiAgent> {
   const { body } = await http.post<AiAgent>("/ai/agents", input);
   return body;
@@ -126,29 +121,13 @@ export async function createTrigger(
   return body;
 }
 
-export async function deleteTrigger(agentID: number, triggerID: number): Promise<void> {
-  await http.delete(`/ai/agents/${agentID}/triggers/${triggerID}`);
-}
-
 export async function manualRunAgent(agentID: number): Promise<AgentRun> {
   const { body } = await http.post<AgentRun>(`/ai/agents/${agentID}/runs`, {});
   return body;
 }
 
-export async function listRuns(query?: Query): Promise<PageResult<AgentRun>> {
-  const { body } = await http.get<PageResult<AgentRun>>("/ai/runs", { query: compactQuery(query) });
-  return body;
-}
-
 export async function getRun(id: number): Promise<AgentRun> {
   const { body } = await http.get<AgentRun>(`/ai/runs/${id}`);
-  return body;
-}
-
-export async function listSkills(query?: Query): Promise<PageResult<SkillPackage>> {
-  const { body } = await http.get<PageResult<SkillPackage>>("/skills", {
-    query: compactQuery(query),
-  });
   return body;
 }
 

@@ -1,13 +1,5 @@
 import { http } from "./http";
-import type {
-  Dictionary,
-  NotificationItem,
-  OperationLog,
-  PageResult,
-  RbacResource,
-  Role,
-  User,
-} from "./types";
+import type { Dictionary, NotificationItem, PageResult, RbacResource, Role, User } from "./types";
 
 export type ListQuery = Record<string, string | number | boolean | undefined | null>;
 
@@ -19,11 +11,6 @@ function toQuery(params?: ListQuery): Record<string, string | number | boolean> 
     out[k] = v;
   }
   return out;
-}
-
-export async function listUsers(params?: ListQuery): Promise<PageResult<User>> {
-  const { body } = await http.get<PageResult<User>>("/users", { query: toQuery(params) });
-  return body;
 }
 
 export async function createUser(body: Record<string, unknown>): Promise<User> {
@@ -42,11 +29,6 @@ export async function deleteUser(id: number): Promise<void> {
 
 export async function listRoles(params?: ListQuery): Promise<PageResult<Role>> {
   const { body } = await http.get<PageResult<Role>>("/roles", { query: toQuery(params) });
-  return body;
-}
-
-export async function getRole(id: number): Promise<Role> {
-  const { body } = await http.get<Role>(`/roles/${id}`);
   return body;
 }
 
@@ -110,26 +92,9 @@ export async function updateResourceIcon(
   return body;
 }
 
-export async function listDictionaries(params?: ListQuery): Promise<PageResult<Dictionary>> {
-  const { body } = await http.get<PageResult<Dictionary>>("/dictionaries", {
-    query: toQuery(params),
-  });
-  return body;
-}
-
 export async function getDictionary(id: number): Promise<Dictionary> {
   const { body } = await http.get<Dictionary>(`/dictionaries/${id}`);
   return body;
-}
-
-/** Load a dictionary and its items even when it is not on the first list page. */
-export async function getDictionaryByCode(code: string): Promise<Dictionary | null> {
-  for (let page = 1; ; page += 1) {
-    const result = await listDictionaries({ page, page_size: 100 });
-    const summary = result.items.find((item) => item.code === code);
-    if (summary) return getDictionary(summary.id);
-    if (page >= result.total_pages) return null;
-  }
 }
 
 export async function createDictionary(body: Record<string, unknown>): Promise<Dictionary> {
@@ -147,13 +112,6 @@ export async function updateDictionary(
 
 export async function deleteDictionary(id: number): Promise<void> {
   await http.delete(`/dictionaries/${id}`);
-}
-
-export async function listOperationLogs(params?: ListQuery): Promise<PageResult<OperationLog>> {
-  const { body } = await http.get<PageResult<OperationLog>>("/operation-logs", {
-    query: toQuery(params),
-  });
-  return body;
 }
 
 export async function listNotifications(params?: ListQuery): Promise<PageResult<NotificationItem>> {

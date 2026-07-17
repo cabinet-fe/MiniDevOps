@@ -47,9 +47,3 @@ func (r *UserRepository) Update(user *model.User) error {
 func (r *UserRepository) Delete(id uint) error {
 	return r.db.Delete(&model.User{}, id).Error
 }
-
-func (r *UserRepository) Count() (int64, error) {
-	var count int64
-	err := r.db.Model(&model.User{}).Count(&count).Error
-	return count, err
-}

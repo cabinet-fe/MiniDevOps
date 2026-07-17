@@ -46,11 +46,6 @@ export async function listRepositories(params?: ListQuery): Promise<PageResult<R
   return body;
 }
 
-export async function getRepository(id: number): Promise<Repository> {
-  const { body } = await http.get<Repository>(`/repositories/${id}`);
-  return body;
-}
-
 export async function listRepositoryBranches(id: number): Promise<string[]> {
   const { body } = await http.get<{ items: string[] }>(`/repositories/${id}/branches`);
   return body.items ?? [];
@@ -159,11 +154,6 @@ export async function enqueueBuildRun(
 }
 
 // —— Build runs ——
-export async function listBuildRuns(params?: ListQuery): Promise<PageResult<BuildRun>> {
-  const { body } = await http.get<PageResult<BuildRun>>("/build-runs", { query: toQuery(params) });
-  return body;
-}
-
 export async function getBuildRun(id: number): Promise<BuildRun> {
   const { body } = await http.get<BuildRun>(`/build-runs/${id}`);
   return body;

@@ -45,7 +45,7 @@ export const BUILD_LOG_STATUS_TAG: Record<
   interrupted: "warning",
 };
 
-export const TERMINAL_THEME: ITheme = {
+const TERMINAL_THEME: ITheme = {
   background: "#09090b",
   foreground: "#d4d4d8",
   cursor: "#d4d4d8",

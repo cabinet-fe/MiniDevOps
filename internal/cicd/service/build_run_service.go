@@ -4,7 +4,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -239,7 +238,3 @@ func (s *BuildRunService) LogPath(id uint) (string, error) {
 
 // Ensure Compile-time interface satisfaction.
 var _ engine.RunEnqueuer = (*BuildRunService)(nil)
-
-func FormatRunRef(run *model.BuildRun) string {
-	return fmt.Sprintf("job-%d/run-%d", run.BuildJobID, run.ID)
-}

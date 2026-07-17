@@ -14,8 +14,6 @@ import (
 	"sync"
 	"time"
 
-	"gorm.io/gorm"
-
 	"bedrock/internal/ops/model"
 	"bedrock/internal/ops/repository"
 )
@@ -551,8 +549,4 @@ func (s *DevEnvironmentService) auditJob(
 		details,
 		"",
 	)
-}
-
-func IsNotFound(err error) bool {
-	return errors.Is(err, gorm.ErrRecordNotFound)
 }
