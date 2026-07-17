@@ -92,6 +92,14 @@ function availableUpdate(key: string) {
   return formatVersion(state.latestVersion);
 }
 
+function isInstalled(key: string) {
+  return detectStates.value[key]?.status === "detected";
+}
+
+function isMissing(key: string) {
+  return detectStates.value[key]?.status === "missing";
+}
+
 function clearUpdateState(key: string) {
   updateStates.value = { ...updateStates.value, [key]: { status: "idle" } };
 }
@@ -116,10 +124,10 @@ async function reload() {
 }
 
 async function detectAll(clis: CliRuntimeDefinition[]) {
-  await Promise.all(clis.map((item) => runDetect(item, { silent: true })));
+  await Promise.all(clis.map((item) => runDetect(item)));
 }
 
-async function runDetect(item: CliRuntimeDefinition, options?: { silent?: boolean }) {
+async function runDetect(item: CliRuntimeDefinition) {
   detectStates.value = {
     ...detectStates.value,
     [item.key]: { status: "loading", version: detectStates.value[item.key]?.version },
@@ -133,16 +141,8 @@ async function runDetect(item: CliRuntimeDefinition, options?: { silent?: boolea
         ? { status: "detected", version: formatVersion(result.version) || undefined }
         : { status: "missing" },
     };
-    if (!options?.silent) {
-      message[result.detected ? "success" : "warning"](
-        result.detected ? `已检测到 ${item.name}` : `${item.name} 未安装`,
-      );
-    }
   } catch {
     detectStates.value = { ...detectStates.value, [item.key]: { status: "error" } };
-    if (!options?.silent) {
-      message.error("检测失败");
-    }
   }
 }
 
@@ -209,7 +209,7 @@ async function runOperation(
           ? `${item.name} 已更新到 ${version}`
           : `${item.name} ${operation} 完成`,
       );
-      await runDetect(item, { silent: true });
+      await runDetect(item);
       return;
     }
     failureTitle.value = `${item.name} · ${operation} 失败`;
@@ -306,10 +306,6 @@ onMounted(() => {
       <p class="risk">
         {{ riskNotice || "AI CLI 以 Bedrock 同 UID 执行，无 OS/容器沙箱。" }}
       </p>
-      <p class="hint">
-        进入页面时自动检测已安装版本；需要时点击「检查更新」查询 npm
-        最新版。安装源为可选 npm Registry（拼接 --registry），未配置时使用默认源。
-      </p>
     </div>
 
     <div class="cards">
@@ -322,11 +318,7 @@ onMounted(() => {
                 <u-tag size="small" :type="versionTagType(detectStates[item.key])">
                   {{ versionTagLabel(detectStates[item.key]) }}
                 </u-tag>
-                <u-tag
-                  v-if="availableUpdate(item.key)"
-                  size="small"
-                  type="warning"
-                >
+                <u-tag v-if="availableUpdate(item.key)" size="small" type="warning">
                   → {{ availableUpdate(item.key) }}
                 </u-tag>
               </div>
@@ -337,22 +329,20 @@ onMounted(() => {
               <p v-if="item.description" class="desc">{{ item.description }}</p>
             </div>
             <div class="actions">
-              <u-action-group :max="6">
+              <u-action-group :max="4">
                 <u-action v-if="hasPermission('ai.clis:view')" @run="openSourcesManager(item)">
                   设置
                 </u-action>
                 <u-action
-                  v-if="hasPermission('ai.clis:execute')"
-                  :disabled="!!pendingOps[item.key] || isCheckPending(item.key)"
-                  @run="runDetect(item)"
+                  v-if="hasPermission('ai.clis:execute') && isMissing(item.key)"
+                  :disabled="!!pendingOps[item.key]"
+                  :loading="isOpPending(item.key, 'install')"
+                  @run="runOperation(item, 'install')"
                 >
-                  检测
+                  安装
                 </u-action>
                 <u-action
-                  v-if="
-                    hasPermission('ai.clis:execute') &&
-                    detectStates[item.key]?.status === 'detected'
-                  "
+                  v-if="hasPermission('ai.clis:execute') && isInstalled(item.key)"
                   :disabled="!!pendingOps[item.key] || isCheckPending(item.key)"
                   :loading="isCheckPending(item.key)"
                   @run="runCheckUpdate(item)"
@@ -360,15 +350,11 @@ onMounted(() => {
                   检查更新
                 </u-action>
                 <u-action
-                  v-if="hasPermission('ai.clis:execute')"
-                  :disabled="!!pendingOps[item.key] || isCheckPending(item.key)"
-                  :loading="isOpPending(item.key, 'install')"
-                  @run="runOperation(item, 'install')"
-                >
-                  安装
-                </u-action>
-                <u-action
-                  v-if="hasPermission('ai.clis:execute') && availableUpdate(item.key)"
+                  v-if="
+                    hasPermission('ai.clis:execute') &&
+                    isInstalled(item.key) &&
+                    availableUpdate(item.key)
+                  "
                   :disabled="!!pendingOps[item.key] || isCheckPending(item.key)"
                   :loading="isOpPending(item.key, 'upgrade')"
                   type="warning"
@@ -377,7 +363,7 @@ onMounted(() => {
                   更新到 {{ availableUpdate(item.key) }}
                 </u-action>
                 <u-action
-                  v-else-if="hasPermission('ai.clis:execute')"
+                  v-else-if="hasPermission('ai.clis:execute') && isInstalled(item.key)"
                   :disabled="!!pendingOps[item.key] || isCheckPending(item.key)"
                   :loading="isOpPending(item.key, 'upgrade')"
                   @run="runOperation(item, 'upgrade')"
@@ -385,7 +371,7 @@ onMounted(() => {
                   升级
                 </u-action>
                 <u-action
-                  v-if="hasPermission('ai.clis:execute')"
+                  v-if="hasPermission('ai.clis:execute') && isInstalled(item.key)"
                   :disabled="!!pendingOps[item.key] || isCheckPending(item.key)"
                   :loading="isOpPending(item.key, 'uninstall')"
                   type="danger"
