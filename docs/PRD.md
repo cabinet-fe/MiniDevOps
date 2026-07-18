@@ -264,7 +264,7 @@ database:
 | ---------- | -------- | ------------------------------------------------------------------------------------------------------------------ |
 | `overview` | 工作台   | `dashboard`（卡片：`build_summary` / `agent_run_summary` / `system_info` / `system_status`）                               |
 | `ops`      | 运维     | `ops_processes`、`ops_dev_environments`（均 `super_admin_only`）                                                   |
-| `resource` | 资源管理 | `resource_repositories`、`resource_servers`、`resource_credentials`、`resource_clis`、`resource_tokens`            |
+| `resource` | 资源管理 | `resource_repositories`、`resource_servers`、`resource_credentials`、`resource_tokens`            |
 | `cicd`     | CI/CD    | `cicd_build_jobs`、`cicd_build_runs`                                                                               |
 | `project`  | 项目管理 | `project_projects`、`project_requirements`、`project_docs`                                                          |
 | `ai`       | AI       | `ai_agents`、`ai_runs`、`ai_skills`                                                                                |
@@ -344,9 +344,9 @@ database:
 
 ### 7.3 开发环境管理
 
-**目标：** 管理 Bedrock 宿主机上的开发环境（语言运行时），而非 CI 构建配置。
+**目标：** 管理 Bedrock 宿主机上的开发语言运行时与智能体 CLI，而非 CI 构建配置。页面分为两大块：**开发语言**、**智能体 CLI**。
 
-**内置开发环境（首期）：**
+**开发语言（内置，首期）：**
 
 | 工具族  | 示例组件                                                        |
 | ------- | --------------------------------------------------------------- |
@@ -363,6 +363,11 @@ database:
 3. 多版本并存时切换默认版本（如适用）。
 4. 安装源管理（见下）。
 
+**智能体 CLI：**
+
+- Claude Code / OpenCode / Reasonix / Codex：检测、安装、升级、卸载、npm Registry 多源回退。
+- API 路径仍为 `/resource/clis`（模型归属资源域）；权限与菜单入口统一为运维 `ops_dev_environments:*`（仅超管），无独立 CLI 菜单。
+
 **安装源：**
 
 - 每种工具可配置**多个有优先级的源**（官方、国内镜像、自定义 URL）。
@@ -376,6 +381,7 @@ database:
 2. 第一源失败、第二源成功时任务成功且日志可见失败回退。
 3. 自定义开发环境定义可被检测与安装流程复用。
 4. 非超管不可访问。
+5. 智能体 CLI 管理入口在开发环境页，资源管理侧栏无独立 CLI 菜单。
 
 ---
 
@@ -904,7 +910,7 @@ flowchart TB
 - 部署形态沿用；数据库驱动配置（sqlite/postgres/mysql）
 - RBAC：用户、角色、菜单分组、资源（菜单/功能）、操作日志、字典；菜单图标上传；登录下发两层分组菜单与功能 `full_code`
 - 仪表盘三卡片 + 用户布局 + 权限过滤
-- 运维：进程、开发环境（Go/Node/Java/Python/自定义）+ 每环境多安装源
+- 运维：进程、开发环境（开发语言 Go/Node/Java/Python/自定义 + 智能体 CLI）+ 每环境多安装源
 - 资源管理：代码仓库、服务器、凭证
 - CI/CD：任务、执行、部署
 - 项目管理：项目成员角色、需求列表、文档树上传与智能体生成

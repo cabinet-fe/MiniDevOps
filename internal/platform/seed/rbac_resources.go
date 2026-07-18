@@ -78,8 +78,7 @@ func EnsureRBACResources(db *gorm.DB) error {
 				{Code: "resource_repositories", Title: "代码仓库", Route: "/resource/repositories", SortKey: 10, Actions: standardCRUD},
 				{Code: "resource_servers", Title: "服务器", Route: "/resource/servers", SortKey: 20, Actions: standardCRUD},
 				{Code: "resource_credentials", Title: "凭证", Route: "/resource/credentials", SortKey: 30, Actions: append(append([]string{}, standardCRUD...), "use")},
-				{Code: "resource_clis", Title: "CLI", Route: "/resource/clis", SortKey: 40, Actions: append(append([]string{}, standardCRUD...), "execute")},
-				{Code: "resource_tokens", Title: "访问令牌", Route: "/resource/tokens", SortKey: 50, Actions: []string{"view", "create", "delete"}},
+				{Code: "resource_tokens", Title: "访问令牌", Route: "/resource/tokens", SortKey: 40, Actions: []string{"view", "create", "delete"}},
 			},
 		},
 		{
@@ -127,7 +126,7 @@ func EnsureRBACResources(db *gorm.DB) error {
 				return err
 			}
 		}
-		return removeRetiredMenus(tx, "dashboard_system_info", "dashboard_system_status")
+		return removeRetiredMenus(tx, "dashboard_system_info", "dashboard_system_status", "resource_clis")
 	})
 }
 

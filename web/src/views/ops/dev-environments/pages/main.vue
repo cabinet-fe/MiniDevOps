@@ -30,6 +30,8 @@ import pythonIcon from "@/assets/dev-env/python.svg";
 import FormDialog from "@/components/form-dialog";
 import { usePermission } from "@/composables/use-permission";
 
+import AgentCliSection from "../components/agent-cli-section.vue";
+
 type DetectState = {
   status: "loading" | "detected" | "missing" | "error";
   version?: string;
@@ -424,84 +426,94 @@ onUnmounted(stopJobPolling);
 </script>
 
 <template>
-  <div v-loading="loading">
-    <div class="page-toolbar">
-      <u-button
-        v-if="hasPermission('ops_dev_environments:create')"
-        type="primary"
-        @click="openCreateEnv"
-      >
-        新建自定义环境
-      </u-button>
-    </div>
+  <div class="dev-env-page">
+    <section v-loading="loading" class="page-section">
+      <div class="section-head">
+        <h2 class="section-title">开发语言</h2>
+        <u-button
+          v-if="hasPermission('ops_dev_environments:create')"
+          type="primary"
+          @click="openCreateEnv"
+        >
+          新建自定义环境
+        </u-button>
+      </div>
 
-    <div class="cards">
-      <u-card v-for="item in environments" :key="item.id" class="env-card">
-        <u-card-content>
-          <header class="card-head">
-            <div class="card-title">
-              <div class="title-row">
-                <img
-                  class="lang-icon"
-                  :src="envIcon(item)"
-                  :alt="item.name"
-                  width="28"
-                  height="28"
-                />
-                <h3>{{ item.name }}</h3>
-                <u-tag size="small" :type="versionTagType(detectStates[item.id])">
-                  {{ versionTagLabel(detectStates[item.id]) }}
-                </u-tag>
+      <div class="cards">
+        <u-card v-for="item in environments" :key="item.id" class="env-card">
+          <u-card-content>
+            <header class="card-head">
+              <div class="card-title">
+                <div class="title-row">
+                  <img
+                    class="lang-icon"
+                    :src="envIcon(item)"
+                    :alt="item.name"
+                    width="28"
+                    height="28"
+                  />
+                  <h3>{{ item.name }}</h3>
+                  <u-tag size="small" :type="versionTagType(detectStates[item.id])">
+                    {{ versionTagLabel(detectStates[item.id]) }}
+                  </u-tag>
+                </div>
+                <p class="meta">
+                  <span>{{ item.kind === "builtin" ? "内置" : "自定义" }}</span>
+                  <span>{{ item.executable }}</span>
+                  <span v-if="item.default_version">默认 {{ item.default_version }}</span>
+                </p>
+                <p v-if="item.description" class="desc">{{ item.description }}</p>
               </div>
-              <p class="meta">
-                <span>{{ item.kind === "builtin" ? "内置" : "自定义" }}</span>
-                <span>{{ item.executable }}</span>
-                <span v-if="item.default_version">默认 {{ item.default_version }}</span>
-              </p>
-              <p v-if="item.description" class="desc">{{ item.description }}</p>
-            </div>
-            <div class="actions">
-              <u-action-group :max="5">
-                <u-action @run="openSourcesManager(item)">设置</u-action>
-                <u-action @run="runDetect(item)">检测</u-action>
-                <u-action @run="runOperation(item, 'install')">安装</u-action>
-                <u-action @run="runOperation(item, 'upgrade')">升级</u-action>
-                <u-action @run="runOperation(item, 'uninstall')">卸载</u-action>
-                <u-action @run="runOperation(item, 'switch')">切版本</u-action>
-                <u-action @run="openScripts(item)">脚本</u-action>
-                <u-action v-if="item.kind === 'custom'" @run="openEditEnv(item)">编辑</u-action>
-                <u-action v-if="item.kind === 'custom'" type="danger" @run="removeEnv(item)"
-                  >删除</u-action
-                >
-              </u-action-group>
-            </div>
-          </header>
-
-          <section v-if="latestJobs[item.id]" class="block">
-            <div class="block-head">
-              <h4>最近任务</h4>
               <div class="actions">
-                <span class="job-status">{{ jobStatusLabel(latestJobs[item.id]?.status) }}</span>
-                <u-action-group :max="2">
-                  <u-action @run="showJobLog(item.id, latestJobs[item.id]!)">日志</u-action>
-                  <u-action
-                    v-if="['failed', 'interrupted'].includes(latestJobs[item.id]?.status || '')"
-                    @run="retryJob(item.id, latestJobs[item.id]!)"
-                    >重试</u-action
+                <u-action-group :max="5">
+                  <u-action @run="openSourcesManager(item)">设置</u-action>
+                  <u-action @run="runDetect(item)">检测</u-action>
+                  <u-action @run="runOperation(item, 'install')">安装</u-action>
+                  <u-action @run="runOperation(item, 'upgrade')">升级</u-action>
+                  <u-action @run="runOperation(item, 'uninstall')">卸载</u-action>
+                  <u-action @run="runOperation(item, 'switch')">切版本</u-action>
+                  <u-action @run="openScripts(item)">脚本</u-action>
+                  <u-action v-if="item.kind === 'custom'" @run="openEditEnv(item)">编辑</u-action>
+                  <u-action v-if="item.kind === 'custom'" type="danger" @run="removeEnv(item)"
+                    >删除</u-action
                   >
                 </u-action-group>
               </div>
-            </div>
-            <p class="job-summary">
-              {{ latestJobs[item.id]?.operation }}
-              <template v-if="latestJobs[item.id]?.requested_version">
-                · {{ latestJobs[item.id]?.requested_version }}
-              </template>
-            </p>
-          </section>
-        </u-card-content>
-      </u-card>
-    </div>
+            </header>
+
+            <section v-if="latestJobs[item.id]" class="block">
+              <div class="block-head">
+                <h4>最近任务</h4>
+                <div class="actions">
+                  <span class="job-status">{{ jobStatusLabel(latestJobs[item.id]?.status) }}</span>
+                  <u-action-group :max="2">
+                    <u-action @run="showJobLog(item.id, latestJobs[item.id]!)">日志</u-action>
+                    <u-action
+                      v-if="['failed', 'interrupted'].includes(latestJobs[item.id]?.status || '')"
+                      @run="retryJob(item.id, latestJobs[item.id]!)"
+                      >重试</u-action
+                    >
+                  </u-action-group>
+                </div>
+              </div>
+              <p class="job-summary">
+                {{ latestJobs[item.id]?.operation }}
+                <template v-if="latestJobs[item.id]?.requested_version">
+                  · {{ latestJobs[item.id]?.requested_version }}
+                </template>
+              </p>
+            </section>
+          </u-card-content>
+        </u-card>
+      </div>
+    </section>
+
+    <section class="page-section">
+      <div class="section-head">
+        <h2 class="section-title">智能体 CLI</h2>
+      </div>
+      <AgentCliSection />
+    </section>
 
     <FormDialog
       v-model="envDialogOpen"
@@ -620,9 +632,27 @@ onUnmounted(stopJobPolling);
 <style scoped lang="scss">
 @use "pkg:@veltra/styles/functions" as fn;
 
-.page-toolbar {
+.dev-env-page {
   display: flex;
-  justify-content: flex-end;
+  flex-direction: column;
+  gap: 28px;
+}
+.page-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.section-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.4;
 }
 .cards {
   display: grid;

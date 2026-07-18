@@ -130,7 +130,7 @@ flowchart LR
 
 ### 4.1 目标
 
-可配置仪表盘三卡片；超管运维：进程管理 + 开发环境（含每环境多安装源）。
+可配置仪表盘三卡片；超管运维：进程管理 + 开发环境（开发语言 + 智能体 CLI，含每环境多安装源）。
 
 ### 4.2 交付物
 
@@ -140,7 +140,7 @@ flowchart LR
 | 系统信息 | 非超管可见**完整只读**系统信息（与超管信息字段一致），但无运维写操作 |
 | 运维 | 进程列表/终止（保护自身与危险进程）；DevEnvironment；每环境 InstallSource 优先级回退；DevEnvJob（同重启协议） |
 | 自定义开发环境 | **仅超管**可创建/修改/执行；脚本快照 + 强提示 + 完整审计 |
-| 前端 | 仪表盘编辑；运维进程页；开发环境卡片（含安装源与任务） |
+| 前端 | 仪表盘编辑；运维进程页；开发环境页（开发语言卡片 + 智能体 CLI） |
 | 测试 | 无权限卡片不可见；非超管运维 API 403；源回退可观测 |
 
 ### 4.3 明确不做
@@ -205,13 +205,13 @@ flowchart LR
 
 | 类别 | 内容 |
 | --- | --- |
-| CLI | Claude Code、OpenCode、Reasonix、Codex：检测/安装/升级/卸载、多源回退、运行时注入配置（运行时管理归属资源管理域：`/resource/clis`、`resource_clis:*`） |
+| CLI | Claude Code、OpenCode、Reasonix、Codex：检测/安装/升级/卸载、多源回退、运行时注入配置（API `/resource/clis`；权限与 UI 归属运维开发环境：`ops_dev_environments:*`，无独立 CLI 菜单） |
 | 智能体 | AiAgent、AgentTrigger（手动/API/定时/构建事件）；AgentRun 独立异步；上下文 = 提示词 + 仓库 |
 | 构建事件 | 默认 `artifact_ready`（归档成功、制品可用）；BuildJob 可覆盖为 `distribution_finished` |
 | Skills | ZIP 上传、SKILL.md 校验、public/private、覆盖更新、工作区注入 |
 | PAT | 哈希存储、仅显示一次、可过期/吊销；固定 scope：`skills:read`、`agents:run`（管理接口归属资源管理域：`/resource/tokens`、`resource_tokens:*`） |
 | 文档生成 | 接通 P3：`docs/generate` → AgentRun → 只写 draft |
-| 前端 | CLI 管理与 PAT 管理（资源管理菜单）、智能体、触发器、运行日志 WS、Skills |
+| 前端 | 开发环境页（开发语言 + 智能体 CLI）与 PAT 管理（资源管理菜单）、智能体、触发器、运行日志 WS、Skills |
 | 测试 | 四 CLI 安装与非交互运行；构建事件不改 BuildRun 成功态；PAT 鉴权；私有 Skill 隔离 |
 
 ### 6.3 明确不做

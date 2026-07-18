@@ -131,69 +131,71 @@
 
 ## AI CLI
 
+运行时管理入口在运维「开发环境」页的「智能体 CLI」区块；无独立菜单。路径仍挂在 `/resource`（模型归属资源域），权限统一为 `ops_dev_environments:*`（仅超管）。
+
 ### GET /resource/clis — 列出 AI CLI
 
-权限：`resource_clis:view`
+权限：`ops_dev_environments:view`
 响应 200：data = object
 说明：四套并行 CLI（Claude Code、OpenCode、Reasonix、Codex）。与 Bedrock 同 UID 执行，无 OS/容器沙箱。
 
 ### POST /resource/clis/{key}/detect — 检测 AI CLI
 
-权限：`resource_clis:execute`
+权限：`ops_dev_environments:execute`
 路径参数：key*: string
 响应 200：data = CliDetectResult
 
 ### POST /resource/clis/{key}/check-update — 检查 AI CLI 更新
 
-权限：`resource_clis:execute`
+权限：`ops_dev_environments:execute`
 路径参数：key*: string
 响应 200：data = CliCheckUpdateResult
 说明：通过 `npm view <package> version` 查询最新版本（按启用安装源优先级尝试 `--registry`，无源则用默认 Registry）。与已安装版本比较后返回是否可更新。未安装时 `update_available` 为 false。
 
 ### POST /resource/clis/{key}/install — 安装 AI CLI
 
-权限：`resource_clis:execute`
+权限：`ops_dev_environments:execute`
 路径参数：key*: string
 请求：{ version }
 响应 200：data = CliExecuteResult
 
 ### POST /resource/clis/{key}/upgrade — 升级 AI CLI
 
-权限：`resource_clis:execute`
+权限：`ops_dev_environments:execute`
 路径参数：key*: string
 请求：{ version }
 响应 200：data = CliExecuteResult
 
 ### POST /resource/clis/{key}/uninstall — 卸载 AI CLI
 
-权限：`resource_clis:execute`
+权限：`ops_dev_environments:execute`
 路径参数：key*: string
 响应 200：data = CliExecuteResult
 
 ### GET /resource/cli-sources — 列出 CLI 安装源
 
-权限：`resource_clis:view`
+权限：`ops_dev_environments:view`
 查询参数：cli_key: string
 响应 200
 说明：安装源为可选 npm Registry。安装/升级时将 `base_url` 拼为 `npm --registry`；未配置启用源时使用 npm 默认 Registry。
 
 ### POST /resource/cli-sources — 创建 CLI 安装源
 
-权限：`resource_clis:create`
+权限：`ops_dev_environments:create`
 请求：{ cli_key*, name*, base_url*, priority, enabled }
 响应 201
 说明：`base_url` 为 npm Registry 地址（如 `https://registry.npmjs.org`）。
 
 ### PUT /resource/cli-sources/{id} — 更新 CLI 安装源
 
-权限：`resource_clis:update`
+权限：`ops_dev_environments:update`
 路径参数：id*: integer
 请求：{ cli_key*, name*, base_url*, priority, enabled }
 响应 200
 
 ### DELETE /resource/cli-sources/{id} — 删除 CLI 安装源
 
-权限：`resource_clis:delete`
+权限：`ops_dev_environments:delete`
 路径参数：id*: integer
 响应 200
 

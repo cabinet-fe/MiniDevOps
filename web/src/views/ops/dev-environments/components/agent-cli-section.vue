@@ -1,5 +1,5 @@
 <script setup lang="ts">
-defineOptions({ name: "ResourceClis" });
+defineOptions({ name: "AgentCliSection" });
 
 import { onMounted, reactive, ref } from "vue";
 import { o } from "@cat-kit/core";
@@ -17,40 +17,29 @@ import {
 } from "@/api/resource";
 import type { CliExecuteResult, CliInstallSource, CliRuntimeDefinition } from "@/api/types";
 import FormDialog from "@/components/form-dialog";
-import { usePermission } from "@/composables/use-permission";
 
 type DetectState = {
   status: "loading" | "detected" | "missing" | "error";
   version?: string;
 };
 
-type UpdateState = {
-  status: "idle" | "loading" | "ready" | "error";
-  latestVersion?: string;
-  updateAvailable?: boolean;
-};
-
-type Operation = "install" | "upgrade" | "uninstall";
-
-const { hasPermission } = usePermission();
+type Operation = "install" | "upgrade" | "uninstall" | "check";
 
 const loading = ref(false);
 const items = ref<CliRuntimeDefinition[]>([]);
 const riskNotice = ref("");
 const detectStates = ref<Record<string, DetectState>>({});
-const updateStates = ref<Record<string, UpdateState>>({});
-const pendingOps = ref<Record<string, Operation | undefined>>({});
+const busy = ref<{ key: string; op: Operation } | null>(null);
 
 const sourcesDialogOpen = ref(false);
-const sourcesCliKey = ref("");
-const sourcesCliName = ref("");
+const sourcesCli = ref<CliRuntimeDefinition | null>(null);
 const sourcesList = ref<CliInstallSource[]>([]);
 const sourcesLoading = ref(false);
 
 const sourceDialogOpen = ref(false);
 const editingSource = ref<CliInstallSource | null>(null);
 const sourceForm = reactive({
-  cli_key: "claude_code",
+  cli_key: "",
   name: "",
   base_url: "",
   priority: 10,
@@ -65,18 +54,18 @@ function showError(error: unknown) {
   message.error(error instanceof Error ? error.message : "操作失败");
 }
 
+function formatVersion(version?: string) {
+  const trimmed = version?.trim();
+  if (!trimmed || trimmed.includes("/") || trimmed.includes("\\")) return "";
+  return trimmed;
+}
+
 function versionTagType(state?: DetectState) {
   if (!state) return "info";
   if (state.status === "detected") return "success";
   if (state.status === "missing") return "warning";
   if (state.status === "error") return "danger";
   return "info";
-}
-
-function formatVersion(version?: string) {
-  const trimmed = version?.trim();
-  if (!trimmed || trimmed.includes("/") || trimmed.includes("\\")) return "";
-  return trimmed;
 }
 
 function versionTagLabel(state?: DetectState) {
@@ -86,22 +75,9 @@ function versionTagLabel(state?: DetectState) {
   return "检测失败";
 }
 
-function availableUpdate(key: string) {
-  const state = updateStates.value[key];
-  if (!state?.updateAvailable) return "";
-  return formatVersion(state.latestVersion);
-}
-
-function isInstalled(key: string) {
-  return detectStates.value[key]?.status === "detected";
-}
-
-function isMissing(key: string) {
-  return detectStates.value[key]?.status === "missing";
-}
-
-function clearUpdateState(key: string) {
-  updateStates.value = { ...updateStates.value, [key]: { status: "idle" } };
+function isBusy(key: string, op?: Operation) {
+  if (!busy.value || busy.value.key !== key) return false;
+  return op ? busy.value.op === op : true;
 }
 
 function formatFailureDetail(result: CliExecuteResult) {
@@ -115,7 +91,7 @@ async function reload() {
     const data = await listCLIs();
     items.value = data.items ?? [];
     riskNotice.value = data.risk_notice ?? "";
-    void detectAll(items.value);
+    void Promise.all(items.value.map((item) => runDetect(item)));
   } catch (error) {
     showError(error);
   } finally {
@@ -123,16 +99,11 @@ async function reload() {
   }
 }
 
-async function detectAll(clis: CliRuntimeDefinition[]) {
-  await Promise.all(clis.map((item) => runDetect(item)));
-}
-
 async function runDetect(item: CliRuntimeDefinition) {
   detectStates.value = {
     ...detectStates.value,
     [item.key]: { status: "loading", version: detectStates.value[item.key]?.version },
   };
-  clearUpdateState(item.key);
   try {
     const result = await detectCLI(item.key);
     detectStates.value = {
@@ -146,67 +117,53 @@ async function runDetect(item: CliRuntimeDefinition) {
   }
 }
 
-function isCheckPending(key: string) {
-  return updateStates.value[key]?.status === "loading";
-}
-
 async function runCheckUpdate(item: CliRuntimeDefinition) {
-  if (pendingOps.value[item.key] || isCheckPending(item.key)) return;
-
-  updateStates.value = {
-    ...updateStates.value,
-    [item.key]: { status: "loading" },
-  };
+  if (isBusy(item.key)) return;
+  busy.value = { key: item.key, op: "check" };
   try {
     const result = await checkCLIUpdate(item.key);
-    const latest = formatVersion(result.latest_version) || undefined;
-    updateStates.value = {
-      ...updateStates.value,
-      [item.key]: {
-        status: result.error ? "error" : "ready",
-        latestVersion: latest,
-        updateAvailable: !!result.update_available && !!latest,
-      },
-    };
+    const latest = formatVersion(result.latest_version);
     if (result.error) {
       message.error(result.error);
-    } else if (result.update_available && latest) {
-      message.info(`${item.name} 有新版本 ${latest}`);
+      return;
+    }
+    if (result.update_available && latest) {
+      if (window.confirm(`${item.name} 有新版本 ${latest}，是否更新？`)) {
+        busy.value = null;
+        await runOperation(item, "upgrade", latest);
+      }
     } else {
       message.success(`${item.name} 已是最新版本`);
     }
   } catch (error) {
-    updateStates.value = { ...updateStates.value, [item.key]: { status: "error" } };
     showError(error);
+  } finally {
+    if (busy.value?.op === "check") busy.value = null;
   }
-}
-
-function isOpPending(key: string, op: Operation) {
-  return pendingOps.value[key] === op;
 }
 
 async function runOperation(
   item: CliRuntimeDefinition,
-  operation: Operation,
-  options?: { version?: string; skipPrompt?: boolean },
+  operation: "install" | "upgrade" | "uninstall",
+  version = "",
 ) {
-  if (pendingOps.value[item.key]) return;
+  if (isBusy(item.key)) return;
 
-  let version = options?.version ?? "";
-  if (operation !== "uninstall" && !options?.skipPrompt) {
+  let targetVersion = version;
+  if (operation !== "uninstall" && !targetVersion) {
     const requested = window.prompt(`输入 ${item.name} 的目标版本（可留空）`);
     if (requested === null) return;
-    version = requested;
+    targetVersion = requested;
   }
   if (operation === "uninstall" && !window.confirm(`确认卸载 ${item.name}？`)) return;
 
-  pendingOps.value = { ...pendingOps.value, [item.key]: operation };
+  busy.value = { key: item.key, op: operation };
   try {
-    const result = await executeCLI(item.key, operation, version);
+    const result = await executeCLI(item.key, operation, targetVersion);
     if (result.success) {
       message.success(
-        operation === "upgrade" && version
-          ? `${item.name} 已更新到 ${version}`
+        operation === "upgrade" && targetVersion
+          ? `${item.name} 已更新到 ${targetVersion}`
           : `${item.name} ${operation} 完成`,
       );
       await runDetect(item);
@@ -218,21 +175,12 @@ async function runOperation(
   } catch (error) {
     showError(error);
   } finally {
-    const next = { ...pendingOps.value };
-    delete next[item.key];
-    pendingOps.value = next;
+    busy.value = null;
   }
 }
 
-function runAvailableUpdate(item: CliRuntimeDefinition) {
-  const latest = availableUpdate(item.key);
-  if (!latest) return;
-  void runOperation(item, "upgrade", { version: latest, skipPrompt: true });
-}
-
 async function openSourcesManager(item: CliRuntimeDefinition) {
-  sourcesCliKey.value = item.key;
-  sourcesCliName.value = item.name;
+  sourcesCli.value = item;
   sourcesDialogOpen.value = true;
   sourcesLoading.value = true;
   try {
@@ -246,10 +194,10 @@ async function openSourcesManager(item: CliRuntimeDefinition) {
 }
 
 async function refreshSources() {
-  if (!sourcesCliKey.value) return;
+  if (!sourcesCli.value) return;
   sourcesLoading.value = true;
   try {
-    sourcesList.value = await listCLISources(sourcesCliKey.value);
+    sourcesList.value = await listCLISources(sourcesCli.value.key);
   } catch (error) {
     showError(error);
   } finally {
@@ -259,7 +207,7 @@ async function refreshSources() {
 
 function openCreateSource() {
   editingSource.value = null;
-  sourceForm.cli_key = sourcesCliKey.value;
+  sourceForm.cli_key = sourcesCli.value?.key ?? "";
   sourceDialogOpen.value = true;
 }
 
@@ -275,7 +223,7 @@ async function saveSource() {
       await updateCLISource(editingSource.value.id, sourceForm);
       message.success("安装源已更新");
     } else {
-      await createCLISource({ ...sourceForm, cli_key: sourcesCliKey.value });
+      await createCLISource(sourceForm);
       message.success("安装源已创建");
     }
     sourceDialogOpen.value = false;
@@ -301,12 +249,10 @@ onMounted(() => {
 </script>
 
 <template>
-  <div v-loading="loading">
-    <div class="page-notice">
-      <p class="risk">
-        {{ riskNotice || "AI CLI 以 Bedrock 同 UID 执行，无 OS/容器沙箱。" }}
-      </p>
-    </div>
+  <div v-loading="loading" class="agent-cli-section">
+    <p class="risk">
+      {{ riskNotice || "AI CLI 以 Bedrock 同 UID 执行，无 OS/容器沙箱。" }}
+    </p>
 
     <div class="cards">
       <u-card v-for="item in items" :key="item.key" class="cli-card">
@@ -318,9 +264,6 @@ onMounted(() => {
                 <u-tag size="small" :type="versionTagType(detectStates[item.key])">
                   {{ versionTagLabel(detectStates[item.key]) }}
                 </u-tag>
-                <u-tag v-if="availableUpdate(item.key)" size="small" type="warning">
-                  → {{ availableUpdate(item.key) }}
-                </u-tag>
               </div>
               <p class="meta">
                 <span>{{ item.key }}</span>
@@ -329,54 +272,32 @@ onMounted(() => {
               <p v-if="item.description" class="desc">{{ item.description }}</p>
             </div>
             <div class="actions">
-              <u-action-group :max="4">
+              <u-action-group :max="5">
+                <u-action @run="openSourcesManager(item)">设置</u-action>
                 <u-action
-                  v-if="hasPermission('resource_clis:view')"
-                  @run="openSourcesManager(item)"
-                >
-                  设置
-                </u-action>
-                <u-action
-                  v-if="hasPermission('resource_clis:execute') && isMissing(item.key)"
-                  :disabled="!!pendingOps[item.key]"
-                  :loading="isOpPending(item.key, 'install')"
+                  :disabled="isBusy(item.key)"
+                  :loading="isBusy(item.key, 'install')"
                   @run="runOperation(item, 'install')"
                 >
                   安装
                 </u-action>
                 <u-action
-                  v-if="hasPermission('resource_clis:execute') && isInstalled(item.key)"
-                  :disabled="!!pendingOps[item.key] || isCheckPending(item.key)"
-                  :loading="isCheckPending(item.key)"
+                  :disabled="isBusy(item.key)"
+                  :loading="isBusy(item.key, 'check')"
                   @run="runCheckUpdate(item)"
                 >
                   检查更新
                 </u-action>
                 <u-action
-                  v-if="
-                    hasPermission('resource_clis:execute') &&
-                    isInstalled(item.key) &&
-                    availableUpdate(item.key)
-                  "
-                  :disabled="!!pendingOps[item.key] || isCheckPending(item.key)"
-                  :loading="isOpPending(item.key, 'upgrade')"
-                  type="warning"
-                  @run="runAvailableUpdate(item)"
-                >
-                  更新到 {{ availableUpdate(item.key) }}
-                </u-action>
-                <u-action
-                  v-else-if="hasPermission('resource_clis:execute') && isInstalled(item.key)"
-                  :disabled="!!pendingOps[item.key] || isCheckPending(item.key)"
-                  :loading="isOpPending(item.key, 'upgrade')"
+                  :disabled="isBusy(item.key)"
+                  :loading="isBusy(item.key, 'upgrade')"
                   @run="runOperation(item, 'upgrade')"
                 >
                   升级
                 </u-action>
                 <u-action
-                  v-if="hasPermission('resource_clis:execute') && isInstalled(item.key)"
-                  :disabled="!!pendingOps[item.key] || isCheckPending(item.key)"
-                  :loading="isOpPending(item.key, 'uninstall')"
+                  :disabled="isBusy(item.key)"
+                  :loading="isBusy(item.key, 'uninstall')"
                   type="danger"
                   @run="runOperation(item, 'uninstall')"
                 >
@@ -391,21 +312,13 @@ onMounted(() => {
 
     <u-dialog
       v-model="sourcesDialogOpen"
-      :title="sourcesCliName ? `${sourcesCliName} · 安装源管理` : '安装源管理'"
+      :title="sourcesCli ? `${sourcesCli.name} · 安装源管理` : '安装源管理'"
       style="width: 640px"
     >
       <div v-loading="sourcesLoading" class="sources-dialog">
         <div class="block-head">
           <h4>安装源列表</h4>
-          <u-button
-            v-if="hasPermission('resource_clis:create')"
-            size="small"
-            text
-            type="primary"
-            @click="openCreateSource"
-          >
-            添加
-          </u-button>
+          <u-button size="small" text type="primary" @click="openCreateSource">添加</u-button>
         </div>
         <ul v-if="sourcesList.length" class="source-list">
           <li v-for="source in sourcesList" :key="source.id">
@@ -418,19 +331,8 @@ onMounted(() => {
             </div>
             <div class="actions">
               <u-action-group :max="2">
-                <u-action
-                  v-if="hasPermission('resource_clis:update')"
-                  @run="openEditSource(source)"
-                >
-                  编辑
-                </u-action>
-                <u-action
-                  v-if="hasPermission('resource_clis:delete')"
-                  type="danger"
-                  @run="removeSource(source)"
-                >
-                  删除
-                </u-action>
+                <u-action @run="openEditSource(source)">编辑</u-action>
+                <u-action type="danger" @run="removeSource(source)">删除</u-action>
               </u-action-group>
             </div>
           </li>
@@ -480,20 +382,14 @@ onMounted(() => {
 <style scoped lang="scss">
 @use "pkg:@veltra/styles/functions" as fn;
 
-.page-notice {
+.agent-cli-section {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 12px;
 }
 .risk {
   margin: 0;
   color: fn.use-var(color, warning);
-  font-size: 13px;
-  line-height: 1.5;
-}
-.hint {
-  margin: 0;
-  color: fn.use-var(text-color, second);
   font-size: 13px;
   line-height: 1.5;
 }

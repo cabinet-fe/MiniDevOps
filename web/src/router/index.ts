@@ -103,16 +103,6 @@ const router = createRouter({
           },
         },
         {
-          path: "resource/clis",
-          name: "resource-clis",
-          component: () => import("@/views/resource/clis/pages/main.vue"),
-          meta: {
-            permission: "resource_clis:view",
-            title: "AI CLI",
-            keepAliveName: "ResourceClis",
-          },
-        },
-        {
           path: "resource/tokens",
           name: "resource-tokens",
           component: () => import("@/views/resource/tokens/pages/main.vue"),
