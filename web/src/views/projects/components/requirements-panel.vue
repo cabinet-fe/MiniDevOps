@@ -313,7 +313,7 @@ onMounted(() => void loadRequirementStatuses());
     <ProTable
       ref="table"
       :url="`/projects/${project.id}/requirements`"
-      v-model:query="query"
+      :query="query"
       :columns="columns"
       pagination
       :auto-query-fields="['status', 'priority']"

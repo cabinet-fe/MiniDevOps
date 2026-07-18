@@ -120,13 +120,7 @@ async function onTest(row: Repository) {
 
 <template>
   <div>
-    <ProTable
-      ref="list"
-      url="/resource/repositories"
-      v-model:query="query"
-      :columns="columns"
-      pagination
-    >
+    <ProTable ref="list" url="/resource/repositories" :query="query" :columns="columns" pagination>
       <template #filters>
         <u-input v-model="query.keyword" placeholder="名称/URL" style="width: 200px" />
         <u-button

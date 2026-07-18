@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"bedrock/internal/ai/model"
-	"bedrock/internal/ai/repository"
+	"bedrock/internal/resource/model"
+	"bedrock/internal/resource/repository"
 )
 
 var (
@@ -21,11 +21,11 @@ var (
 )
 
 type PATService struct {
-	repo  *repository.AIRepository
+	repo  *repository.PATRepository
 	audit AuditWriter
 }
 
-func NewPATService(repo *repository.AIRepository, audit ...AuditWriter) *PATService {
+func NewPATService(repo *repository.PATRepository, audit ...AuditWriter) *PATService {
 	svc := &PATService{repo: repo}
 	if len(audit) > 0 {
 		svc.audit = audit[0]
@@ -68,7 +68,7 @@ func (s *PATService) Create(userID uint, in CreatePATInput) (*CreatePATResult, e
 		Scopes:      scopes,
 		ExpiresAt:   in.ExpiresAt,
 	}
-	if err := s.repo.CreatePAT(item); err != nil {
+	if err := s.repo.Create(item); err != nil {
 		return nil, err
 	}
 	if s.audit != nil {
@@ -79,7 +79,7 @@ func (s *PATService) Create(userID uint, in CreatePATInput) (*CreatePATResult, e
 }
 
 func (s *PATService) List(userID uint, page, pageSize int) ([]model.PersonalAccessToken, int64, error) {
-	items, total, err := s.repo.ListPATs(userID, page, pageSize)
+	items, total, err := s.repo.ListByUser(userID, page, pageSize)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -90,14 +90,14 @@ func (s *PATService) List(userID uint, page, pageSize int) ([]model.PersonalAcce
 }
 
 func (s *PATService) Delete(userID uint, id uint) error {
-	token, err := s.repo.FindPAT(id)
+	token, err := s.repo.Find(id)
 	if err != nil {
 		return err
 	}
 	if token.UserID != userID {
 		return ErrPATInvalid
 	}
-	if err := s.repo.DeletePAT(id); err != nil {
+	if err := s.repo.Delete(id); err != nil {
 		return err
 	}
 	if s.audit != nil {
@@ -113,7 +113,7 @@ func (s *PATService) ValidateBearer(raw string) (userID uint, scopes []string, e
 	if !strings.HasPrefix(raw, "br_pat_") {
 		return 0, nil, ErrPATInvalid
 	}
-	token, err := s.repo.FindPATByHash(hashToken(raw))
+	token, err := s.repo.FindByHash(hashToken(raw))
 	if err != nil {
 		return 0, nil, ErrPATInvalid
 	}
@@ -126,7 +126,7 @@ func (s *PATService) ValidateBearer(raw string) (userID uint, scopes []string, e
 	decodeScopes(token)
 	now := time.Now().UTC()
 	token.LastUsedAt = &now
-	_ = s.repo.UpdatePAT(token)
+	_ = s.repo.Update(token)
 	return token.UserID, token.Scopes, nil
 }
 

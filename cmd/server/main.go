@@ -150,6 +150,8 @@ func main() {
 	credRepo := resourcerepo.NewCredentialRepository(gdb)
 	repoRepo := resourcerepo.NewRepositoryRepository(gdb)
 	serverRepo := resourcerepo.NewServerRepository(gdb)
+	cliRepo := resourcerepo.NewCLIRepository(gdb)
+	patRepo := resourcerepo.NewPATRepository(gdb)
 	jobRepo := cicdrepo.NewBuildJobRepository(gdb)
 	runRepo := cicdrepo.NewBuildRunRepository(gdb)
 	deliveryRepo := cicdrepo.NewWebhookDeliveryRepository(gdb)
@@ -157,6 +159,8 @@ func main() {
 	credSvc := resourceservice.NewCredentialService(credRepo)
 	repoSvc := resourceservice.NewRepositoryService(repoRepo, credSvc)
 	serverSvc := resourceservice.NewServerService(serverRepo, credSvc)
+	cliSvc := resourceservice.NewCLIService(cliRepo, auditSvc)
+	patSvc := resourceservice.NewPATService(patRepo, auditSvc)
 	jobSvc := cicdservice.NewBuildJobService(jobRepo, repoRepo)
 	runSvc := cicdservice.NewBuildRunService(runRepo, jobRepo)
 	webhookSvc := cicdservice.NewWebhookService(jobRepo, deliveryRepo, runSvc)
@@ -186,9 +190,7 @@ func main() {
 	projectHandler := projecthandler.NewProjectHandler(projectSvc, permSvc)
 
 	aiRepo := airepo.NewAIRepository(gdb)
-	cliSvc := aiservice.NewCLIService(aiRepo, auditSvc)
 	skillSvc := aiservice.NewSkillService(aiRepo, storageSvc, auditSvc)
-	patSvc := aiservice.NewPATService(aiRepo, auditSvc)
 
 	hub := ws.NewHub()
 	notifRepo := systemrepo.NewNotificationRepository(gdb)
@@ -201,7 +203,7 @@ func main() {
 	agentSvc.SetTerminalNotifier(notifSvc)
 	docsBridge := aiservice.NewDocsBridge(agentSvc)
 	projectSvc.SetDocsAIBridge(docsBridge)
-	aiHandler := aihandler.NewHandler(cliSvc, agentSvc, skillSvc, patSvc, permSvc)
+	aiHandler := aihandler.NewHandler(agentSvc, skillSvc, permSvc)
 
 	pipeline := engine.NewPipeline(
 		runRepo, jobRepo, repoRepo, serverRepo,
@@ -219,6 +221,8 @@ func main() {
 	credHandler := resourcehandler.NewCredentialHandler(credSvc, permSvc)
 	repoHandler := resourcehandler.NewRepositoryHandler(repoSvc, permSvc)
 	serverHandler := resourcehandler.NewServerHandler(serverSvc, permSvc)
+	cliHandler := resourcehandler.NewCLIHandler(cliSvc, permSvc)
+	tokenHandler := resourcehandler.NewTokenHandler(patSvc, permSvc)
 	jobHandler := cicdhandler.NewBuildJobHandler(jobSvc, runSvc, permSvc)
 	runHandler := cicdhandler.NewBuildRunHandler(runSvc, permSvc)
 	webhookHandler := cicdhandler.NewWebhookHandler(webhookSvc)
@@ -240,6 +244,8 @@ func main() {
 	credHandler.RegisterRoutes(api, authMW)
 	repoHandler.RegisterRoutes(api, authMW)
 	serverHandler.RegisterRoutes(api, authMW)
+	cliHandler.RegisterRoutes(api, authMW)
+	tokenHandler.RegisterRoutes(api, authMW)
 	jobHandler.RegisterRoutes(api, authMW)
 	runHandler.RegisterRoutes(api, authMW)
 	webhookHandler.RegisterRoutes(api)

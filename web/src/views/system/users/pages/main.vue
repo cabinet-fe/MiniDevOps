@@ -116,7 +116,7 @@ async function remove(row: User) {
 
 <template>
   <div>
-    <ProTable ref="list" url="/users" v-model:query="query" :columns="columns" pagination>
+    <ProTable ref="list" url="/users" :query="query" :columns="columns" pagination>
       <template #filters>
         <u-input v-model="query.keyword" placeholder="用户名关键词" style="width: 200px" />
         <u-button

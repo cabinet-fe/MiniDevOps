@@ -1,15 +1,17 @@
 <script setup lang="ts">
-defineOptions({ name: "AiTokens" });
+defineOptions({ name: "ResourceTokens" });
 
 import { reactive, ref, useTemplateRef } from "vue";
 import { message } from "@veltra/desktop";
 
-import { createToken, deleteToken } from "@/api/ai";
+import { createToken, deleteToken } from "@/api/resource";
 import type { PersonalAccessToken } from "@/api/types";
 import FormDialog from "@/components/form-dialog";
 import ProTable, { defineProTableColumns } from "@/components/pro-table";
+import { usePermission } from "@/composables/use-permission";
 import { formatDateTime } from "@/lib/datetime";
 
+const { hasPermission } = usePermission();
 const table = useTemplateRef("table");
 const dialogOpen = ref(false);
 const plaintext = ref("");
@@ -73,9 +75,14 @@ async function remove(row: PersonalAccessToken) {
 
 <template>
   <div>
-    <ProTable ref="table" url="/tokens" pagination :columns="columns">
+    <ProTable ref="table" url="/resource/tokens" pagination :columns="columns">
       <template #filters>
-        <u-button type="primary" style="margin-left: auto" @click.prevent="openCreate">
+        <u-button
+          v-if="hasPermission('resource.tokens:create')"
+          type="primary"
+          style="margin-left: auto"
+          @click.prevent="openCreate"
+        >
           创建令牌
         </u-button>
       </template>
@@ -101,7 +108,12 @@ async function remove(row: PersonalAccessToken) {
       </template>
       <template #column:action="{ rowData }">
         <u-action-group :max="2">
-          <u-action need-confirm type="danger" @run="remove(rowData as PersonalAccessToken)">
+          <u-action
+            v-if="hasPermission('resource.tokens:delete')"
+            need-confirm
+            type="danger"
+            @run="remove(rowData as PersonalAccessToken)"
+          >
             删除
           </u-action>
         </u-action-group>

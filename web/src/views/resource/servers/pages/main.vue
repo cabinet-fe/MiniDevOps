@@ -132,13 +132,7 @@ async function onTest(row: Server) {
 
 <template>
   <div>
-    <ProTable
-      ref="list"
-      url="/resource/servers"
-      v-model:query="query"
-      :columns="columns"
-      pagination
-    >
+    <ProTable ref="list" url="/resource/servers" :query="query" :columns="columns" pagination>
       <template #filters>
         <u-input v-model="query.keyword" placeholder="名称/主机" style="width: 200px" />
         <u-button

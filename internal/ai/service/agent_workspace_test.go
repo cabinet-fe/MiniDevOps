@@ -21,6 +21,8 @@ import (
 	"bedrock/internal/platform/db"
 	"bedrock/internal/platform/migration"
 	_ "bedrock/internal/platform/migration/migrations"
+	resourcerepo "bedrock/internal/resource/repository"
+	resourceservice "bedrock/internal/resource/service"
 	storagerepo "bedrock/internal/storage/repository"
 	storageservice "bedrock/internal/storage/service"
 )
@@ -37,7 +39,7 @@ func (f *stubJobFinder) FindByID(id uint) (*cicdmodel.BuildJob, error) {
 	return job, nil
 }
 
-func setupAgentWorkspace(t *testing.T) (*service.AgentService, *service.SkillService, *repository.AIRepository, string) {
+func setupAgentWorkspace(t *testing.T) (*service.AgentService, *service.SkillService, *resourcerepo.CLIRepository, string) {
 	t.Helper()
 	gdb, err := db.Open(&config.DatabaseConfig{
 		Driver: "sqlite",
@@ -50,7 +52,8 @@ func setupAgentWorkspace(t *testing.T) (*service.AgentService, *service.SkillSer
 		t.Fatalf("migration: %v", err)
 	}
 	repo := repository.NewAIRepository(gdb)
-	cli := service.NewCLIService(repo)
+	cliRepo := resourcerepo.NewCLIRepository(gdb)
+	cli := resourceservice.NewCLIService(cliRepo)
 	storageRoot := filepath.Join(t.TempDir(), "storage")
 	storageSvc, err := storageservice.NewStorageService(storagerepo.NewStorageRepository(gdb), storageRoot, storageservice.Limits{})
 	if err != nil {
@@ -62,7 +65,7 @@ func setupAgentWorkspace(t *testing.T) (*service.AgentService, *service.SkillSer
 	agents := service.NewAgentService(repo, cli, skills, nil, zap.NewNop(), work, logs)
 	agents.Start()
 	t.Cleanup(agents.Shutdown)
-	return agents, skills, repo, work
+	return agents, skills, cliRepo, work
 }
 
 func TestAgentWorkspaceSyncSkillsAndSoftlinks(t *testing.T) {
@@ -191,7 +194,7 @@ echo "persistent output"
 	if err := os.WriteFile(script, []byte(content), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	cli, err := repo.FindCLIByKey("claude_code")
+	cli, err := repo.FindByKey("claude_code")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -199,7 +202,7 @@ echo "persistent output"
 	cli.DefaultArgs = ""
 	cli.InstallStatus = "installed"
 	cli.Healthy = true
-	if err := repo.UpdateCLI(cli); err != nil {
+	if err := repo.Update(cli); err != nil {
 		t.Fatal(err)
 	}
 
@@ -327,7 +330,7 @@ func TestAgentRunPassesFullPermissionFlagsAndScopeHint(t *testing.T) {
 	if err := os.WriteFile(script, []byte(content), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	cli, err := repo.FindCLIByKey("claude_code")
+	cli, err := repo.FindByKey("claude_code")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -335,7 +338,7 @@ func TestAgentRunPassesFullPermissionFlagsAndScopeHint(t *testing.T) {
 	cli.DefaultArgs = "--print"
 	cli.InstallStatus = "installed"
 	cli.Healthy = true
-	if err := repo.UpdateCLI(cli); err != nil {
+	if err := repo.Update(cli); err != nil {
 		t.Fatal(err)
 	}
 
@@ -418,7 +421,7 @@ func TestAgentRunNonInteractiveCLIArgs(t *testing.T) {
 			if err := os.WriteFile(script, []byte(content), 0o755); err != nil {
 				t.Fatal(err)
 			}
-			cli, err := repo.FindCLIByKey(tc.cliKey)
+			cli, err := repo.FindByKey(tc.cliKey)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -426,7 +429,7 @@ func TestAgentRunNonInteractiveCLIArgs(t *testing.T) {
 			cli.DefaultArgs = tc.defaultArg
 			cli.InstallStatus = "installed"
 			cli.Healthy = true
-			if err := repo.UpdateCLI(cli); err != nil {
+			if err := repo.Update(cli); err != nil {
 				t.Fatal(err)
 			}
 			agent, err := agents.CreateAgent(1, service.AgentInput{
@@ -491,7 +494,7 @@ func TestAgentRunStreamOutputCLIArgs(t *testing.T) {
 			if err := os.WriteFile(script, []byte(content), 0o755); err != nil {
 				t.Fatal(err)
 			}
-			cli, err := repo.FindCLIByKey(tc.cliKey)
+			cli, err := repo.FindByKey(tc.cliKey)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -499,7 +502,7 @@ func TestAgentRunStreamOutputCLIArgs(t *testing.T) {
 			cli.DefaultArgs = tc.defaultArg
 			cli.InstallStatus = "installed"
 			cli.Healthy = true
-			if err := repo.UpdateCLI(cli); err != nil {
+			if err := repo.Update(cli); err != nil {
 				t.Fatal(err)
 			}
 			stream := true
@@ -575,7 +578,7 @@ func TestAgentRunNonStreamOutputCLIArgs(t *testing.T) {
 	if err := os.WriteFile(script, []byte(content), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	cli, err := repo.FindCLIByKey("reasonix")
+	cli, err := repo.FindByKey("reasonix")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -583,7 +586,7 @@ func TestAgentRunNonStreamOutputCLIArgs(t *testing.T) {
 	cli.DefaultArgs = "run"
 	cli.InstallStatus = "installed"
 	cli.Healthy = true
-	if err := repo.UpdateCLI(cli); err != nil {
+	if err := repo.Update(cli); err != nil {
 		t.Fatal(err)
 	}
 	stream := false

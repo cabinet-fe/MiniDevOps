@@ -278,10 +278,10 @@ level1.level2.level3:action
 | ------------- | -------- | ------------------------------------------------------------------------------------------------------------------ |
 | `dashboard`   | 仪表盘   | （可无子菜单；卡片权限见 `dashboard.system_info` 等）                                                              |
 | `ops`         | 运维     | `ops.processes`、`ops.dev_environments`                                                                            |
-| `resource`    | 资源管理 | `resource.repositories`、`resource.servers`、`resource.credentials`                                               |
+| `resource`    | 资源管理 | `resource.repositories`、`resource.servers`、`resource.credentials`、`resource.clis`、`resource.tokens`            |
 | `cicd`        | CI/CD    | `cicd.build_jobs`、`cicd.build_runs`                                                                              |
 | `project`     | 项目管理 | `project.projects`、`project.requirements`、`project.docs`                                                         |
-| `ai`          | AI       | `ai.clis`、`ai.agents`、`ai.runs`、`ai.skills`、`ai.tokens`                                                          |
+| `ai`          | AI       | `ai.agents`、`ai.runs`、`ai.skills`                                                                                 |
 | `system`      | 系统管理 | `system.users`、`system.roles`、`system.resources`、`system.dictionaries`、`system.operation_logs` |
 
 进入页所需权限示例：叶子菜单对应 `{path}:view`；一级分组可见性见 §4.2.2。
@@ -793,7 +793,6 @@ flowchart TB
 | GET  | `/menus`          | 菜单型资源树（角色授权勾选用）                  |
 | CRUD | `/dictionaries`   | 字典                                            |
 | GET  | `/operation-logs` | 操作日志                                        |
-| CRUD | `/tokens`         | 个人访问令牌                                    |
 
 #### 仪表盘
 
@@ -830,6 +829,11 @@ flowchart TB
 | CRUD | `/resource/servers`                   | 服务器   |
 | POST | `/resource/servers/:id/test`          | 测试连接 |
 | CRUD | `/resource/credentials`               | 凭证     |
+| GET  | `/resource/clis`                      | CLI 列表 |
+| POST | `/resource/clis/:key/install`         | 安装/升级 |
+| POST | `/resource/clis/:key/uninstall`       | 卸载     |
+| CRUD | `/resource/cli-sources`               | CLI 安装源 |
+| CRUD | `/resource/tokens`                    | 个人访问令牌 |
 
 #### CI/CD
 
@@ -862,9 +866,6 @@ flowchart TB
 
 | 方法 | 路径                      | 说明                   |
 | ---- | ------------------------- | ---------------------- |
-| GET  | `/ai/clis`                | CLI 列表               |
-| POST | `/ai/clis/:key/install`   | 安装/升级              |
-| POST | `/ai/clis/:key/uninstall` | 卸载                   |
 | CRUD | `/ai/agents`              | 智能体                 |
 | CRUD | `/ai/agents/:id/triggers` | 触发器                 |
 | POST | `/ai/agents/:id/runs`     | 手动触发               |

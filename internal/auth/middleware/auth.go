@@ -21,7 +21,8 @@ const (
 
 var ErrPATWrongScope = errors.New("token scope insufficient")
 
-// PATValidator validates personal access tokens without importing the AI package.
+// PATValidator validates personal access tokens without importing the resource package
+// (implemented by resource PATService; wired in cmd/server).
 type PATValidator interface {
 	ValidateBearer(raw string) (userID uint, scopes []string, err error)
 }

@@ -37,6 +37,8 @@ func EnsureRBACResources(db *gorm.DB) error {
 				{Path: "resource.repositories", Title: "代码仓库", Route: "/resource/repositories", SortKey: 10},
 				{Path: "resource.servers", Title: "服务器", Route: "/resource/servers", SortKey: 20},
 				{Path: "resource.credentials", Title: "凭证", Route: "/resource/credentials", SortKey: 30},
+				{Path: "resource.clis", Title: "CLI", Route: "/resource/clis", SortKey: 40},
+				{Path: "resource.tokens", Title: "访问令牌", Route: "/resource/tokens", SortKey: 50},
 			},
 		},
 		{
@@ -57,11 +59,9 @@ func EnsureRBACResources(db *gorm.DB) error {
 		{
 			Path: "ai", Title: "AI", Route: "/ai", SortKey: 50,
 			Children: []seedMenu{
-				{Path: "ai.clis", Title: "CLI", Route: "/ai/clis", SortKey: 10},
-				{Path: "ai.agents", Title: "智能体", Route: "/ai/agents", SortKey: 20},
-				{Path: "ai.runs", Title: "运行记录", Route: "/ai/runs", SortKey: 25},
+				{Path: "ai.agents", Title: "智能体", Route: "/ai/agents", SortKey: 10},
+				{Path: "ai.runs", Title: "运行记录", Route: "/ai/runs", SortKey: 20},
 				{Path: "ai.skills", Title: "技能", Route: "/ai/skills", SortKey: 30},
-				{Path: "ai.tokens", Title: "访问令牌", Route: "/ai/tokens", SortKey: 40},
 			},
 		},
 		{

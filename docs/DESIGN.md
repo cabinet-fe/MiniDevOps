@@ -105,16 +105,16 @@ cmd/
   agent/                  # Deploy Agent（独立）
 internal/
   platform/               # config、db 工厂、migration runner、健康检查
-  auth/                   # JWT、PAT、login cipher
+  auth/                   # JWT、login cipher、PAT 校验（PAT CRUD 属 resource）
   rbac/                   # 资源树、权限合并、中间件
   system/                 # User、Role、Dictionary、OperationLog、Menu 维护
-  resource/               # Repository、Server、Credential（共享资源）
+  resource/               # Repository、Server、Credential、CliRuntime、PAT（共享资源）
   cicd/                   # BuildJob、BuildRun、Webhook
   engine/                 # Pipeline、Scheduler、Cron、Git（依赖 cicd / resource 接口）
   deployer/               # rsync/sftp/scp/agent/local
   ops/                    # Process、DevEnvironment
   project/                # ProductProject、Requirement、ApiDoc
-  ai/                     # CliRuntime、AiAgent、AgentRun、Skill
+  ai/                     # AiAgent、AgentRun、Skill（CLI 查找依赖 resource 注入）
   dashboard/              # Layout + 卡片数据源
   storage/                # StorageObject + StorageService
   ws/                     # Hub + 频道

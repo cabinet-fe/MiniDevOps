@@ -23,11 +23,14 @@ import (
 	projectmodel "bedrock/internal/project/model"
 	projectrepo "bedrock/internal/project/repository"
 	projectservice "bedrock/internal/project/service"
+	resourcemodel "bedrock/internal/resource/model"
+	resourcerepo "bedrock/internal/resource/repository"
+	resourceservice "bedrock/internal/resource/service"
 	storagerepo "bedrock/internal/storage/repository"
 	storageservice "bedrock/internal/storage/service"
 )
 
-func setupAI(t *testing.T) (*gorm.DB, *service.CLIService, *service.AgentService, *service.SkillService, *service.PATService, *projectservice.ProjectService) {
+func setupAI(t *testing.T) (*gorm.DB, *service.AgentService, *service.SkillService, *projectservice.ProjectService) {
 	t.Helper()
 	gdb, err := db.Open(&config.DatabaseConfig{
 		Driver: "sqlite",
@@ -40,7 +43,7 @@ func setupAI(t *testing.T) (*gorm.DB, *service.CLIService, *service.AgentService
 		t.Fatalf("migration: %v", err)
 	}
 	repo := repository.NewAIRepository(gdb)
-	cli := service.NewCLIService(repo)
+	cli := resourceservice.NewCLIService(resourcerepo.NewCLIRepository(gdb))
 
 	storageRoot := filepath.Join(t.TempDir(), "storage")
 	storageSvc, err := storageservice.NewStorageService(storagerepo.NewStorageRepository(gdb), storageRoot, storageservice.Limits{})
@@ -48,7 +51,6 @@ func setupAI(t *testing.T) (*gorm.DB, *service.CLIService, *service.AgentService
 		t.Fatal(err)
 	}
 	skills := service.NewSkillService(repo, storageSvc)
-	pats := service.NewPATService(repo)
 	work := filepath.Join(t.TempDir(), "work")
 	logs := filepath.Join(t.TempDir(), "logs")
 	agents := service.NewAgentService(repo, cli, skills, nil, zap.NewNop(), work, logs)
@@ -58,31 +60,11 @@ func setupAI(t *testing.T) (*gorm.DB, *service.CLIService, *service.AgentService
 	projectSvc := projectservice.NewProjectService(projectrepo.NewProjectRepository(gdb), storageSvc)
 	agents.SetDocDraftWriter(projectSvc)
 	projectSvc.SetDocsAIBridge(service.NewDocsBridge(agents))
-	return gdb, cli, agents, skills, pats, projectSvc
-}
-
-func TestFourCLIDetectReferencePaths(t *testing.T) {
-	_, cli, _, _, _, _ := setupAI(t)
-	for _, key := range []string{"claude_code", "opencode", "reasonix", "codex"} {
-		result, err := cli.Detect(key)
-		if err != nil {
-			t.Fatalf("%s detect: %v", key, err)
-		}
-		if result.RiskNotice == "" {
-			t.Fatalf("%s missing risk notice", key)
-		}
-		// Observable success (installed) or failure (missing) both satisfy Gate.
-		if result.Detected && !result.Healthy {
-			t.Fatalf("%s detected but not healthy", key)
-		}
-		if !result.Detected && result.Output == "" {
-			t.Fatalf("%s missing failure output", key)
-		}
-	}
+	return gdb, agents, skills, projectSvc
 }
 
 func TestTriggersCreateIndependentAgentRuns(t *testing.T) {
-	_, _, agents, _, _, _ := setupAI(t)
+	_, agents, _, _ := setupAI(t)
 	agent, err := agents.CreateAgent(1, service.AgentInput{
 		Name: "t", CliKey: "claude_code", SystemPrompt: "hello", TimeoutSec: 5,
 	})
@@ -137,7 +119,7 @@ func TestTriggersCreateIndependentAgentRuns(t *testing.T) {
 }
 
 func TestAgentFailureDoesNotChangeBuildRun(t *testing.T) {
-	_, _, agents, _, _, _ := setupAI(t)
+	_, agents, _, _ := setupAI(t)
 	agent, err := agents.CreateAgent(1, service.AgentInput{
 		Name: "fail", CliKey: "reasonix", SystemPrompt: "x", TimeoutSec: 3,
 	})
@@ -154,7 +136,7 @@ func TestAgentFailureDoesNotChangeBuildRun(t *testing.T) {
 }
 
 func TestSkillUploadRejectMissingSKILLMDAndOverwrite(t *testing.T) {
-	_, _, _, skills, _, _ := setupAI(t)
+	_, _, skills, _ := setupAI(t)
 	bad := zipBytes(t, map[string]string{"README.md": "nope"})
 	_, err := skills.Create(service.SkillUploadInput{
 		Name: "bad", Visibility: model.SkillPrivate, Filename: "bad.zip",
@@ -198,7 +180,7 @@ func TestSkillUploadRejectMissingSKILLMDAndOverwrite(t *testing.T) {
 }
 
 func TestPrivateSkillIsolation(t *testing.T) {
-	_, _, _, skills, _, _ := setupAI(t)
+	_, _, skills, _ := setupAI(t)
 	z := zipBytes(t, map[string]string{"SKILL.md": "# priv"})
 	s, err := skills.Create(service.SkillUploadInput{
 		Name: "priv", Visibility: model.SkillPrivate, Filename: "p.zip",
@@ -221,52 +203,8 @@ func TestPrivateSkillIsolation(t *testing.T) {
 	}
 }
 
-func TestPATPlaintextOnceAndScopes(t *testing.T) {
-	_, _, _, _, pats, _ := setupAI(t)
-	created, err := pats.Create(1, service.CreatePATInput{
-		Name: "t", Scopes: []string{model.ScopeSkillsRead},
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.HasPrefix(created.Token, "br_pat_") {
-		t.Fatalf("unexpected token %s", created.Token)
-	}
-	list, _, err := pats.List(1, 1, 20)
-	if err != nil || len(list) != 1 {
-		t.Fatalf("list: %v %#v", err, list)
-	}
-	// Metadata list must not include plaintext.
-	if strings.Contains(list[0].TokenHash, created.Token) {
-		t.Fatal("plaintext must not be stored")
-	}
-	if _, _, err := pats.ValidateBearer("br_pat_deadbeef"); err == nil {
-		t.Fatal("invalid PAT must fail")
-	}
-	uid, scopes, err := pats.ValidateBearer(created.Token)
-	if err != nil || uid != 1 {
-		t.Fatalf("valid PAT: %v uid=%d", err, uid)
-	}
-	if err := pats.RequireScope(scopes, model.ScopeAgentsRun); err == nil {
-		t.Fatal("wrong scope must 403")
-	}
-	if err := pats.RequireScope(scopes, model.ScopeSkillsRead); err != nil {
-		t.Fatal(err)
-	}
-	if err := pats.Delete(1, created.Metadata.ID); err != nil {
-		t.Fatal(err)
-	}
-	if _, _, err := pats.ValidateBearer(created.Token); err == nil {
-		t.Fatal("deleted PAT must be invalid")
-	}
-	list, _, err = pats.List(1, 1, 20)
-	if err != nil || len(list) != 0 {
-		t.Fatalf("deleted PAT must be removed from list: %v %#v", err, list)
-	}
-}
-
 func TestDocsGenerateWritesDraftOnly(t *testing.T) {
-	gdb, _, agents, _, _, projectSvc := setupAI(t)
+	gdb, agents, _, projectSvc := setupAI(t)
 	owner := projectservice.NewAccessContext(1, true, []string{"project.projects:create", "project.docs:execute", "project.docs:view"})
 	project, err := projectSvc.CreateProject(owner, projectservice.CreateProjectInput{Name: "P", Slug: "p-ai"})
 	if err != nil {
@@ -333,32 +271,8 @@ func zipBytes(t *testing.T, files map[string]string) []byte {
 	return buf.Bytes()
 }
 
-func TestCLIListSeeded(t *testing.T) {
-	_, cli, _, _, _, _ := setupAI(t)
-	items, err := cli.ListCLIs()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(items) != 4 {
-		t.Fatalf("want 4 CLIs, got %d", len(items))
-	}
-	wantDefaultArgs := map[string]string{
-		"claude_code": "--print",
-		"codex":       "exec",
-		"opencode":    "run",
-		"reasonix":    "run",
-	}
-	for _, item := range items {
-		got := strings.TrimSpace(item.DefaultArgs)
-		want := wantDefaultArgs[item.Key]
-		if got != want {
-			t.Fatalf("cli %s default_args=%q want %q", item.Key, got, want)
-		}
-	}
-}
-
 func TestCronReloadAppliesTimezone(t *testing.T) {
-	_, _, agents, _, _, _ := setupAI(t)
+	_, agents, _, _ := setupAI(t)
 	agent, err := agents.CreateAgent(1, service.AgentInput{
 		Name: "tz", CliKey: "claude_code", SystemPrompt: "x", TimeoutSec: 5,
 	})
@@ -393,13 +307,13 @@ func TestCronReloadAppliesTimezone(t *testing.T) {
 }
 
 func TestAgentRunRecovery_QueuedAndInterrupted(t *testing.T) {
-	gdb, _, agents, _, _, _ := setupAI(t)
+	gdb, agents, _, _ := setupAI(t)
 	repo := repository.NewAIRepository(gdb)
-	cliDef := &model.CliRuntimeDefinition{
+	cliDef := &resourcemodel.CliRuntimeDefinition{
 		Key: "claude_code", Name: "Claude", BinaryName: "claude",
 	}
-	if err := gdb.Where(model.CliRuntimeDefinition{Key: "claude_code"}).
-		Attrs(model.CliRuntimeDefinition{Name: "Claude", BinaryName: "claude"}).
+	if err := gdb.Where(resourcemodel.CliRuntimeDefinition{Key: "claude_code"}).
+		Attrs(resourcemodel.CliRuntimeDefinition{Name: "Claude", BinaryName: "claude"}).
 		FirstOrCreate(cliDef).Error; err != nil {
 		t.Fatal(err)
 	}
@@ -436,234 +350,5 @@ func TestAgentRunRecovery_QueuedAndInterrupted(t *testing.T) {
 		// ok — re-submit may advance or fail without a real CLI binary
 	default:
 		t.Fatalf("unexpected queued recovery status %s", gotQueued.Status)
-	}
-}
-
-func TestDetectExtractsVersionNotPath(t *testing.T) {
-	gdb, cli, _, _, _, _ := setupAI(t)
-	if err := gdb.Model(&model.CliRuntimeDefinition{}).
-		Where("key = ?", "claude_code").
-		Updates(map[string]any{
-			"detect_command": `printf '/usr/local/bin/claude\nclaude version 2.3.4\n'`,
-		}).Error; err != nil {
-		t.Fatal(err)
-	}
-	result, err := cli.Detect("claude_code")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !result.Detected {
-		t.Fatal("expected detected")
-	}
-	if result.Version != "2.3.4" {
-		t.Fatalf("version=%q want 2.3.4", result.Version)
-	}
-	if strings.Contains(result.Version, "/") {
-		t.Fatalf("version looks like path: %q", result.Version)
-	}
-}
-
-func TestDetectClearsStaleWhenMissing(t *testing.T) {
-	gdb, cli, _, _, _, _ := setupAI(t)
-	if err := gdb.Model(&model.CliRuntimeDefinition{}).
-		Where("key = ?", "codex").
-		Updates(map[string]any{
-			"detect_command":    "false",
-			"installed_path":    "/stale/codex",
-			"installed_version": "9.9.9",
-			"install_status":    "installed",
-			"healthy":           true,
-		}).Error; err != nil {
-		t.Fatal(err)
-	}
-	result, err := cli.Detect("codex")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if result.Detected {
-		t.Fatal("expected missing")
-	}
-	var got model.CliRuntimeDefinition
-	if err := gdb.Where("key = ?", "codex").First(&got).Error; err != nil {
-		t.Fatal(err)
-	}
-	if got.InstallStatus != "missing" || got.InstalledPath != "" || got.InstalledVersion != "" || got.Healthy {
-		t.Fatalf("stale fields not cleared: %+v", got)
-	}
-}
-
-func TestExecuteSyncSuccessAndFailure(t *testing.T) {
-	gdb, cli, _, _, _, _ := setupAI(t)
-	if err := gdb.Model(&model.CliRuntimeDefinition{}).
-		Where("key = ?", "reasonix").
-		Updates(map[string]any{
-			"install_template":   `echo install-ok`,
-			"upgrade_template":   `echo upgrade-ok`,
-			"uninstall_template": `echo uninstall-ok; exit 1`,
-		}).Error; err != nil {
-		t.Fatal(err)
-	}
-	ok, err := cli.Execute(context.Background(), "reasonix", "install", service.ExecuteInput{}, 1)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !ok.Success || !strings.Contains(ok.Output, "install-ok") {
-		t.Fatalf("install: %+v", ok)
-	}
-	fail, err := cli.Execute(context.Background(), "reasonix", "uninstall", service.ExecuteInput{}, 1)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if fail.Success || fail.Error == "" || !strings.Contains(fail.Output, "uninstall-ok") {
-		t.Fatalf("uninstall: %+v", fail)
-	}
-	if gdb.Migrator().HasTable("cli_install_jobs") {
-		t.Fatal("cli_install_jobs table should not exist")
-	}
-}
-
-func TestExecuteMultiSourceFallback(t *testing.T) {
-	gdb, cli, _, _, _, _ := setupAI(t)
-	if err := gdb.Model(&model.CliRuntimeDefinition{}).
-		Where("key = ?", "opencode").
-		Updates(map[string]any{
-			"install_template": `base="{{base_url}}"; if [ "$base" = "https://bad.example" ]; then echo fail; exit 1; fi; echo ok-from-$base`,
-		}).Error; err != nil {
-		t.Fatal(err)
-	}
-	if err := gdb.Where("cli_key = ?", "opencode").Delete(&model.CliInstallSource{}).Error; err != nil {
-		t.Fatal(err)
-	}
-	for i, src := range []struct {
-		name string
-		url  string
-		prio int
-	}{
-		{"bad", "https://bad.example", 10},
-		{"good", "https://good.example", 20},
-	} {
-		if err := gdb.Create(&model.CliInstallSource{
-			CliKey: "opencode", Name: src.name, BaseURL: src.url, Priority: src.prio, Enabled: true,
-		}).Error; err != nil {
-			t.Fatal(err)
-		}
-		_ = i
-	}
-	result, err := cli.Execute(context.Background(), "opencode", "install", service.ExecuteInput{}, 1)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !result.Success || !strings.Contains(result.Output, "ok-from-https://good.example") {
-		t.Fatalf("fallback result: %+v", result)
-	}
-	if !strings.Contains(result.Output, `source "bad" failed`) {
-		t.Fatalf("expected first source failure in output: %s", result.Output)
-	}
-}
-
-func TestExecuteDefaultRegistryWhenNoSources(t *testing.T) {
-	gdb, cli, _, _, _, _ := setupAI(t)
-	if err := gdb.Model(&model.CliRuntimeDefinition{}).
-		Where("key = ?", "codex").
-		Updates(map[string]any{
-			"install_template": `base="{{base_url}}"; if [ -n "$base" ]; then echo unexpected-registry; exit 1; fi; echo default-registry-ok`,
-		}).Error; err != nil {
-		t.Fatal(err)
-	}
-	if err := gdb.Where("cli_key = ?", "codex").Delete(&model.CliInstallSource{}).Error; err != nil {
-		t.Fatal(err)
-	}
-	result, err := cli.Execute(context.Background(), "codex", "install", service.ExecuteInput{}, 1)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !result.Success || !strings.Contains(result.Output, "default-registry-ok") {
-		t.Fatalf("default registry result: %+v", result)
-	}
-}
-
-func TestCLINpmTemplatesUseRegistryFlag(t *testing.T) {
-	_, cli, _, _, _, _ := setupAI(t)
-	items, err := cli.ListCLIs()
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, item := range items {
-		if !strings.Contains(item.InstallTemplate, "npm install -g") {
-			t.Fatalf("%s install should use npm: %s", item.Key, item.InstallTemplate)
-		}
-		if !strings.Contains(item.InstallTemplate, `--registry $base`) {
-			t.Fatalf("%s install should wire --registry: %s", item.Key, item.InstallTemplate)
-		}
-		if !strings.Contains(item.UpgradeTemplate, `--registry $base`) {
-			t.Fatalf("%s upgrade should wire --registry: %s", item.Key, item.UpgradeTemplate)
-		}
-		if !strings.Contains(item.UninstallTemplate, "npm uninstall -g") {
-			t.Fatalf("%s uninstall should use npm: %s", item.Key, item.UninstallTemplate)
-		}
-	}
-}
-
-func TestCheckUpdateRequiresNpmPackage(t *testing.T) {
-	gdb, cli, _, _, _, _ := setupAI(t)
-	if err := gdb.Model(&model.CliRuntimeDefinition{}).
-		Where("key = ?", "codex").
-		Update("install_template", `echo no-npm`).Error; err != nil {
-		t.Fatal(err)
-	}
-	_, err := cli.CheckUpdate(context.Background(), "codex")
-	if err == nil || !strings.Contains(err.Error(), "npm") {
-		t.Fatalf("expected npm package error, got %v", err)
-	}
-}
-
-func TestCheckUpdateReportsAvailability(t *testing.T) {
-	gdb, cli, _, _, _, _ := setupAI(t)
-	if err := gdb.Model(&model.CliRuntimeDefinition{}).
-		Where("key = ?", "codex").
-		Updates(map[string]any{
-			"install_template":  `npm install -g @openai/codex${version:+@$version}`,
-			"installed_version": "0.0.0",
-			"install_status":    "installed",
-		}).Error; err != nil {
-		t.Fatal(err)
-	}
-	if err := gdb.Where("cli_key = ?", "codex").Delete(&model.CliInstallSource{}).Error; err != nil {
-		t.Fatal(err)
-	}
-	result, err := cli.CheckUpdate(context.Background(), "codex")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if result.Package != "@openai/codex" {
-		t.Fatalf("package: %s", result.Package)
-	}
-	if result.Error != "" {
-		t.Skipf("npm view unavailable in this environment: %s", result.Error)
-	}
-	if result.LatestVersion == "" {
-		t.Fatal("expected latest version")
-	}
-	if !result.UpdateAvailable {
-		t.Fatalf("0.0.0 should be outdated vs %s", result.LatestVersion)
-	}
-	if result.CurrentVersion != "0.0.0" {
-		t.Fatalf("current: %s", result.CurrentVersion)
-	}
-}
-
-func TestCLIInstallJobsTableDropped(t *testing.T) {
-	gdb, err := db.Open(&config.DatabaseConfig{
-		Driver: "sqlite",
-		Path:   filepath.Join(t.TempDir(), "migrate.sqlite"),
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := migration.Up(context.Background(), gdb, migration.Driver("sqlite")); err != nil {
-		t.Fatal(err)
-	}
-	if gdb.Migrator().HasTable("cli_install_jobs") {
-		t.Fatal("cli_install_jobs table should be dropped by 000014")
 	}
 }

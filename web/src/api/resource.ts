@@ -1,5 +1,15 @@
 import { http } from "./http";
-import type { Credential, PageResult, Repository, Server } from "./types";
+import type {
+  CliCheckUpdateResult,
+  CliExecuteResult,
+  CliInstallSource,
+  CliRuntimeDefinition,
+  Credential,
+  PageResult,
+  PersonalAccessToken,
+  Repository,
+  Server,
+} from "./types";
 
 export type ListQuery = Record<string, string | number | boolean | undefined | null>;
 
@@ -104,4 +114,104 @@ export async function testServer(id: number): Promise<{ ok: boolean; output?: st
     {},
   );
   return body;
+}
+
+// —— AI CLIs ——
+export async function listCLIs(): Promise<{ items: CliRuntimeDefinition[]; risk_notice: string }> {
+  const { body } = await http.get<{ items: CliRuntimeDefinition[]; risk_notice: string }>(
+    "/resource/clis",
+  );
+  return body;
+}
+
+export async function detectCLI(key: string) {
+  const { body } = await http.post<{
+    detected: boolean;
+    output: string;
+    path: string;
+    version: string;
+    healthy: boolean;
+    risk_notice: string;
+  }>(`/resource/clis/${key}/detect`, {});
+  return body;
+}
+
+export async function checkCLIUpdate(key: string): Promise<CliCheckUpdateResult> {
+  const { body } = await http.post<CliCheckUpdateResult>(
+    `/resource/clis/${key}/check-update`,
+    {},
+    { timeout: 60_000 },
+  );
+  return body;
+}
+
+export async function executeCLI(
+  key: string,
+  operation: "install" | "upgrade" | "uninstall",
+  version = "",
+): Promise<CliExecuteResult> {
+  const { body } = await http.post<CliExecuteResult>(
+    `/resource/clis/${key}/${operation}`,
+    { version },
+    { timeout: 300_000 },
+  );
+  return body;
+}
+
+export async function listCLISources(cliKey?: string): Promise<CliInstallSource[]> {
+  const { body } = await http.get<{ items: CliInstallSource[] }>("/resource/cli-sources", {
+    query: toQuery({ cli_key: cliKey }),
+  });
+  return body.items;
+}
+
+export async function createCLISource(input: {
+  cli_key: string;
+  name: string;
+  base_url: string;
+  priority?: number;
+  enabled?: boolean;
+}): Promise<CliInstallSource> {
+  const { body } = await http.post<CliInstallSource>("/resource/cli-sources", input);
+  return body;
+}
+
+export async function updateCLISource(
+  id: number,
+  input: {
+    cli_key?: string;
+    name?: string;
+    base_url?: string;
+    priority?: number;
+    enabled?: boolean;
+  },
+): Promise<CliInstallSource> {
+  const { body } = await http.put<CliInstallSource>(`/resource/cli-sources/${id}`, input);
+  return body;
+}
+
+export async function deleteCLISource(id: number): Promise<void> {
+  await http.delete(`/resource/cli-sources/${id}`);
+}
+
+// —— Personal access tokens ——
+export async function listTokens(): Promise<PersonalAccessToken[]> {
+  const { body } = await http.get<{ items: PersonalAccessToken[] }>("/resource/tokens");
+  return body.items;
+}
+
+export async function createToken(input: {
+  name: string;
+  scopes: string[];
+  expires_at?: string;
+}): Promise<{ token: string; metadata: PersonalAccessToken }> {
+  const { body } = await http.post<{ token: string; metadata: PersonalAccessToken }>(
+    "/resource/tokens",
+    input,
+  );
+  return body;
+}
+
+export async function deleteToken(id: number): Promise<void> {
+  await http.delete(`/resource/tokens/${id}`);
 }

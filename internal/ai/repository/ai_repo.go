@@ -16,61 +16,6 @@ func NewAIRepository(db *gorm.DB) *AIRepository {
 	return &AIRepository{db: db}
 }
 
-func (r *AIRepository) ListCLIs() ([]model.CliRuntimeDefinition, error) {
-	var items []model.CliRuntimeDefinition
-	err := r.db.Order("id ASC").Find(&items).Error
-	return items, err
-}
-
-func (r *AIRepository) FindCLIByKey(key string) (*model.CliRuntimeDefinition, error) {
-	var item model.CliRuntimeDefinition
-	if err := r.db.Where("key = ?", key).First(&item).Error; err != nil {
-		return nil, err
-	}
-	return &item, nil
-}
-
-func (r *AIRepository) UpdateCLI(item *model.CliRuntimeDefinition) error {
-	return r.db.Save(item).Error
-}
-
-func (r *AIRepository) ListSources(cliKey string) ([]model.CliInstallSource, error) {
-	var items []model.CliInstallSource
-	q := r.db.Order("priority ASC, id ASC")
-	if cliKey != "" {
-		q = q.Where("cli_key = ?", cliKey)
-	}
-	err := q.Find(&items).Error
-	return items, err
-}
-
-func (r *AIRepository) ListEnabledSources(cliKey string) ([]model.CliInstallSource, error) {
-	var items []model.CliInstallSource
-	err := r.db.Where("cli_key = ? AND enabled = ?", cliKey, true).
-		Order("priority ASC, id ASC").Find(&items).Error
-	return items, err
-}
-
-func (r *AIRepository) FindSource(id uint) (*model.CliInstallSource, error) {
-	var item model.CliInstallSource
-	if err := r.db.First(&item, id).Error; err != nil {
-		return nil, err
-	}
-	return &item, nil
-}
-
-func (r *AIRepository) CreateSource(item *model.CliInstallSource) error {
-	return r.db.Create(item).Error
-}
-
-func (r *AIRepository) UpdateSource(item *model.CliInstallSource) error {
-	return r.db.Save(item).Error
-}
-
-func (r *AIRepository) DeleteSource(id uint) error {
-	return r.db.Delete(&model.CliInstallSource{}, id).Error
-}
-
 func (r *AIRepository) CreateAgent(agent *model.AiAgent) error {
 	return r.db.Create(agent).Error
 }
@@ -261,49 +206,4 @@ func (r *AIRepository) ListSkills(page, pageSize int, userID uint, isSuperAdmin 
 	var items []model.SkillPackage
 	err := q.Order("id DESC").Offset((page - 1) * pageSize).Limit(pageSize).Find(&items).Error
 	return items, total, err
-}
-
-func (r *AIRepository) CreatePAT(token *model.PersonalAccessToken) error {
-	return r.db.Create(token).Error
-}
-
-func (r *AIRepository) FindPATByHash(hash string) (*model.PersonalAccessToken, error) {
-	var token model.PersonalAccessToken
-	if err := r.db.Where("token_hash = ?", hash).First(&token).Error; err != nil {
-		return nil, err
-	}
-	return &token, nil
-}
-
-func (r *AIRepository) FindPAT(id uint) (*model.PersonalAccessToken, error) {
-	var token model.PersonalAccessToken
-	if err := r.db.First(&token, id).Error; err != nil {
-		return nil, err
-	}
-	return &token, nil
-}
-
-func (r *AIRepository) ListPATs(userID uint, page, pageSize int) ([]model.PersonalAccessToken, int64, error) {
-	q := r.db.Model(&model.PersonalAccessToken{}).Where("user_id = ?", userID)
-	var total int64
-	if err := q.Count(&total).Error; err != nil {
-		return nil, 0, err
-	}
-	if page < 1 {
-		page = 1
-	}
-	if pageSize < 1 {
-		pageSize = 20
-	}
-	var items []model.PersonalAccessToken
-	err := q.Order("id DESC").Offset((page - 1) * pageSize).Limit(pageSize).Find(&items).Error
-	return items, total, err
-}
-
-func (r *AIRepository) UpdatePAT(token *model.PersonalAccessToken) error {
-	return r.db.Save(token).Error
-}
-
-func (r *AIRepository) DeletePAT(id uint) error {
-	return r.db.Delete(&model.PersonalAccessToken{}, id).Error
 }

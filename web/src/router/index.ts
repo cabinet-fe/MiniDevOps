@@ -103,6 +103,26 @@ const router = createRouter({
           },
         },
         {
+          path: "resource/clis",
+          name: "resource-clis",
+          component: () => import("@/views/resource/clis/pages/main.vue"),
+          meta: {
+            permission: "resource.clis:view",
+            title: "AI CLI",
+            keepAliveName: "ResourceClis",
+          },
+        },
+        {
+          path: "resource/tokens",
+          name: "resource-tokens",
+          component: () => import("@/views/resource/tokens/pages/main.vue"),
+          meta: {
+            permission: "resource.tokens:view",
+            title: "访问令牌",
+            keepAliveName: "ResourceTokens",
+          },
+        },
+        {
           path: "cicd/build-jobs",
           name: "cicd-build-jobs",
           component: () => import("@/views/cicd/build-jobs/pages/main.vue"),
@@ -214,12 +234,6 @@ const router = createRouter({
           },
         },
         {
-          path: "ai/clis",
-          name: "ai-clis",
-          component: () => import("@/views/ai/clis/pages/main.vue"),
-          meta: { permission: "ai.clis:view", title: "AI CLI", keepAliveName: "AiClis" },
-        },
-        {
           path: "ai/agents",
           name: "ai-agents",
           component: () => import("@/views/ai/agents/pages/main.vue"),
@@ -246,12 +260,6 @@ const router = createRouter({
           name: "ai-skills",
           component: () => import("@/views/ai/skills/pages/main.vue"),
           meta: { permission: "ai.skills:view", title: "Skills", keepAliveName: "AiSkills" },
-        },
-        {
-          path: "ai/tokens",
-          name: "ai-tokens",
-          component: () => import("@/views/ai/tokens/pages/main.vue"),
-          meta: { title: "Tokens", keepAliveName: "AiTokens" },
         },
       ],
     },

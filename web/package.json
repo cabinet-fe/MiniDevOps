@@ -15,32 +15,31 @@
     "@cat-kit/fe": "^1.1.8",
     "@cat-kit/http": "^1.1.8",
     "@noble/ciphers": "^2.2.0",
-    "@veltra/desktop": "^1.2.31",
-    "@veltra/icons": "^1.2.31",
-    "@veltra/styles": "^1.2.31",
+    "@veltra/desktop": "^1.2.33",
+    "@veltra/icons": "^1.2.33",
+    "@veltra/styles": "^1.2.33",
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/addon-search": "^0.16.0",
     "@xterm/addon-webgl": "^0.19.0",
     "@xterm/xterm": "^6.0.0",
     "gridstack": "^12",
-    "pinia": "^3.0.4",
-    "vue": "^3.5.38",
-    "vue-router": "^5.1.0"
+    "pinia": "^4.0.2",
+    "vue": "^3.5.40",
+    "vue-router": "^5.2.0"
   },
   "devDependencies": {
     "@cat-kit/tsconfig": "^2.0.1",
     "@playwright/test": "^1.57.0",
-    "@types/node": "^24.13.2",
-    "@veltra/vite": "^1.2.31",
+    "@types/node": "^26.1.1",
+    "@veltra/vite": "^1.2.33",
     "@vitejs/plugin-vue": "^6.0.7",
     "sass-embedded": "^1.100.0",
     "typescript": "~6.0.0",
     "unplugin-vue-components": "^32.1.0",
-    "vite": "npm:@voidzero-dev/vite-plus-core@0.2.4",
-    "vite-plus": "0.2.4"
+    "vite-plus": "0.2.5"
   },
   "overrides": {
-    "vite": "npm:@voidzero-dev/vite-plus-core@0.2.4",
+    "vite": "npm:@voidzero-dev/vite-plus-core@0.2.5",
     "vitest": "4.1.9"
   },
   "devEngines": {

@@ -49,12 +49,12 @@ const { hasPermission } = usePermission();
 const router = useRouter();
 const listRef = useTemplateRef("list");
 const historyRef = useTemplateRef("history");
-let query = reactive({ keyword: "", repository_id: undefined as number | undefined });
+const query = reactive({ keyword: "", repository_id: undefined as number | undefined });
 const dialogOpen = ref(false);
 const secretOpen = ref(false);
 const historyOpen = ref(false);
 const historyJob = ref<BuildJob | null>(null);
-let historyQuery = reactive({ build_job_id: undefined as number | undefined });
+const historyQuery = reactive({ build_job_id: undefined as number | undefined });
 const editing = ref<BuildJob | null>(null);
 const webhookInfo = reactive({ secret: "", url: "" });
 const repoOptions = ref<{ label: string; value: number }[]>([]);
@@ -345,7 +345,7 @@ async function rotateWebhookSecret() {
     <ProTable
       ref="list"
       url="/build-jobs"
-      v-model:query="query"
+      :query="query"
       :columns="columns"
       :auto-query-fields="['repository_id']"
       pagination
@@ -536,7 +536,7 @@ async function rotateWebhookSecret() {
       <ProTable
         ref="history"
         url="/build-runs"
-        v-model:query="historyQuery"
+        :query="historyQuery"
         :columns="historyColumns"
         :immediate="false"
         pagination

@@ -38,7 +38,7 @@ function openProject(project: ProductProject) {
   <div>
     <ProTable
       url="/projects"
-      v-model:query="query"
+      :query="query"
       :columns="columns"
       pagination
       :auto-query-fields="['status']"

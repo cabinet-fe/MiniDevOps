@@ -77,7 +77,7 @@ onMounted(async () => {
   <div>
     <ProTable
       url="/build-runs"
-      v-model:query="query"
+      :query="query"
       :columns="columns"
       :auto-query-fields="['status', 'build_job_id']"
       pagination

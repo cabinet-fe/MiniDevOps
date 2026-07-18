@@ -82,12 +82,12 @@ CONFLICT="$(curl -sS -o /tmp/smoke-409.json -w '%{http_code}' -X POST \
 [[ "$CONFLICT" == "409" ]] || { echo "expected 409 on stale publish, got $CONFLICT $(cat /tmp/smoke-409.json)" >&2; exit 1; }
 
 echo "==> AI / PAT surfaces"
-for path in /ai/clis /ai/agents /ai/runs /skills /tokens; do
+for path in /resource/clis /ai/agents /ai/runs /skills /resource/tokens; do
   CODE="$(curl -sS -o /tmp/smoke-ai.json -w '%{http_code}' "$BASE/api/v1$path" -H "Authorization: Bearer $TOKEN")"
   [[ "$CODE" == "200" ]] || { echo "GET $path → $CODE $(cat /tmp/smoke-ai.json)" >&2; exit 1; }
 done
 
-PAT="$(curl -fsS -X POST "$BASE/api/v1/tokens" "${AUTH[@]}" \
+PAT="$(curl -fsS -X POST "$BASE/api/v1/resource/tokens" "${AUTH[@]}" \
   -d '{"name":"smoke-pat","scopes":["skills:read","agents:run"]}')"
 PAT_TOKEN="$(json_get "$PAT" "o['data'].get('token') or ''")"
 if [[ -n "$PAT_TOKEN" && "$PAT_TOKEN" != "None" ]]; then

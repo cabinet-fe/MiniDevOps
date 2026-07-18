@@ -18,36 +18,21 @@ import (
 )
 
 type Handler struct {
-	cli    *service.CLIService
 	agents *service.AgentService
 	skills *service.SkillService
-	pats   *service.PATService
 	perm   *rbacservice.PermissionService
 }
 
 func NewHandler(
-	cli *service.CLIService,
 	agents *service.AgentService,
 	skills *service.SkillService,
-	pats *service.PATService,
 	perm *rbacservice.PermissionService,
 ) *Handler {
-	return &Handler{cli: cli, agents: agents, skills: skills, pats: pats, perm: perm}
+	return &Handler{agents: agents, skills: skills, perm: perm}
 }
 
 func (h *Handler) RegisterRoutes(rg *gin.RouterGroup, authMW gin.HandlerFunc) {
 	ai := rg.Group("/ai", authMW)
-	ai.GET("/clis", rbacmw.RequirePermission(h.perm, "ai.clis:view"), h.ListCLIs)
-	ai.POST("/clis/:key/detect", rbacmw.RequirePermission(h.perm, "ai.clis:execute"), h.DetectCLI)
-	ai.POST("/clis/:key/check-update", rbacmw.RequirePermission(h.perm, "ai.clis:execute"), h.CheckCLIUpdate)
-	ai.POST("/clis/:key/install", rbacmw.RequirePermission(h.perm, "ai.clis:execute"), h.InstallCLI)
-	ai.POST("/clis/:key/upgrade", rbacmw.RequirePermission(h.perm, "ai.clis:execute"), h.UpgradeCLI)
-	ai.POST("/clis/:key/uninstall", rbacmw.RequirePermission(h.perm, "ai.clis:execute"), h.UninstallCLI)
-	ai.GET("/cli-sources", rbacmw.RequirePermission(h.perm, "ai.clis:view"), h.ListCLISources)
-	ai.POST("/cli-sources", rbacmw.RequirePermission(h.perm, "ai.clis:create"), h.CreateCLISource)
-	ai.PUT("/cli-sources/:id", rbacmw.RequirePermission(h.perm, "ai.clis:update"), h.UpdateCLISource)
-	ai.DELETE("/cli-sources/:id", rbacmw.RequirePermission(h.perm, "ai.clis:delete"), h.DeleteCLISource)
-
 	ai.GET("/agents", rbacmw.RequirePermission(h.perm, "ai.agents:view"), h.ListAgents)
 	ai.POST("/agents", rbacmw.RequirePermission(h.perm, "ai.agents:create"), h.CreateAgent)
 	ai.GET("/agents/:id", rbacmw.RequirePermission(h.perm, "ai.agents:view"), h.GetAgent)
@@ -72,114 +57,6 @@ func (h *Handler) RegisterRoutes(rg *gin.RouterGroup, authMW gin.HandlerFunc) {
 	skills.PUT("/:id", rbacmw.RequirePermission(h.perm, "ai.skills:update"), h.OverwriteSkill)
 	skills.DELETE("/:id", rbacmw.RequirePermission(h.perm, "ai.skills:delete"), h.DeleteSkill)
 	skills.GET("/:id/package", h.DownloadSkill)
-
-	tokens := rg.Group("/tokens", authMW)
-	tokens.GET("", h.ListPATs)
-	tokens.POST("", h.CreatePAT)
-	tokens.DELETE("/:id", h.DeletePAT)
-}
-
-func (h *Handler) ListCLIs(c *gin.Context) {
-	items, err := h.cli.ListCLIs()
-	if err != nil {
-		pkg.Error(c, http.StatusInternalServerError, "查询 CLI 失败")
-		return
-	}
-	pkg.Success(c, gin.H{"items": items, "risk_notice": "AI CLI 与构建脚本均以 Bedrock 进程同一操作系统用户直接执行，无 OS/容器沙箱隔离。"})
-}
-
-func (h *Handler) DetectCLI(c *gin.Context) {
-	result, err := h.cli.Detect(c.Param("key"))
-	if err != nil {
-		writeErr(c, err)
-		return
-	}
-	pkg.Success(c, result)
-}
-
-func (h *Handler) CheckCLIUpdate(c *gin.Context) {
-	result, err := h.cli.CheckUpdate(c.Request.Context(), c.Param("key"))
-	if err != nil {
-		writeErr(c, err)
-		return
-	}
-	pkg.Success(c, result)
-}
-
-func (h *Handler) InstallCLI(c *gin.Context) {
-	h.executeCLI(c, "install")
-}
-func (h *Handler) UpgradeCLI(c *gin.Context) {
-	h.executeCLI(c, "upgrade")
-}
-func (h *Handler) UninstallCLI(c *gin.Context) {
-	h.executeCLI(c, "uninstall")
-}
-
-func (h *Handler) executeCLI(c *gin.Context, op string) {
-	var input service.ExecuteInput
-	_ = c.ShouldBindJSON(&input)
-	result, err := h.cli.Execute(c.Request.Context(), c.Param("key"), op, input, authmiddleware.GetUserID(c))
-	if err != nil {
-		writeErr(c, err)
-		return
-	}
-	pkg.Success(c, result)
-}
-
-func (h *Handler) ListCLISources(c *gin.Context) {
-	items, err := h.cli.ListSources(c.Query("cli_key"))
-	if err != nil {
-		pkg.Error(c, http.StatusInternalServerError, err.Error())
-		return
-	}
-	pkg.Success(c, gin.H{"items": items})
-}
-
-func (h *Handler) CreateCLISource(c *gin.Context) {
-	var input service.SourceInput
-	if err := c.ShouldBindJSON(&input); err != nil {
-		pkg.Error(c, http.StatusBadRequest, "无效请求")
-		return
-	}
-	item, err := h.cli.CreateSource(input)
-	if err != nil {
-		writeErr(c, err)
-		return
-	}
-	pkg.Created(c, item)
-}
-
-func (h *Handler) UpdateCLISource(c *gin.Context) {
-	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
-	if err != nil {
-		pkg.Error(c, http.StatusBadRequest, "无效 ID")
-		return
-	}
-	var input service.SourceInput
-	if err := c.ShouldBindJSON(&input); err != nil {
-		pkg.Error(c, http.StatusBadRequest, "无效请求")
-		return
-	}
-	item, err := h.cli.UpdateSource(uint(id), input)
-	if err != nil {
-		writeErr(c, err)
-		return
-	}
-	pkg.Success(c, item)
-}
-
-func (h *Handler) DeleteCLISource(c *gin.Context) {
-	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
-	if err != nil {
-		pkg.Error(c, http.StatusBadRequest, "无效 ID")
-		return
-	}
-	if err := h.cli.DeleteSource(uint(id)); err != nil {
-		writeErr(c, err)
-		return
-	}
-	pkg.Success(c, gin.H{"deleted": true})
 }
 
 func (h *Handler) ListAgents(c *gin.Context) {
@@ -450,50 +327,9 @@ func (h *Handler) DownloadSkill(c *gin.Context) {
 	c.DataFromReader(http.StatusOK, skill.SizeBytes, "application/zip", rc, nil)
 }
 
-func (h *Handler) ListPATs(c *gin.Context) {
-	page := pkg.ParsePage(c)
-	items, total, err := h.pats.List(authmiddleware.GetUserID(c), page.Page, page.PageSize)
-	if err != nil {
-		pkg.Error(c, http.StatusInternalServerError, err.Error())
-		return
-	}
-	pkg.Paginated(c, items, total, page.Page, page.PageSize)
-}
-
-func (h *Handler) CreatePAT(c *gin.Context) {
-	var input service.CreatePATInput
-	if err := c.ShouldBindJSON(&input); err != nil {
-		pkg.Error(c, http.StatusBadRequest, "无效请求")
-		return
-	}
-	result, err := h.pats.Create(authmiddleware.GetUserID(c), input)
-	if err != nil {
-		writeErr(c, err)
-		return
-	}
-	pkg.Created(c, result)
-}
-
-func (h *Handler) DeletePAT(c *gin.Context) {
-	id, _ := strconv.ParseUint(c.Param("id"), 10, 64)
-	if err := h.pats.Delete(authmiddleware.GetUserID(c), uint(id)); err != nil {
-		writeErr(c, err)
-		return
-	}
-	pkg.Success(c, gin.H{"deleted": true})
-}
-
 func writeErr(c *gin.Context, err error) {
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		pkg.Error(c, http.StatusNotFound, "资源不存在")
-		return
-	}
-	if errors.Is(err, service.ErrPATInvalid) {
-		pkg.Error(c, http.StatusUnauthorized, err.Error())
-		return
-	}
-	if errors.Is(err, service.ErrPATWrongScope) || errors.Is(err, service.ErrPATBadScope) {
-		pkg.Error(c, http.StatusForbidden, err.Error())
 		return
 	}
 	pkg.Error(c, http.StatusBadRequest, err.Error())

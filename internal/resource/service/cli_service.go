@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
@@ -13,20 +12,21 @@ import (
 	"strconv"
 	"strings"
 
-	"bedrock/internal/ai/model"
-	"bedrock/internal/ai/repository"
+	"bedrock/internal/resource/model"
+	"bedrock/internal/resource/repository"
 )
 
+// AuditWriter appends operation-log entries (implemented by system AuditService).
 type AuditWriter interface {
 	Write(userID uint, username, action, resourceType, resourceID, details, ip string) error
 }
 
 type CLIService struct {
-	repo  *repository.AIRepository
+	repo  *repository.CLIRepository
 	audit AuditWriter
 }
 
-func NewCLIService(repo *repository.AIRepository, audit ...AuditWriter) *CLIService {
+func NewCLIService(repo *repository.CLIRepository, audit ...AuditWriter) *CLIService {
 	svc := &CLIService{repo: repo}
 	if len(audit) > 0 {
 		svc.audit = audit[0]
@@ -35,7 +35,7 @@ func NewCLIService(repo *repository.AIRepository, audit ...AuditWriter) *CLIServ
 }
 
 func (s *CLIService) ListCLIs() ([]model.CliRuntimeDefinition, error) {
-	items, err := s.repo.ListCLIs()
+	items, err := s.repo.List()
 	if err != nil {
 		return nil, err
 	}
@@ -43,6 +43,11 @@ func (s *CLIService) ListCLIs() ([]model.CliRuntimeDefinition, error) {
 		items[i].RiskNotice = model.RiskNoticeSameUID
 	}
 	return items, nil
+}
+
+// FindByKey satisfies the AI-domain CLILookup interface (agent CLI resolution).
+func (s *CLIService) FindByKey(key string) (*model.CliRuntimeDefinition, error) {
+	return s.repo.FindByKey(key)
 }
 
 type DetectResult struct {
@@ -55,7 +60,7 @@ type DetectResult struct {
 }
 
 func (s *CLIService) Detect(key string) (*DetectResult, error) {
-	cli, err := s.repo.FindCLIByKey(key)
+	cli, err := s.repo.FindByKey(key)
 	if err != nil {
 		return nil, err
 	}
@@ -78,7 +83,7 @@ func (s *CLIService) Detect(key string) (*DetectResult, error) {
 		if result.Output == "" {
 			result.Output = runErr.Error()
 		}
-		_ = s.repo.UpdateCLI(cli)
+		_ = s.repo.Update(cli)
 		return result, nil
 	}
 	version := extractCLIVersion(output, cli.BinaryName)
@@ -102,7 +107,7 @@ func (s *CLIService) Detect(key string) (*DetectResult, error) {
 	cli.InstalledPath = path
 	cli.InstalledVersion = version
 	cli.Healthy = true
-	_ = s.repo.UpdateCLI(cli)
+	_ = s.repo.Update(cli)
 	return result, nil
 }
 
@@ -117,7 +122,7 @@ type CheckUpdateResult struct {
 }
 
 func (s *CLIService) CheckUpdate(ctx context.Context, key string) (*CheckUpdateResult, error) {
-	cli, err := s.repo.FindCLIByKey(key)
+	cli, err := s.repo.FindByKey(key)
 	if err != nil {
 		return nil, err
 	}
@@ -158,7 +163,7 @@ type ExecuteResult struct {
 }
 
 func (s *CLIService) Execute(ctx context.Context, key, operation string, input ExecuteInput, createdBy uint) (*ExecuteResult, error) {
-	cli, err := s.repo.FindCLIByKey(key)
+	cli, err := s.repo.FindByKey(key)
 	if err != nil {
 		return nil, err
 	}
@@ -232,7 +237,7 @@ func (s *CLIService) CreateSource(input SourceInput) (*model.CliInstallSource, e
 	if strings.TrimSpace(input.CliKey) == "" || strings.TrimSpace(input.Name) == "" || strings.TrimSpace(input.BaseURL) == "" {
 		return nil, errors.New("cli_key、名称和 Registry 地址不能为空")
 	}
-	if _, err := s.repo.FindCLIByKey(input.CliKey); err != nil {
+	if _, err := s.repo.FindByKey(input.CliKey); err != nil {
 		return nil, errors.New("CLI 不存在")
 	}
 	item := &model.CliInstallSource{
@@ -524,33 +529,4 @@ func isPathLine(line, binaryName string) bool {
 		return true
 	}
 	return false
-}
-
-// ResolveBinary returns absolute path for a CLI binary if installed.
-func ResolveBinary(cli *model.CliRuntimeDefinition) (string, error) {
-	if cli.InstalledPath != "" {
-		if _, err := os.Stat(cli.InstalledPath); err == nil {
-			return cli.InstalledPath, nil
-		}
-	}
-	return exec.LookPath(cli.BinaryName)
-}
-
-// BuildRuntimeEnv injects API base / env templates without overwriting CLI login state files.
-func BuildRuntimeEnv(cli *model.CliRuntimeDefinition, apiBase string, extra map[string]string) []string {
-	env := os.Environ()
-	if apiBase != "" && cli.APIBaseEnv != "" {
-		env = append(env, cli.APIBaseEnv+"="+apiBase)
-	}
-	for k, v := range extra {
-		if strings.TrimSpace(k) == "" {
-			continue
-		}
-		env = append(env, k+"="+v)
-	}
-	if cli.InstalledPath != "" {
-		dir := filepath.Dir(cli.InstalledPath)
-		env = append(env, "PATH="+dir+string(os.PathListSeparator)+os.Getenv("PATH"))
-	}
-	return env
 }

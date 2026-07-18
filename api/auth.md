@@ -1,9 +1,10 @@
-# 认证与令牌
+# 认证
 
-登录、刷新、登出、当前用户，以及个人访问令牌（PAT）。
+登录、刷新、登出、当前用户。
 
 通用约定（信封、分页、认证）见 [.agents/api.md](../.agents/api.md)。
 业务语义与权限模型见 [docs/DESIGN.md](../docs/DESIGN.md)。
+个人访问令牌（PAT）的管理接口（`/resource/tokens`）已迁入资源管理域，见 [resource.md](resource.md)；auth 中间件继续消费 Bearer PAT 做鉴权（`Authorization: Bearer br_pat_...`）。
 
 ## 认证
 
@@ -34,24 +35,6 @@
 
 响应 200：data = MeResponse
 错误：401 / 404
-
-## 个人访问令牌（PAT）
-
-### GET /tokens — 列出个人访问令牌（仅元数据）
-
-查询：`page`、`page_size`（标准分页）
-响应 200：data = 分页信封（`items`、`total`、`page`、`page_size`、`total_pages`）
-
-### POST /tokens — 创建个人访问令牌
-
-请求：{ name*, scopes*, expires_at }
-响应 201：data = PATCreateResponse
-说明：明文 token 仅在创建响应中返回一次，之后不可再读。服务端只存哈希。scopes 限于 `skills:read`、`agents:run`。不能替代 HTTPS/TLS。
-
-### DELETE /tokens/{id} — 删除个人访问令牌
-
-路径参数：id*: integer
-响应 200
 
 ## 对象形状
 
@@ -101,23 +84,4 @@
 | `sort` | `integer` |  |  |
 | `children` | `MenuNode[]` |  |  |
 
-### PATCreateResponse
-
-| 字段 | 类型 | 必填 | 说明 |
-| --- | --- | --- | --- |
-| `token` | `string` |  | 明文仅展示一次；不落日志、不可再读 |
-| `metadata` | `PersonalAccessToken` |  |  |
-
-### PersonalAccessToken
-
-| 字段 | 类型 | 必填 | 说明 |
-| --- | --- | --- | --- |
-| `id` | `integer` |  |  |
-| `user_id` | `integer` |  |  |
-| `name` | `string` |  |  |
-| `token_prefix` | `string` |  |  |
-| `scopes` | `('skills:read' \| 'agents:run')[]` |  |  |
-| `expires_at` | `string(date-time)` |  |  |
-| `revoked_at` | `string(date-time)` |  |  |
-| `last_used_at` | `string(date-time)` |  |  |
-| `created_at` | `string(date-time)` |  |  |
+PAT 对象形状（PATCreateResponse、PersonalAccessToken）见 [resource.md](resource.md)。

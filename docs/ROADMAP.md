@@ -205,13 +205,13 @@ flowchart LR
 
 | 类别 | 内容 |
 | --- | --- |
-| CLI | Claude Code、OpenCode、Reasonix、Codex：检测/安装/升级/卸载、多源回退、运行时注入配置 |
+| CLI | Claude Code、OpenCode、Reasonix、Codex：检测/安装/升级/卸载、多源回退、运行时注入配置（运行时管理归属资源管理域：`/resource/clis`、`resource.clis:*`） |
 | 智能体 | AiAgent、AgentTrigger（手动/API/定时/构建事件）；AgentRun 独立异步；上下文 = 提示词 + 仓库 |
 | 构建事件 | 默认 `artifact_ready`（归档成功、制品可用）；BuildJob 可覆盖为 `distribution_finished` |
 | Skills | ZIP 上传、SKILL.md 校验、public/private、覆盖更新、工作区注入 |
-| PAT | 哈希存储、仅显示一次、可过期/吊销；固定 scope：`skills:read`、`agents:run` |
+| PAT | 哈希存储、仅显示一次、可过期/吊销；固定 scope：`skills:read`、`agents:run`（管理接口归属资源管理域：`/resource/tokens`、`resource.tokens:*`） |
 | 文档生成 | 接通 P3：`docs/generate` → AgentRun → 只写 draft |
-| 前端 | CLI 管理、智能体、触发器、运行日志 WS、Skills、PAT 管理 |
+| 前端 | CLI 管理与 PAT 管理（资源管理菜单）、智能体、触发器、运行日志 WS、Skills |
 | 测试 | 四 CLI 安装与非交互运行；构建事件不改 BuildRun 成功态；PAT 鉴权；私有 Skill 隔离 |
 
 ### 6.3 明确不做

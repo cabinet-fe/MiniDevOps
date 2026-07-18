@@ -216,7 +216,7 @@ async function remove(row: RbacResource) {
     <ProTable
       ref="list"
       url="/rbac/resources"
-      v-model:query="query"
+      :query="query"
       :columns="columns"
       tree
       default-expand-all

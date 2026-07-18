@@ -26,6 +26,8 @@ import (
 	projectservice "bedrock/internal/project/service"
 	rbacrepo "bedrock/internal/rbac/repository"
 	rbacservice "bedrock/internal/rbac/service"
+	resourcerepo "bedrock/internal/resource/repository"
+	resourceservice "bedrock/internal/resource/service"
 	storagerepo "bedrock/internal/storage/repository"
 	storageservice "bedrock/internal/storage/service"
 )
@@ -137,7 +139,7 @@ func TestGenerateDocsWiredReturnsAccepted(t *testing.T) {
 	}
 
 	aiRepo := airepository.NewAIRepository(gdb)
-	cli := aiservice.NewCLIService(aiRepo)
+	cli := resourceservice.NewCLIService(resourcerepo.NewCLIRepository(gdb))
 	agents := aiservice.NewAgentService(aiRepo, cli, nil, nil, zap.NewNop(), t.TempDir(), t.TempDir())
 	agents.Start()
 	t.Cleanup(agents.Shutdown)

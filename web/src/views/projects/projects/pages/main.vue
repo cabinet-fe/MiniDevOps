@@ -108,7 +108,7 @@ function splitTags(raw?: string | null): string[] {
     <ProTable
       ref="table"
       url="/projects"
-      v-model:query="query"
+      :query="query"
       :columns="columns"
       pagination
       :auto-query-fields="['status']"

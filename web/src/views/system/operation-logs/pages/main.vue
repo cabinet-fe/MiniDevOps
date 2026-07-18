@@ -34,7 +34,7 @@ const columns = defineProTableColumns([
 
 <template>
   <div>
-    <ProTable url="/operation-logs" v-model:query="query" :columns="columns" pagination>
+    <ProTable url="/operation-logs" :query="query" :columns="columns" pagination>
       <template #filters>
         <u-input v-model="query.action" placeholder="动作 (POST/PUT…)" style="width: 160px" />
         <u-input v-model="query.resource_type" placeholder="资源路径" style="width: 220px" />

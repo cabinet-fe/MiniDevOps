@@ -69,13 +69,7 @@ async function terminate(row: ProcessInfo) {
 
 <template>
   <div>
-    <ProTable
-      ref="list"
-      url="/ops/processes"
-      v-model:query="query"
-      :columns="columns"
-      row-key="pid"
-    >
+    <ProTable ref="list" url="/ops/processes" :query="query" :columns="columns" row-key="pid">
       <template #filters>
         <u-input v-model="query.keyword" placeholder="名称 / 命令行" style="width: 180px" />
         <u-input v-model="query.pid" type="number" placeholder="PID" style="width: 110px" />

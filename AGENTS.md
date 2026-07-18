@@ -68,7 +68,7 @@ make clean
 │   ├── auth/
 │   ├── rbac/
 │   ├── system/
-│   ├── resource/               # 资源管理：仓库、服务器、凭证
+│   ├── resource/               # 资源管理：仓库、服务器、凭证、AI CLI、访问令牌
 │   ├── cicd/
 │   ├── engine/
 │   ├── deployer/

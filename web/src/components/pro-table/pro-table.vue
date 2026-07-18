@@ -21,6 +21,12 @@ const props = withDefaults(
     /** API path relative to `/api/v1` (e.g. `/users`) */
     url: string;
     columns: ProTableColumn[];
+    /**
+     * Filter / sort query object owned by the parent.
+     * One-way prop: ProTable reads and mutates fields in place (no `update:query`).
+     * Sort is written as `sort: "<field>@asc" | "<field>@desc"` and omitted when cleared.
+     */
+    query?: ProTableQuery;
     /** Fields that auto-trigger search when changed (selects, etc.) */
     autoQueryFields?: string[];
     /**
@@ -46,6 +52,7 @@ const props = withDefaults(
     defaultExpandAll?: boolean;
   }>(),
   {
+    query: () => ({}),
     autoQueryFields: () => [],
     dataPath: "items",
     pagination: false,
@@ -61,12 +68,6 @@ const props = withDefaults(
 const emit = defineEmits<{
   loaded: [items: T[]];
 }>();
-
-/**
- * Filter / pagination / sort query bound to the parent.
- * Sort is written as `sort: "<field>@asc" | "<field>@desc"` and omitted when cleared.
- */
-const query = defineModel<ProTableQuery>("query", { default: () => ({}) });
 
 const slots = useSlots();
 const loading = ref(false);
@@ -105,7 +106,7 @@ function parseSort(value: unknown): { field: string; order: SortOrder | null } {
 }
 
 function cycleSort(field: string) {
-  const current = parseSort(query.value?.sort);
+  const current = parseSort(props.query?.sort);
   let next: string | undefined;
   if (current.field !== field || !current.order) {
     next = `${field}@desc`;
@@ -116,15 +117,15 @@ function cycleSort(field: string) {
   }
 
   if (next) {
-    query.value.sort = next;
+    props.query.sort = next;
   } else {
-    delete query.value.sort;
+    delete props.query.sort;
   }
   void search();
 }
 
 function mapColumns(cols: ProTableColumn[]): TableColumn[] {
-  const { field: sortField, order: sortOrder } = parseSort(query.value?.sort);
+  const { field: sortField, order: sortOrder } = parseSort(props.query?.sort);
 
   return cols.map((col) => {
     const children = col.children?.length
@@ -212,7 +213,7 @@ function applyPaginationMeta(body: Record<string, unknown>) {
 async function load() {
   loading.value = true;
   try {
-    const params: Record<string, unknown> = { ...query.value };
+    const params: Record<string, unknown> = { ...props.query };
     if (mode.value === "pagination") {
       params.page = page.value;
       params.page_size = pageSize.value;
@@ -261,7 +262,7 @@ function onPageSizeChange() {
 watch(
   () =>
     props.autoQueryFields
-      .map((key) => `${key}:${JSON.stringify(query.value?.[key] ?? null)}`)
+      .map((key) => `${key}:${JSON.stringify(props.query?.[key] ?? null)}`)
       .join("|"),
   () => {
     if (!props.autoQueryFields.length) return;

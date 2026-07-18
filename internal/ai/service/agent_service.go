@@ -20,8 +20,14 @@ import (
 	"bedrock/internal/ai/model"
 	"bedrock/internal/ai/repository"
 	cicdmodel "bedrock/internal/cicd/model"
+	resourcemodel "bedrock/internal/resource/model"
 	"bedrock/internal/ws"
 )
+
+// AuditWriter appends operation-log entries (implemented by system AuditService).
+type AuditWriter interface {
+	Write(userID uint, username, action, resourceType, resourceID, details, ip string) error
+}
 
 // DocDraftWriter writes draft content after a docs_generate AgentRun succeeds.
 type DocDraftWriter interface {
@@ -35,7 +41,7 @@ type TerminalNotifier interface {
 
 type AgentService struct {
 	repo     *repository.AIRepository
-	cli      *CLIService
+	cli      CLILookup
 	skills   *SkillService
 	hub      *ws.Hub
 	logger   *zap.Logger
@@ -76,7 +82,7 @@ var cronParser = cron.NewParser(cron.Minute | cron.Hour | cron.Dom | cron.Month 
 
 func NewAgentService(
 	repo *repository.AIRepository,
-	cli *CLIService,
+	cli CLILookup,
 	skills *SkillService,
 	hub *ws.Hub,
 	logger *zap.Logger,
@@ -158,7 +164,7 @@ func (s *AgentService) CreateAgent(createdBy uint, in AgentInput) (*model.AiAgen
 	if name == "" || strings.TrimSpace(in.CliKey) == "" {
 		return nil, errors.New("名称与 cli_key 不能为空")
 	}
-	if _, err := s.repo.FindCLIByKey(in.CliKey); err != nil {
+	if _, err := s.cli.FindByKey(in.CliKey); err != nil {
 		return nil, errors.New("CLI 不存在")
 	}
 	agent := &model.AiAgent{
@@ -206,7 +212,7 @@ func (s *AgentService) UpdateAgent(id, userID uint, in AgentInput) (*model.AiAge
 		agent.Enabled = *in.Enabled
 	}
 	if strings.TrimSpace(in.CliKey) != "" {
-		if _, err := s.repo.FindCLIByKey(in.CliKey); err != nil {
+		if _, err := s.cli.FindByKey(in.CliKey); err != nil {
 			return nil, errors.New("CLI 不存在")
 		}
 		agent.CliKey = in.CliKey
@@ -393,7 +399,7 @@ func (s *AgentService) CreateRun(agentID uint, in CreateRunInput) (*model.AgentR
 		"stream_output": agent.StreamOutput,
 		"timeout_sec":   agent.TimeoutSec,
 		"context_note":  "persistent agent workspace + fixed output_dir + skills + build_job softlinks",
-		"risk_notice":   model.RiskNoticeSameUID,
+		"risk_notice":   resourcemodel.RiskNoticeSameUID,
 	})
 	run := &model.AgentRun{
 		AgentID: agentID, TriggerType: in.TriggerType, TriggerID: in.TriggerID,
@@ -538,7 +544,7 @@ func (s *AgentService) ExecuteRun(ctx context.Context, id uint) {
 	}
 	decodeSkillIDs(agent)
 	decodeBuildJobIDs(agent)
-	cli, err := s.repo.FindCLIByKey(agent.CliKey)
+	cli, err := s.cli.FindByKey(agent.CliKey)
 	if err != nil {
 		s.failRun(run, err)
 		return
@@ -566,7 +572,7 @@ func (s *AgentService) ExecuteRun(ctx context.Context, id uint) {
 			s.hub.BroadcastToChannel(fmt.Sprintf("ai-run:%d", run.ID), []byte(line))
 		}
 	}
-	writeLog(model.RiskNoticeSameUID)
+	writeLog(resourcemodel.RiskNoticeSameUID)
 	writeLog(fmt.Sprintf("agent=%s cli=%s trigger=%s", agent.Name, agent.CliKey, run.TriggerType))
 	writeLog("context: persistent agent workspace (skills + build_job softlinks)")
 

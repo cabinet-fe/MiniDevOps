@@ -99,7 +99,7 @@ watch(
       url="/ai/runs"
       pagination
       :columns="columns"
-      v-model:query="query"
+      :query="query"
       :auto-query-fields="['agent_id', 'status']"
     >
       <template #filters>
