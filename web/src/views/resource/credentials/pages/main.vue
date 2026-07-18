@@ -57,26 +57,14 @@ function openEdit(row: Credential) {
 
 async function save() {
   try {
+    const body: Record<string, unknown> = { ...form };
+    if (!form.passphrase) delete body.passphrase;
     if (editing.value) {
-      const body: Record<string, unknown> = {
-        name: form.name,
-        type: form.type,
-        username: form.username,
-        description: form.description,
-      };
-      if (form.secret) body.secret = form.secret;
-      if (form.passphrase) body.passphrase = form.passphrase;
+      if (!form.secret) delete body.secret;
       await updateCredential(editing.value.id, body);
       message.success("已更新");
     } else {
-      await createCredential({
-        name: form.name,
-        type: form.type,
-        username: form.username,
-        secret: form.secret,
-        passphrase: form.passphrase || undefined,
-        description: form.description,
-      });
+      await createCredential(body);
       message.success("已创建");
     }
     dialogOpen.value = false;

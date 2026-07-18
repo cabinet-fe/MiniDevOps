@@ -8,6 +8,13 @@
       "skillPath": "skills/cat-kit/SKILL.md",
       "computedHash": "23ef4e1e5ac2dd8072ffe34c81188191456715c32c7430fc6c98d1bb30a67d3e"
     },
+    "frontend-expert": {
+      "source": "cabinet-fe/prompt-engineering",
+      "ref": "main",
+      "sourceType": "github",
+      "skillPath": "skills/frontend-expert/SKILL.md",
+      "computedHash": "6bda388be2b39d912d3277464b0fb91f3303d67a3fcd385366d50c7e236349ff"
+    },
     "git-commit": {
       "source": "cabinet-fe/prompt-engineering",
       "ref": "main",

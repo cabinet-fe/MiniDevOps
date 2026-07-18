@@ -73,15 +73,9 @@ function openEdit(row: Repository) {
 
 async function save() {
   try {
-    const body: Record<string, unknown> = {
-      name: form.name,
-      repo_url: form.repo_url,
-      description: form.description,
-      tags: form.tags,
-      auth_type: form.auth_type,
-    };
-    if (form.auth_type === "credential" && form.credential_id) {
-      body.credential_id = form.credential_id;
+    const body: Record<string, unknown> = { ...form };
+    if (form.auth_type !== "credential" || !form.credential_id) {
+      delete body.credential_id;
     }
     if (editing.value) {
       if (form.auth_type === "none") body.clear_credential = true;

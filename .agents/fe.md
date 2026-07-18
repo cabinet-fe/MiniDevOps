@@ -55,6 +55,23 @@ import ProTable, { defineProTableColumns } from "@/components/pro-table";
 - SFC 文件名：`kebab-case`
 - 前端常量：`UPPER_SNAKE_CASE`（对象键 `snake_case`）
 
+## 开发偏好
+
+### 追求代码简洁性
+
+前端表单的字段的定义始终是和后端保持一致的, 不要结构字段再赋值, 非常啰嗦.
+
+```ts
+// good
+o(form).extend(row);
+
+// bad
+o(form).extend({
+  field1: row.field1,
+  field2: row.field2,
+});
+```
+
 ## 测试
 
 - 关键路径优先 Playwright 冒烟（登录、菜单、构建日志等）：`web/e2e/`，`bunx playwright test`

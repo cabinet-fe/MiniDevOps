@@ -33,11 +33,6 @@ const columns = defineProTableColumns([
 
 function openCreate() {
   editing.value = null;
-  form.name = "";
-  form.code = "";
-  form.route_prefix = "";
-  form.sort_key = 0;
-  form.enabled = true;
   dialogOpen.value = true;
 }
 
@@ -50,16 +45,10 @@ function openEdit(row: MenuGroup) {
 async function save() {
   try {
     if (editing.value) {
-      await updateMenuGroup(editing.value.id, {
-        name: form.name,
-        code: form.code,
-        route_prefix: form.route_prefix,
-        sort_key: form.sort_key,
-        enabled: form.enabled,
-      });
+      await updateMenuGroup(editing.value.id, form);
       message.success("已更新");
     } else {
-      await createMenuGroup({ ...form });
+      await createMenuGroup(form);
       message.success("已创建");
     }
     dialogOpen.value = false;

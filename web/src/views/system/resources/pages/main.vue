@@ -14,21 +14,21 @@ const tabs = [
 </script>
 
 <template>
-  <div class="resources-page">
-    <u-tabs v-model="tab" :items="tabs" />
-    <ResourcesPanel v-if="tab === 'resources'" />
-    <MenuGroupsPanel v-else-if="tab === 'groups'" />
-  </div>
+  <u-tabs v-model="tab" :items="tabs" class="resources-page">
+    <template #resources>
+      <ResourcesPanel />
+    </template>
+
+    <template #groups>
+      <MenuGroupsPanel />
+    </template>
+  </u-tabs>
 </template>
 
 <style scoped lang="scss">
 @use "pkg:@veltra/styles/functions" as fn;
 
 .resources-page {
-  display: flex;
-  flex-direction: column;
-  gap: fn.use-var(gap, default);
-  min-height: 0;
   height: 100%;
 }
 </style>

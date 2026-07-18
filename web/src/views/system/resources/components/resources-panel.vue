@@ -185,18 +185,11 @@ onMounted(() => {
 async function openCreate(parent?: RbacResource) {
   editing.value = null;
   lastAutoRoute.value = "";
-  form.code = "";
+  await loadGroups();
+  await loadMenuParents();
   form.type = parent ? "action" : "menu";
   form.group_id = parent ? undefined : groups.value[0]?.id;
   form.parent_id = parent?.type === "menu" ? parent.id : undefined;
-  form.enabled = true;
-  form.sort_key = 0;
-  form.title = "";
-  form.route = "";
-  form.hidden = false;
-  form.super_admin_only = false;
-  await loadGroups();
-  await loadMenuParents();
   dialogOpen.value = true;
 }
 
@@ -205,18 +198,7 @@ async function openEdit(row: RbacResource) {
   lastAutoRoute.value = "";
   await loadGroups();
   await loadMenuParents();
-  o(form).extend({
-    code: row.code,
-    type: row.type,
-    group_id: row.group_id ?? undefined,
-    parent_id: row.parent_id ?? undefined,
-    enabled: row.enabled,
-    sort_key: row.sort_key,
-    title: row.title || "",
-    route: row.route || "",
-    hidden: row.hidden,
-    super_admin_only: row.super_admin_only,
-  });
+  o(form).extend(row);
   dialogOpen.value = true;
 }
 
