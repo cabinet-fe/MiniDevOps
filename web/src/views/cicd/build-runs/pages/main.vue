@@ -8,7 +8,13 @@ import { listBuildJobs } from "@/api/cicd";
 import type { BuildRun } from "@/api/types";
 import ProTable, { defineProTableColumns } from "@/components/pro-table";
 import { formatDateTime } from "@/lib/datetime";
-import { JOB_STATUS_TAG, TRIGGER_TYPE_TAG, tagType, type TagType } from "@/lib/tag";
+import {
+  BUILD_DISTRIBUTION_TAG,
+  BUILD_STAGE_TAG,
+  JOB_STATUS_TAG,
+  TRIGGER_TYPE_TAG,
+  tagType,
+} from "@/lib/tag";
 
 const router = useRouter();
 const query = reactive({
@@ -16,24 +22,6 @@ const query = reactive({
   status: "",
 });
 const jobNameMap = ref(new Map<number, string>());
-
-const STAGE_TAG: Record<string, TagType> = {
-  pending: undefined,
-  cloning: "primary",
-  building: "primary",
-  archiving: "primary",
-  distributing: "warning",
-  idle: "success",
-};
-
-const DISTRIBUTION_TAG: Record<string, TagType> = {
-  none: undefined,
-  running: "primary",
-  all_success: "success",
-  partial: "warning",
-  all_failed: "danger",
-  cancelled: "warning",
-};
 
 const columns = defineProTableColumns([
   { key: "build_number", name: "#" },
@@ -114,14 +102,14 @@ onMounted(async () => {
         </u-tag>
       </template>
       <template #column:stage="{ rowData }">
-        <u-tag size="small" :type="tagType((rowData as BuildRun).stage, STAGE_TAG)">
+        <u-tag size="small" :type="tagType((rowData as BuildRun).stage, BUILD_STAGE_TAG)">
           {{ (rowData as BuildRun).stage || "—" }}
         </u-tag>
       </template>
       <template #column:distribution_summary="{ rowData }">
         <u-tag
           size="small"
-          :type="tagType((rowData as BuildRun).distribution_summary, DISTRIBUTION_TAG)"
+          :type="tagType((rowData as BuildRun).distribution_summary, BUILD_DISTRIBUTION_TAG)"
         >
           {{ (rowData as BuildRun).distribution_summary || "—" }}
         </u-tag>

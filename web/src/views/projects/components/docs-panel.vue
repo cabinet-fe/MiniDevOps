@@ -254,7 +254,6 @@ watch(
 );
 
 onMounted(() => {
-  void loadTree();
   void listAgents({ page: 1, page_size: 100 })
     .then((page) => {
       agentOptions.value = (page.items ?? []).map((a) => ({ label: a.name, value: a.id }));

@@ -3,6 +3,7 @@ defineOptions({ name: "CicdBuildRunDetail" });
 
 import { computed, onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
+import { saveBlob } from "@cat-kit/fe";
 import { message } from "@veltra/desktop";
 
 import {
@@ -17,7 +18,13 @@ import type { BuildRun } from "@/api/types";
 import BuildLogViewer, { resolveBuildLogStatus } from "@/components/build-log-viewer";
 import { usePermission } from "@/composables/use-permission";
 import { formatDateTime } from "@/lib/datetime";
-import { JOB_STATUS_TAG, TRIGGER_TYPE_TAG, tagType, type TagType } from "@/lib/tag";
+import {
+  BUILD_DISTRIBUTION_TAG,
+  BUILD_STAGE_TAG,
+  JOB_STATUS_TAG,
+  TRIGGER_TYPE_TAG,
+  tagType,
+} from "@/lib/tag";
 
 const route = useRoute();
 const router = useRouter();
@@ -27,24 +34,6 @@ const run = ref<BuildRun | null>(null);
 const loading = ref(true);
 const acting = ref(false);
 const logViewerRef = ref<InstanceType<typeof BuildLogViewer> | null>(null);
-
-const STAGE_TAG: Record<string, TagType> = {
-  pending: undefined,
-  cloning: "primary",
-  building: "primary",
-  archiving: "primary",
-  distributing: "warning",
-  idle: "success",
-};
-
-const DISTRIBUTION_TAG: Record<string, TagType> = {
-  none: undefined,
-  running: "primary",
-  all_success: "success",
-  partial: "warning",
-  all_failed: "danger",
-  cancelled: "warning",
-};
 
 function parseRouteId(raw: unknown): number | null {
   const value = Array.isArray(raw) ? raw[0] : raw;
@@ -172,11 +161,7 @@ async function onDownloadArtifact() {
     const cd = res.headers.get("Content-Disposition") || "";
     const m = /filename="?([^"]+)"?/.exec(cd);
     const name = m?.[1] || `build-${run.value.build_number}.tar.gz`;
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = name;
-    a.click();
-    URL.revokeObjectURL(a.href);
+    saveBlob(blob, name);
   } catch (err) {
     message.error(err instanceof Error ? err.message : "下载失败");
   }
@@ -226,13 +211,13 @@ onMounted(async () => {
           <div class="meta-grid">
             <div class="meta-item">
               <span class="meta-label">阶段</span>
-              <u-tag size="small" :type="tagType(run.stage, STAGE_TAG)">
+              <u-tag size="small" :type="tagType(run.stage, BUILD_STAGE_TAG)">
                 {{ run.stage || "—" }}
               </u-tag>
             </div>
             <div class="meta-item">
               <span class="meta-label">分发汇总</span>
-              <u-tag size="small" :type="tagType(run.distribution_summary, DISTRIBUTION_TAG)">
+              <u-tag size="small" :type="tagType(run.distribution_summary, BUILD_DISTRIBUTION_TAG)">
                 {{ run.distribution_summary || "—" }}
               </u-tag>
             </div>

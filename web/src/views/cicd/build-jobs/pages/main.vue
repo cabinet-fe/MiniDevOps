@@ -21,7 +21,13 @@ import FormDialog from "@/components/form-dialog";
 import ProTable, { defineProTableColumns } from "@/components/pro-table";
 import { usePermission } from "@/composables/use-permission";
 import { formatDateTime } from "@/lib/datetime";
-import { JOB_STATUS_TAG, TRIGGER_TYPE_TAG, tagType, type TagType } from "@/lib/tag";
+import {
+  BUILD_STAGE_TAG,
+  JOB_STATUS_TAG,
+  TRIGGER_TYPE_TAG,
+  tagType,
+  type TagType,
+} from "@/lib/tag";
 
 const METHOD_OPTIONS = [
   { label: "rsync", value: "rsync" },
@@ -119,15 +125,6 @@ const historyColumns = defineProTableColumns([
   { key: "created_at", name: "创建时间", sortable: true, render: ({ val }) => formatDateTime(val) },
   { key: "action", name: "操作", width: 100, align: "center", fixed: "right" },
 ]);
-
-const HISTORY_STAGE_TAG: Record<string, TagType> = {
-  pending: undefined,
-  cloning: "primary",
-  building: "primary",
-  archiving: "primary",
-  distributing: "warning",
-  idle: "success",
-};
 
 async function loadBranches(repositoryId?: number) {
   if (!repositoryId) {
@@ -240,35 +237,15 @@ function removeTarget(idx: number) {
 }
 
 function buildBody(): Record<string, unknown> {
+  const { env_var_names, deploy_targets, agent_id, ...rest } = form;
   return {
-    repository_id: form.repository_id,
-    name: form.name,
-    description: form.description,
-    enabled: form.enabled,
-    branch: form.branch,
-    shallow_clone: form.shallow_clone,
-    build_script_type: form.build_script_type,
-    build_script: form.build_script,
-    work_dir: form.work_dir,
-    output_dir: form.output_dir,
-    env_var_names: form.env_var_names
+    ...rest,
+    env_var_names: env_var_names
       .split(/[,;\s]+/)
       .map((s) => s.trim())
       .filter(Boolean),
-    trigger_manual: form.trigger_manual,
-    trigger_webhook: form.trigger_webhook,
-    trigger_cron: form.trigger_cron,
-    webhook_type: form.webhook_type,
-    webhook_ref_path: form.webhook_ref_path,
-    webhook_commit_path: form.webhook_commit_path,
-    webhook_message_path: form.webhook_message_path,
-    cron_expression: form.cron_expression,
-    cron_timezone: form.cron_timezone,
-    max_artifacts: form.max_artifacts,
-    artifact_format: form.artifact_format,
-    agent_trigger_event: form.agent_trigger_event,
-    agent_id: form.agent_id || null,
-    deploy_targets: form.deploy_targets.map((t, i) => ({
+    agent_id: agent_id || null,
+    deploy_targets: deploy_targets.map((t, i) => ({
       server_id: t.method === "local" ? null : t.server_id,
       remote_path: t.remote_path,
       method: t.method,
@@ -378,15 +355,12 @@ async function rotateWebhookSecret() {
       </template>
       <template #column:triggers="{ rowData }">
         <span class="tag-cell">
-          <u-tag
-            v-for="part in triggerParts(rowData as BuildJob)"
-            :key="part.label"
-            size="small"
-            :type="part.type"
-          >
-            {{ part.label }}
-          </u-tag>
-          <template v-if="!triggerParts(rowData as BuildJob).length">—</template>
+          <template v-for="parts in [triggerParts(rowData as BuildJob)]" :key="0">
+            <u-tag v-for="part in parts" :key="part.label" size="small" :type="part.type">
+              {{ part.label }}
+            </u-tag>
+            <template v-if="!parts.length">—</template>
+          </template>
         </span>
       </template>
       <template #column:action="{ rowData }">
@@ -548,7 +522,7 @@ async function rotateWebhookSecret() {
           </u-tag>
         </template>
         <template #column:stage="{ rowData }">
-          <u-tag size="small" :type="tagType((rowData as BuildRun).stage, HISTORY_STAGE_TAG)">
+          <u-tag size="small" :type="tagType((rowData as BuildRun).stage, BUILD_STAGE_TAG)">
             {{ (rowData as BuildRun).stage || "—" }}
           </u-tag>
         </template>

@@ -3,6 +3,7 @@ defineOptions({ name: "AiSkills" });
 
 import { reactive, ref, useTemplateRef } from "vue";
 import { o } from "@cat-kit/core";
+import { saveBlob } from "@cat-kit/fe";
 import { message } from "@veltra/desktop";
 
 import { deleteSkill, downloadSkill, overwriteSkill, uploadSkill } from "@/api/ai";
@@ -73,13 +74,7 @@ async function save() {
 
 async function onDownload(row: SkillPackage) {
   try {
-    const blob = await downloadSkill(row.id);
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${row.name}.zip`;
-    a.click();
-    URL.revokeObjectURL(url);
+    saveBlob(await downloadSkill(row.id), `${row.name}.zip`);
   } catch (error) {
     message.error(error instanceof Error ? error.message : "下载失败");
   }

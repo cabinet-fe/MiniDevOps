@@ -139,7 +139,7 @@ async function reload() {
     const items = await listDevEnvironments();
     environments.value = items;
     await Promise.all(items.map((item) => refreshLatestJob(item.id)));
-    void detectAll(items);
+    void Promise.all(items.map((item) => runDetect(item, { silent: true })));
   } catch (error) {
     showError(error);
   } finally {
@@ -147,15 +147,11 @@ async function reload() {
   }
 }
 
-async function detectAll(items: DevEnvironment[]) {
-  await Promise.all(items.map((item) => runDetect(item, { silent: true })));
-}
-
 async function refreshLatestJob(envId: number) {
   try {
     const page = await listDevEnvJobs(envId, { page: 1, page_size: 1 });
     const job = page.items[0];
-    latestJobs.value = { ...latestJobs.value, [envId]: job };
+    latestJobs.value[envId] = job;
     if (job && ["queued", "running"].includes(job.status)) {
       trackJob(envId, job.id);
     }
@@ -203,11 +199,7 @@ async function saveEnv() {
 }
 
 async function saveScripts() {
-  if (!scriptsEnv.value) {
-    scriptsDialogOpen.value = false;
-    return;
-  }
-  if (scriptsEnv.value.kind !== "custom") {
+  if (!scriptsEnv.value || scriptsEnv.value.kind !== "custom") {
     scriptsDialogOpen.value = false;
     return;
   }
@@ -233,29 +225,26 @@ async function removeEnv(item: DevEnvironment) {
 }
 
 async function runDetect(item: DevEnvironment, options?: { silent?: boolean }) {
-  detectStates.value = {
-    ...detectStates.value,
-    [item.id]: { status: "loading", version: detectStates.value[item.id]?.version },
+  detectStates.value[item.id] = {
+    status: "loading",
+    version: detectStates.value[item.id]?.version,
   };
   try {
     const result = await detectDevEnvironment(item.id);
-    detectStates.value = {
-      ...detectStates.value,
-      [item.id]: result.detected
-        ? {
-            status: "detected",
-            version: parseDetectedVersion(result.output),
-            output: result.output,
-          }
-        : { status: "missing", output: result.output },
-    };
+    detectStates.value[item.id] = result.detected
+      ? {
+          status: "detected",
+          version: parseDetectedVersion(result.output),
+          output: result.output,
+        }
+      : { status: "missing", output: result.output };
     if (!options?.silent) {
       message[result.detected ? "success" : "warning"](
         result.detected ? `已检测到 ${item.name}` : `${item.name} 未检测到`,
       );
     }
   } catch (error) {
-    detectStates.value = { ...detectStates.value, [item.id]: { status: "error" } };
+    detectStates.value[item.id] = { status: "error" };
     if (!options?.silent) showError(error);
   }
 }
@@ -275,7 +264,7 @@ async function runOperation(
     const job = await enqueueDevEnvironmentOperation(item.id, operation, version);
     message.success("任务已排队");
     trackJob(item.id, job.id);
-    latestJobs.value = { ...latestJobs.value, [item.id]: job };
+    latestJobs.value[item.id] = job;
   } catch (error) {
     showError(error);
   }
@@ -347,7 +336,7 @@ async function retryJob(envId: number, job: DevEnvJob) {
     const next = await retryDevEnvJob(envId, job.id);
     message.success("已创建重试任务");
     trackJob(envId, next.id);
-    latestJobs.value = { ...latestJobs.value, [envId]: next };
+    latestJobs.value[envId] = next;
   } catch (error) {
     showError(error);
   }
@@ -375,7 +364,7 @@ async function pollPendingJobs() {
     const entries = [...pendingJobs.entries()];
     const jobs = await Promise.all(entries.map(([jobId, envId]) => getDevEnvJob(envId, jobId)));
     for (const job of jobs) {
-      latestJobs.value = { ...latestJobs.value, [job.environment_id]: job };
+      latestJobs.value[job.environment_id] = job;
       if (!["queued", "running"].includes(job.status)) {
         pendingJobs.delete(job.id);
         const env = environments.value.find((item) => item.id === job.environment_id);
@@ -400,15 +389,10 @@ function stopJobPolling() {
   }
 }
 
-function jobStatusLabel(status?: string) {
-  return status || "暂无任务";
-}
-
 function versionTagType(state?: DetectState) {
-  if (!state) return "info";
-  if (state.status === "detected") return "success";
-  if (state.status === "missing") return "warning";
-  if (state.status === "error") return "danger";
+  if (state?.status === "detected") return "success";
+  if (state?.status === "missing") return "warning";
+  if (state?.status === "error") return "danger";
   return "info";
 }
 
@@ -443,27 +427,25 @@ onUnmounted(stopJobPolling);
         <u-card v-for="item in environments" :key="item.id" class="env-card">
           <u-card-content>
             <header class="card-head">
-              <div class="card-title">
-                <div class="title-row">
-                  <img
-                    class="lang-icon"
-                    :src="envIcon(item)"
-                    :alt="item.name"
-                    width="28"
-                    height="28"
-                  />
-                  <h3>{{ item.name }}</h3>
-                  <u-tag size="small" :type="versionTagType(detectStates[item.id])">
-                    {{ versionTagLabel(detectStates[item.id]) }}
-                  </u-tag>
-                </div>
-                <p class="meta">
-                  <span>{{ item.kind === "builtin" ? "内置" : "自定义" }}</span>
-                  <span>{{ item.executable }}</span>
-                  <span v-if="item.default_version">默认 {{ item.default_version }}</span>
-                </p>
-                <p v-if="item.description" class="desc">{{ item.description }}</p>
+              <div class="title-row">
+                <img
+                  class="lang-icon"
+                  :src="envIcon(item)"
+                  :alt="item.name"
+                  width="28"
+                  height="28"
+                />
+                <h3>{{ item.name }}</h3>
+                <u-tag size="small" :type="versionTagType(detectStates[item.id])">
+                  {{ versionTagLabel(detectStates[item.id]) }}
+                </u-tag>
               </div>
+              <p class="meta">
+                <span>{{ item.kind === "builtin" ? "内置" : "自定义" }}</span>
+                <span>{{ item.executable }}</span>
+                <span v-if="item.default_version">默认 {{ item.default_version }}</span>
+              </p>
+              <p v-if="item.description" class="desc">{{ item.description }}</p>
               <div class="actions">
                 <u-action-group :max="5">
                   <u-action @run="openSourcesManager(item)">设置</u-action>
@@ -485,7 +467,7 @@ onUnmounted(stopJobPolling);
               <div class="block-head">
                 <h4>最近任务</h4>
                 <div class="actions">
-                  <span class="job-status">{{ jobStatusLabel(latestJobs[item.id]?.status) }}</span>
+                  <span class="job-status">{{ latestJobs[item.id]?.status || "暂无任务" }}</span>
                   <u-action-group :max="2">
                     <u-action @run="showJobLog(item.id, latestJobs[item.id]!)">日志</u-action>
                     <u-action
@@ -586,13 +568,11 @@ onUnmounted(stopJobPolling);
                 优先级 {{ source.priority }} · {{ source.enabled ? "启用" : "停用" }}
               </span>
             </div>
-            <div class="actions">
-              <u-action-group :max="3">
-                <u-action @run="pingSource(sourcesEnv.id, source)">Ping</u-action>
-                <u-action @run="openEditSource(sourcesEnv.id, source)">编辑</u-action>
-                <u-action type="danger" @run="removeSource(sourcesEnv.id, source)">删除</u-action>
-              </u-action-group>
-            </div>
+            <u-action-group :max="3">
+              <u-action @run="pingSource(sourcesEnv.id, source)">Ping</u-action>
+              <u-action @run="openEditSource(sourcesEnv.id, source)">编辑</u-action>
+              <u-action type="danger" @run="removeSource(sourcesEnv.id, source)">删除</u-action>
+            </u-action-group>
           </li>
         </ul>
         <p v-else class="empty">尚未配置安装源</p>
@@ -681,7 +661,7 @@ onUnmounted(stopJobPolling);
   height: 28px;
   object-fit: contain;
 }
-.card-title h3 {
+.card-head h3 {
   margin: 0;
   font-size: 16px;
   line-height: 1.4;

@@ -26,8 +26,6 @@ const tabs = [
 </template>
 
 <style scoped lang="scss">
-@use "pkg:@veltra/styles/functions" as fn;
-
 .resources-page {
   height: 100%;
 }

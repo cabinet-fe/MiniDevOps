@@ -31,14 +31,6 @@ const ROLE_LABEL: Record<string, string> = {
   readonly: "Readonly",
 };
 
-function roleTagType(role: string) {
-  return tagType(role, ROLE_TAG);
-}
-
-function roleLabel(role: string) {
-  return ROLE_LABEL[role] ?? role;
-}
-
 const props = defineProps<{ project: ProductProject }>();
 const emit = defineEmits<{ membersChanged: []; ownerTransferred: [] }>();
 
@@ -157,8 +149,8 @@ onMounted(() => void load());
     <div v-loading="loading" class="table-wrap">
       <u-table :columns="columns" :data="members" row-key="id">
         <template #column:role="{ rowData }">
-          <u-tag size="small" :type="roleTagType((rowData as ProjectMember).role)">
-            {{ roleLabel((rowData as ProjectMember).role) }}
+          <u-tag size="small" :type="tagType((rowData as ProjectMember).role, ROLE_TAG)">
+            {{ ROLE_LABEL[(rowData as ProjectMember).role] ?? (rowData as ProjectMember).role }}
           </u-tag>
         </template>
         <template #column:action="{ rowData }">

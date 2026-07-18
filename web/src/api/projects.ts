@@ -1,3 +1,5 @@
+import { saveBlob } from "@cat-kit/fe";
+
 import { http } from "./http";
 import type {
   ApiDocDiff,
@@ -203,12 +205,7 @@ export async function downloadRequirementAttachment(
     `/projects/${projectID}/requirements/${requirementID}/attachments/${attachmentID}/download`,
     { responseType: "blob" },
   );
-  const url = URL.createObjectURL(body);
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = filename;
-  anchor.click();
-  URL.revokeObjectURL(url);
+  saveBlob(body, filename);
 }
 
 export async function listDocTree(projectID: number): Promise<ApiDocNode[]> {

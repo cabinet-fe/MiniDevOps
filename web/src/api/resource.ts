@@ -195,11 +195,6 @@ export async function deleteCLISource(id: number): Promise<void> {
 }
 
 // —— Personal access tokens ——
-export async function listTokens(): Promise<PersonalAccessToken[]> {
-  const { body } = await http.get<{ items: PersonalAccessToken[] }>("/resource/tokens");
-  return body.items;
-}
-
 export async function createToken(input: {
   name: string;
   scopes: string[];

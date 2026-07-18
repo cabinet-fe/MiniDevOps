@@ -15,7 +15,7 @@ import {
   listCLISources,
   updateCLISource,
 } from "@/api/resource";
-import type { CliExecuteResult, CliInstallSource, CliRuntimeDefinition } from "@/api/types";
+import type { CliInstallSource, CliRuntimeDefinition } from "@/api/types";
 import FormDialog from "@/components/form-dialog";
 
 type DetectState = {
@@ -39,7 +39,6 @@ const sourcesLoading = ref(false);
 const sourceDialogOpen = ref(false);
 const editingSource = ref<CliInstallSource | null>(null);
 const sourceForm = reactive({
-  cli_key: "",
   name: "",
   base_url: "",
   priority: 10,
@@ -61,10 +60,9 @@ function formatVersion(version?: string) {
 }
 
 function versionTagType(state?: DetectState) {
-  if (!state) return "info";
-  if (state.status === "detected") return "success";
-  if (state.status === "missing") return "warning";
-  if (state.status === "error") return "danger";
+  if (state?.status === "detected") return "success";
+  if (state?.status === "missing") return "warning";
+  if (state?.status === "error") return "danger";
   return "info";
 }
 
@@ -78,11 +76,6 @@ function versionTagLabel(state?: DetectState) {
 function isBusy(key: string, op?: Operation) {
   if (!busy.value || busy.value.key !== key) return false;
   return op ? busy.value.op === op : true;
-}
-
-function formatFailureDetail(result: CliExecuteResult) {
-  const parts = [result.output?.trim(), result.error?.trim()].filter(Boolean);
-  return parts.join("\n\n") || "无输出";
 }
 
 async function reload() {
@@ -100,20 +93,17 @@ async function reload() {
 }
 
 async function runDetect(item: CliRuntimeDefinition) {
-  detectStates.value = {
-    ...detectStates.value,
-    [item.key]: { status: "loading", version: detectStates.value[item.key]?.version },
+  detectStates.value[item.key] = {
+    status: "loading",
+    version: detectStates.value[item.key]?.version,
   };
   try {
     const result = await detectCLI(item.key);
-    detectStates.value = {
-      ...detectStates.value,
-      [item.key]: result.detected
-        ? { status: "detected", version: formatVersion(result.version) || undefined }
-        : { status: "missing" },
-    };
+    detectStates.value[item.key] = result.detected
+      ? { status: "detected", version: formatVersion(result.version) || undefined }
+      : { status: "missing" };
   } catch {
-    detectStates.value = { ...detectStates.value, [item.key]: { status: "error" } };
+    detectStates.value[item.key] = { status: "error" };
   }
 }
 
@@ -170,7 +160,8 @@ async function runOperation(
       return;
     }
     failureTitle.value = `${item.name} · ${operation} 失败`;
-    failureDetail.value = formatFailureDetail(result);
+    const parts = [result.output?.trim(), result.error?.trim()].filter(Boolean);
+    failureDetail.value = parts.join("\n\n") || "无输出";
     failureDialogOpen.value = true;
   } catch (error) {
     showError(error);
@@ -179,12 +170,11 @@ async function runOperation(
   }
 }
 
-async function openSourcesManager(item: CliRuntimeDefinition) {
-  sourcesCli.value = item;
-  sourcesDialogOpen.value = true;
+async function loadSources() {
+  if (!sourcesCli.value) return;
   sourcesLoading.value = true;
   try {
-    sourcesList.value = await listCLISources(item.key);
+    sourcesList.value = await listCLISources(sourcesCli.value.key);
   } catch (error) {
     showError(error);
     sourcesList.value = [];
@@ -193,21 +183,14 @@ async function openSourcesManager(item: CliRuntimeDefinition) {
   }
 }
 
-async function refreshSources() {
-  if (!sourcesCli.value) return;
-  sourcesLoading.value = true;
-  try {
-    sourcesList.value = await listCLISources(sourcesCli.value.key);
-  } catch (error) {
-    showError(error);
-  } finally {
-    sourcesLoading.value = false;
-  }
+async function openSourcesManager(item: CliRuntimeDefinition) {
+  sourcesCli.value = item;
+  sourcesDialogOpen.value = true;
+  await loadSources();
 }
 
 function openCreateSource() {
   editingSource.value = null;
-  sourceForm.cli_key = sourcesCli.value?.key ?? "";
   sourceDialogOpen.value = true;
 }
 
@@ -218,16 +201,17 @@ function openEditSource(source: CliInstallSource) {
 }
 
 async function saveSource() {
+  if (!sourcesCli.value) return;
   try {
     if (editingSource.value) {
       await updateCLISource(editingSource.value.id, sourceForm);
       message.success("安装源已更新");
     } else {
-      await createCLISource(sourceForm);
+      await createCLISource({ ...sourceForm, cli_key: sourcesCli.value.key });
       message.success("安装源已创建");
     }
     sourceDialogOpen.value = false;
-    await refreshSources();
+    await loadSources();
   } catch (error) {
     showError(error);
   }
@@ -237,7 +221,7 @@ async function removeSource(source: CliInstallSource) {
   if (!window.confirm(`删除安装源 ${source.name}？`)) return;
   try {
     await deleteCLISource(source.id);
-    await refreshSources();
+    await loadSources();
   } catch (error) {
     showError(error);
   }
@@ -258,19 +242,17 @@ onMounted(() => {
       <u-card v-for="item in items" :key="item.key" class="cli-card">
         <u-card-content>
           <header class="card-head">
-            <div class="card-title">
-              <div class="title-row">
-                <h3>{{ item.name }}</h3>
-                <u-tag size="small" :type="versionTagType(detectStates[item.key])">
-                  {{ versionTagLabel(detectStates[item.key]) }}
-                </u-tag>
-              </div>
-              <p class="meta">
-                <span>{{ item.key }}</span>
-                <span>{{ item.binary_name }}</span>
-              </p>
-              <p v-if="item.description" class="desc">{{ item.description }}</p>
+            <div class="title-row">
+              <h3>{{ item.name }}</h3>
+              <u-tag size="small" :type="versionTagType(detectStates[item.key])">
+                {{ versionTagLabel(detectStates[item.key]) }}
+              </u-tag>
             </div>
+            <p class="meta">
+              <span>{{ item.key }}</span>
+              <span>{{ item.binary_name }}</span>
+            </p>
+            <p v-if="item.description" class="desc">{{ item.description }}</p>
             <div class="actions">
               <u-action-group :max="5">
                 <u-action @run="openSourcesManager(item)">设置</u-action>
@@ -329,12 +311,10 @@ onMounted(() => {
                 优先级 {{ source.priority }} · {{ source.enabled ? "启用" : "停用" }}
               </span>
             </div>
-            <div class="actions">
-              <u-action-group :max="2">
-                <u-action @run="openEditSource(source)">编辑</u-action>
-                <u-action type="danger" @run="removeSource(source)">删除</u-action>
-              </u-action-group>
-            </div>
+            <u-action-group :max="2">
+              <u-action @run="openEditSource(source)">编辑</u-action>
+              <u-action type="danger" @run="removeSource(source)">删除</u-action>
+            </u-action-group>
           </li>
         </ul>
         <p v-else class="empty">尚未配置安装源，安装时将使用 npm 默认 Registry</p>
@@ -415,7 +395,7 @@ onMounted(() => {
   gap: 10px;
   min-width: 0;
 }
-.card-title h3 {
+.card-head h3 {
   margin: 0;
   font-size: 16px;
   line-height: 1.4;

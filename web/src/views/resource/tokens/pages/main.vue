@@ -37,9 +37,6 @@ const columns = defineProTableColumns([
 ]);
 
 function openCreate() {
-  form.name = "";
-  form.scopeSkills = true;
-  form.scopeAgents = false;
   plaintext.value = "";
   dialogOpen.value = true;
 }

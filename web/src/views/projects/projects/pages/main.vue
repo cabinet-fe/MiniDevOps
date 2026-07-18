@@ -48,12 +48,7 @@ function openEdit(project: ProductProject) {
 
 async function save() {
   try {
-    const input = {
-      name: form.name,
-      slug: form.slug,
-      description: form.description,
-      tags: form.tags,
-    };
+    const input = { ...form };
     if (editing.value) {
       await updateProject(editing.value.id, input);
       message.success("项目已更新");

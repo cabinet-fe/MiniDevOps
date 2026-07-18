@@ -72,13 +72,14 @@ const form = reactive({
   timeout_sec: 600,
 });
 
-const triggerDraft = reactive({
+const TRIGGER_DRAFT_DEFAULTS = {
   type: "manual",
   cron_expression: "0 * * * *",
   cron_timezone: "Asia/Shanghai",
   build_job_id: undefined as number | undefined,
   build_event: "artifact_ready",
-});
+};
+const triggerDraft = reactive({ ...TRIGGER_DRAFT_DEFAULTS });
 
 const skillOptions = computed(() =>
   skills.value.map((s) => ({
@@ -134,29 +135,11 @@ onMounted(async () => {
 });
 
 function resetTriggerDraft() {
-  triggerDraft.type = "manual";
-  triggerDraft.cron_expression = "0 * * * *";
-  triggerDraft.cron_timezone = "Asia/Shanghai";
-  triggerDraft.build_job_id = undefined;
-  triggerDraft.build_event = "artifact_ready";
-}
-
-function resetFormFields() {
-  form.name = "";
-  form.description = "";
-  form.enabled = true;
-  form.cli_key = "claude_code";
-  form.system_prompt = "";
-  form.skill_ids = [];
-  form.build_job_ids = [];
-  form.output_dir = "output";
-  form.stream_output = false;
-  form.timeout_sec = 600;
+  Object.assign(triggerDraft, TRIGGER_DRAFT_DEFAULTS);
 }
 
 function openCreate() {
   editing.value = null;
-  resetFormFields();
   formTriggers.value = [];
   initialTriggerIDs.value = [];
   resetTriggerDraft();
@@ -259,18 +242,7 @@ async function syncTriggers(agentID: number) {
 }
 
 async function save() {
-  const body = {
-    name: form.name,
-    description: form.description,
-    enabled: form.enabled,
-    cli_key: form.cli_key,
-    system_prompt: form.system_prompt,
-    skill_ids: form.skill_ids,
-    build_job_ids: form.build_job_ids,
-    output_dir: form.output_dir || "output",
-    stream_output: form.stream_output,
-    timeout_sec: form.timeout_sec,
-  };
+  const body = { ...form, output_dir: form.output_dir || "output" };
   try {
     let agentID: number;
     if (editing.value) {
@@ -503,13 +475,6 @@ async function remove(row: AiAgent) {
 .trigger-empty {
   margin: 0 0 12px;
   font-size: 13px;
-  opacity: 0.65;
-}
-
-.form-hint {
-  margin: -8px 0 12px;
-  font-size: 12px;
-  line-height: 1.5;
   opacity: 0.65;
 }
 

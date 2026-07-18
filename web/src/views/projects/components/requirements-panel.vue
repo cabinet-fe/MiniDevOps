@@ -129,7 +129,7 @@ function statusLabel(value: string) {
 function canEditComment(comment: RequirementComment) {
   return (
     canUpdateRequirement.value &&
-    (props.manageAll || canAdminProjectContent.value || comment.created_by === auth.user?.id)
+    (canAdminProjectContent.value || comment.created_by === auth.user?.id)
   );
 }
 
@@ -137,7 +137,7 @@ function canDeleteComment(comment: RequirementComment) {
   return (
     hasPermission("project_requirements:delete") &&
     canEditProjectContent.value &&
-    (props.manageAll || canAdminProjectContent.value || comment.created_by === auth.user?.id)
+    (canAdminProjectContent.value || comment.created_by === auth.user?.id)
   );
 }
 
@@ -167,14 +167,7 @@ function openEdit(requirement: Requirement) {
 
 async function save() {
   try {
-    const input = {
-      title: form.title,
-      description: form.description,
-      status: form.status,
-      priority: form.priority,
-      assignee_id: form.assignee_id,
-      tags: form.tags,
-    };
+    const input = { ...form };
     if (editing.value) {
       await updateRequirement(props.project.id, editing.value.id, input);
       message.success("需求已更新");

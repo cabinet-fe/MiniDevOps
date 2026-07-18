@@ -43,18 +43,6 @@ export async function createTrigger(
   return body;
 }
 
-export async function updateTrigger(
-  agentID: number,
-  triggerID: number,
-  input: Record<string, unknown>,
-): Promise<AgentTrigger> {
-  const { body } = await http.put<AgentTrigger>(
-    `/ai/agents/${agentID}/triggers/${triggerID}`,
-    input,
-  );
-  return body;
-}
-
 export async function deleteTrigger(agentID: number, triggerID: number): Promise<void> {
   await http.delete(`/ai/agents/${agentID}/triggers/${triggerID}`);
 }

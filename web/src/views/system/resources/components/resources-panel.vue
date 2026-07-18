@@ -38,10 +38,6 @@ const RESOURCE_TYPE_TAG: Record<string, TagType> = {
   card: "warning",
 };
 
-function resourceTypeTag(type: string) {
-  return tagType(type, RESOURCE_TYPE_TAG);
-}
-
 const { hasPermission } = usePermission();
 const auth = useAuthStore();
 const listRef = useTemplateRef("list");
@@ -99,7 +95,6 @@ const isFeatureType = computed(() => form.type === "action" || form.type === "ca
 const canEditSuperOnly = computed(() => !!auth.user?.is_super_admin);
 
 const showIconUpload = computed(() => !!editing.value && editing.value.type === "menu");
-
 const editingIconSrc = computed(() => iconSrc(editing.value));
 
 const selectedGroup = computed(() => groups.value.find((g) => g.id === form.group_id));
@@ -138,11 +133,6 @@ function iconSrc(row?: RbacResource | null): string | undefined {
   return `data:${row.icon_mime || "image/png"};base64,${row.icon_base64}`;
 }
 
-/** Menus are flat roots (features nest under them; parent picker only needs menus). */
-function menuRoots(nodes: RbacResource[]): RbacResource[] {
-  return nodes.filter((n) => n.type === "menu");
-}
-
 function findNode(nodes: RbacResource[], id: number): RbacResource | null {
   for (const node of nodes) {
     if (node.id === id) return node;
@@ -172,7 +162,7 @@ async function loadGroups() {
 async function loadMenuParents() {
   try {
     const res = await listResources({ type: "menu" });
-    menuParents.value = menuRoots(res.items ?? []);
+    menuParents.value = (res.items ?? []).filter((n) => n.type === "menu");
   } catch {
     menuParents.value = [];
   }
@@ -206,38 +196,22 @@ async function save() {
   try {
     if (editing.value) {
       const body: Record<string, unknown> = {
-        enabled: form.enabled,
-        sort_key: form.sort_key,
-        title: form.title,
-        route: form.route,
-        hidden: form.hidden,
+        ...o(form).pick(["enabled", "sort_key", "title", "route", "hidden"]),
       };
-      if (editing.value.type === "menu" && form.group_id) {
-        body.group_id = form.group_id;
-      }
-      if (canEditSuperOnly.value) {
-        body.super_admin_only = form.super_admin_only;
-      }
+      if (editing.value.type === "menu" && form.group_id) body.group_id = form.group_id;
+      if (canEditSuperOnly.value) body.super_admin_only = form.super_admin_only;
       await updateResource(editing.value.id, body);
       message.success("已更新");
     } else {
       const body: Record<string, unknown> = {
-        code: form.code,
-        type: form.type,
-        enabled: form.enabled,
-        sort_key: form.sort_key,
-        title: form.title,
+        ...o(form).pick(["code", "type", "enabled", "sort_key", "title"]),
       };
       if (form.type === "menu") {
-        body.group_id = form.group_id;
-        body.route = form.route;
-        body.hidden = form.hidden;
+        Object.assign(body, o(form).pick(["group_id", "route", "hidden"]));
       } else {
         body.parent_id = form.parent_id;
       }
-      if (canEditSuperOnly.value) {
-        body.super_admin_only = form.super_admin_only;
-      }
+      if (canEditSuperOnly.value) body.super_admin_only = form.super_admin_only;
       await createResource(body);
       message.success("已创建");
     }
@@ -334,7 +308,7 @@ async function remove(row: RbacResource) {
         {{ (rowData as RbacResource).route || "—" }}
       </template>
       <template #column:type="{ rowData }">
-        <u-tag size="small" :type="resourceTypeTag((rowData as RbacResource).type)">
+        <u-tag size="small" :type="tagType((rowData as RbacResource).type, RESOURCE_TYPE_TAG)">
           {{ (rowData as RbacResource).type }}
         </u-tag>
       </template>

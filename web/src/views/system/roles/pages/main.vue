@@ -50,9 +50,6 @@ function isBuiltinRole(row: Role) {
 
 function openCreate() {
   editing.value = null;
-  form.name = "";
-  form.code = "";
-  form.description = "";
   dialogOpen.value = true;
 }
 
