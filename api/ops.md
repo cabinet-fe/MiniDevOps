@@ -34,14 +34,14 @@
 
 ### GET /dashboard/system-info — 系统信息卡片数据
 
-权限：`dashboard_system_info:view`
+权限：`dashboard:system_info`
 响应 200：data = SystemInfo
 错误：403
 说明：有权限的非超管也可见；不因此获得运维写权限。
 
 ### GET /dashboard/system-status — 系统状态卡片数据
 
-权限：`dashboard_system_status:view`
+权限：`dashboard:system_status`
 响应 200：data = SystemStatus
 错误：403
 说明：`disk_*` 为关键数据目录所在分区的宿主机磁盘占用；`directories` 为各关键目录自身占用大小（非分区剩余空间）。

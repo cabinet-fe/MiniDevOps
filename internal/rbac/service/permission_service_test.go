@@ -252,15 +252,37 @@ func TestMenuTrimTwoLevelGroups(t *testing.T) {
 }
 
 func TestHiddenMenusExcludedFromNav(t *testing.T) {
-	perm, _, _, _, _ := setupRBAC(t)
+	perm, _, resources, _, _ := setupRBAC(t)
+	tree, err := resources.ListTree(service.ListResourcesFilter{Type: model.ResourceTypeMenu})
+	if err != nil || len(tree) == 0 {
+		t.Fatalf("need menus: %v", err)
+	}
+	var gid *uint
+	for _, m := range tree {
+		if m.Code == "dashboard" && m.GroupID != nil {
+			gid = m.GroupID
+			break
+		}
+	}
+	if gid == nil {
+		t.Fatal("dashboard menu missing group_id")
+	}
+	hidden := true
+	enabled := true
+	if _, err := resources.Create(service.CreateResourceInput{
+		Type: model.ResourceTypeMenu, Code: "hidden_mount", Title: "隐藏挂载",
+		GroupID: gid, Hidden: &hidden, Enabled: &enabled,
+	}, true); err != nil {
+		t.Fatal(err)
+	}
 	menus, err := perm.TrimMenus(1, true)
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, g := range menus {
 		for _, item := range g.Children {
-			if item.Title == "系统信息卡片" || item.Title == "系统状态卡片" {
-				t.Fatalf("hidden mount menu leaked into nav: %+v", item)
+			if item.Title == "隐藏挂载" {
+				t.Fatalf("hidden menu leaked into nav: %+v", item)
 			}
 		}
 	}

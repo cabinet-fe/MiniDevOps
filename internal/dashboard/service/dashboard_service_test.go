@@ -70,7 +70,7 @@ func TestDirectoryUsedBytesMissingRootIsZero(t *testing.T) {
 func TestLayoutFiltersStaleBuildCardAndRejectsUnauthorizedAddition(t *testing.T) {
 	repo := newDashboardRepository(t)
 	svc := NewDashboardService(repo, "test", time.Now(), []string{"."})
-	permissions := []string{"dashboard_system_info:view", "dashboard_system_status:view"}
+	permissions := []string{"dashboard:system_info", "dashboard:system_status"}
 
 	if err := repo.CreateLayout(&model.Layout{
 		UserID:    42,
@@ -98,7 +98,7 @@ func TestLayoutFiltersStaleBuildCardAndRejectsUnauthorizedAddition(t *testing.T)
 func TestLayoutFiltersStaleAgentRunCardAndRejectsUnauthorizedAddition(t *testing.T) {
 	repo := newDashboardRepository(t)
 	svc := NewDashboardService(repo, "test", time.Now(), []string{"."})
-	permissions := []string{"dashboard_system_info:view", "dashboard_system_status:view"}
+	permissions := []string{"dashboard:system_info", "dashboard:system_status"}
 
 	if err := repo.CreateLayout(&model.Layout{
 		UserID:    43,
@@ -127,7 +127,7 @@ func TestLayoutPersistsAfterPut(t *testing.T) {
 	repo := newDashboardRepository(t)
 	svc := NewDashboardService(repo, "test", time.Now(), []string{"."})
 	permissions := []string{
-		"cicd_build_runs:view", "dashboard_system_info:view", "dashboard_system_status:view",
+		"cicd_build_runs:view", "dashboard:system_info", "dashboard:system_status",
 	}
 	input := []model.CardLayout{
 		{ID: CardSystemStatus, Visible: false, Order: 0, X: 0, Y: 0, W: 8, H: 3},
@@ -163,7 +163,7 @@ func TestLayoutUpgradesLegacyJSONWithoutGeometry(t *testing.T) {
 	svc := NewDashboardService(repo, "test", time.Now(), []string{"."})
 	permissions := []string{
 		"cicd_build_runs:view", "ai_runs:view",
-		"dashboard_system_info:view", "dashboard_system_status:view",
+		"dashboard:system_info", "dashboard:system_status",
 	}
 	if err := repo.CreateLayout(&model.Layout{
 		UserID: 8,
@@ -203,7 +203,7 @@ func TestLayoutUpgradesLegacyJSONWithoutGeometry(t *testing.T) {
 func TestLayoutRejectsInvalidGeometry(t *testing.T) {
 	repo := newDashboardRepository(t)
 	svc := NewDashboardService(repo, "test", time.Now(), []string{"."})
-	permissions := []string{"dashboard_system_info:view"}
+	permissions := []string{"dashboard:system_info"}
 
 	_, err := svc.PutLayout(9, false, permissions, []model.CardLayout{
 		{ID: CardSystemInfo, Visible: true, Order: 0, X: 0, Y: 0, W: 1, H: 4},
@@ -232,7 +232,7 @@ func TestDefaultLayoutIncludesGeometry(t *testing.T) {
 	svc := NewDashboardService(repo, "test", time.Now(), []string{"."})
 	permissions := []string{
 		"cicd_build_runs:view", "ai_runs:view",
-		"dashboard_system_info:view", "dashboard_system_status:view",
+		"dashboard:system_info", "dashboard:system_status",
 	}
 	layout, err := svc.GetLayout(10, false, permissions)
 	if err != nil {

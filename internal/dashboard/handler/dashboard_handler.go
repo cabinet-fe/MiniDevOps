@@ -29,8 +29,8 @@ func (h *DashboardHandler) RegisterRoutes(rg *gin.RouterGroup, authMW gin.Handle
 	g.PUT("/layout", h.PutLayout)
 	g.GET("/build-summary", rbacmw.RequirePermission(h.perm, "cicd_build_runs:view"), h.BuildSummary)
 	g.GET("/agent-run-summary", rbacmw.RequirePermission(h.perm, "ai_runs:view"), h.AgentRunSummary)
-	g.GET("/system-info", rbacmw.RequirePermission(h.perm, "dashboard_system_info:view"), h.SystemInfo)
-	g.GET("/system-status", rbacmw.RequirePermission(h.perm, "dashboard_system_status:view"), h.SystemStatus)
+	g.GET("/system-info", rbacmw.RequirePermission(h.perm, "dashboard:system_info"), h.SystemInfo)
+	g.GET("/system-status", rbacmw.RequirePermission(h.perm, "dashboard:system_status"), h.SystemStatus)
 }
 
 func (h *DashboardHandler) GetLayout(c *gin.Context) {

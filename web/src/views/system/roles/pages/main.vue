@@ -225,35 +225,31 @@ async function remove(row: Role) {
         <section v-for="group in catalog" :key="group.id" class="perm-group">
           <h3 class="perm-group__title">{{ group.name }}</h3>
           <div v-for="menu in group.menus" :key="menu.id" class="perm-menu">
-            <label class="perm-menu__head">
-              <input
-                type="checkbox"
-                :checked="menuCheckState(menu) === true"
+            <div class="perm-menu__head">
+              <u-checkbox
+                :model-value="menuCheckState(menu) === true"
                 :indeterminate="menuCheckState(menu) === 'indeterminate'"
                 :disabled="!bindableFeatures(menu).length"
-                @change="toggleMenu(menu, ($event.target as HTMLInputElement).checked)"
-              />
-              <span class="perm-menu__title">{{ menu.title }}</span>
-              <code class="perm-menu__code">{{ menu.code }}</code>
-              <u-tag v-if="menu.hidden" size="small" type="info">隐藏</u-tag>
-              <u-tag v-if="menu.super_admin_only" size="small" type="warning">仅超管</u-tag>
-            </label>
+                @change="(on) => toggleMenu(menu, on)"
+              >
+                <span class="perm-menu__title">{{ menu.title }}</span>
+                <code class="perm-menu__code">{{ menu.code }}</code>
+                <u-tag v-if="menu.hidden" size="small" type="info">隐藏</u-tag>
+                <u-tag v-if="menu.super_admin_only" size="small" type="warning">仅超管</u-tag>
+              </u-checkbox>
+            </div>
             <div class="perm-features">
-              <label
+              <u-checkbox
                 v-for="feat in menu.features"
                 :key="feat.id"
                 class="perm-check"
-                :class="{ 'perm-check--disabled': !isFeatureBindable(feat) }"
+                :model-value="isChecked(feat.full_code)"
+                :disabled="!isFeatureBindable(feat)"
+                @change="(on) => toggleFeature(feat, on)"
               >
-                <input
-                  type="checkbox"
-                  :checked="isChecked(feat.full_code)"
-                  :disabled="!isFeatureBindable(feat)"
-                  @change="toggleFeature(feat, ($event.target as HTMLInputElement).checked)"
-                />
                 <span>{{ feat.title || feat.code }}</span>
                 <u-tag v-if="feat.super_admin_only" size="small" type="warning">仅超管</u-tag>
-              </label>
+              </u-checkbox>
             </div>
           </div>
         </section>
@@ -295,15 +291,12 @@ async function remove(row: Role) {
 }
 
 .perm-menu__head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
   margin-bottom: 6px;
   font-weight: 500;
-  cursor: pointer;
 }
 
 .perm-menu__code {
+  margin-left: 6px;
   color: fn.use-var(text-color, assist);
   font-size: 12px;
 }
@@ -316,15 +309,6 @@ async function remove(row: Role) {
 }
 
 .perm-check {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
   font-size: 13px;
-  cursor: pointer;
-
-  &--disabled {
-    opacity: 0.55;
-    cursor: not-allowed;
-  }
 }
 </style>

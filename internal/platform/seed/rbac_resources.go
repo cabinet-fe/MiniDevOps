@@ -51,16 +51,9 @@ func EnsureRBACResources(db *gorm.DB) error {
 					Cards: []seedCard{
 						{Code: "build_summary", Title: "构建任务", SortKey: 10},
 						{Code: "agent_run_summary", Title: "智能体运行", SortKey: 20},
+						{Code: "system_info", Title: "系统信息", SortKey: 30},
+						{Code: "system_status", Title: "系统状态", SortKey: 40},
 					},
-				},
-				// Hidden mount menus: legacy dashboard.system_*:view → dashboard_system_*:view.
-				{
-					Code: "dashboard_system_info", Title: "系统信息卡片", SortKey: 20, Hidden: true,
-					Actions: []string{"view"},
-				},
-				{
-					Code: "dashboard_system_status", Title: "系统状态卡片", SortKey: 30, Hidden: true,
-					Actions: []string{"view"},
 				},
 			},
 		},
@@ -134,8 +127,31 @@ func EnsureRBACResources(db *gorm.DB) error {
 				return err
 			}
 		}
-		return nil
+		return removeRetiredMenus(tx, "dashboard_system_info", "dashboard_system_status")
 	})
+}
+
+// removeRetiredMenus deletes obsolete menu resources and their feature children.
+func removeRetiredMenus(tx *gorm.DB, fullCodes ...string) error {
+	for _, code := range fullCodes {
+		var menu model.RbacResource
+		err := tx.Where("full_code = ? AND type = ?", code, model.ResourceTypeMenu).First(&menu).Error
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			continue
+		}
+		if err != nil {
+			return fmt.Errorf("find retired menu %s: %w", code, err)
+		}
+		if err := tx.Where("parent_id = ?", menu.ID).Delete(&model.RbacResource{}).Error; err != nil {
+			return fmt.Errorf("delete features of %s: %w", code, err)
+		}
+		if err := tx.Delete(&menu).Error; err != nil {
+			return fmt.Errorf("delete menu %s: %w", code, err)
+		}
+		_ = tx.Where("permission LIKE ?", code+":%").Delete(&model.RolePermission{}).Error
+		_ = tx.Where("permission = ?", code).Delete(&model.RolePermission{}).Error
+	}
+	return nil
 }
 
 func ensureGroup(tx *gorm.DB, g seedGroup, now time.Time) error {

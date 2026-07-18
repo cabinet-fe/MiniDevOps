@@ -3,8 +3,8 @@ defineOptions({ name: "SystemResources" });
 
 import { ref } from "vue";
 
-import MenuGroupsPanel from "../../components/menu-groups-panel.vue";
-import ResourcesPanel from "../../components/resources-panel.vue";
+import MenuGroupsPanel from "../components/menu-groups-panel.vue";
+import ResourcesPanel from "../components/resources-panel.vue";
 
 const tab = ref("resources");
 const tabs = [

@@ -240,10 +240,10 @@ func allowedCards(isSuperAdmin bool, permissions []string) map[string]struct{} {
 	if isSuperAdmin || hasPermission(permissions, "ai_runs:view") {
 		allowed[CardAgentRunSummary] = struct{}{}
 	}
-	if isSuperAdmin || hasPermission(permissions, "dashboard_system_info:view") {
+	if isSuperAdmin || hasPermission(permissions, "dashboard:system_info") {
 		allowed[CardSystemInfo] = struct{}{}
 	}
-	if isSuperAdmin || hasPermission(permissions, "dashboard_system_status:view") {
+	if isSuperAdmin || hasPermission(permissions, "dashboard:system_status") {
 		allowed[CardSystemStatus] = struct{}{}
 	}
 	return allowed

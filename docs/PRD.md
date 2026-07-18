@@ -177,8 +177,8 @@ database:
 | 权限码（`full_code`）          | 含义                           |
 | ------------------------------ | ------------------------------ |
 | `dashboard:view`               | 查看/进入仪表盘                |
-| `dashboard_system_info:view`   | 查看系统信息卡片（隐藏挂载菜单） |
-| `dashboard_system_status:view` | 查看系统状态卡片               |
+| `dashboard:system_info`   | 查看系统信息卡片 |
+| `dashboard:system_status` | 查看系统状态卡片 |
 | `resource_repositories:view`   | 查看代码仓库页                 |
 | `resource_repositories:create` | 创建代码仓库                   |
 | `cicd_build_runs:view`         | 查看构建执行 / 构建摘要卡片    |
@@ -262,7 +262,7 @@ database:
 
 | 分组 code  | 标题示例 | 典型菜单 code                                                                                                      |
 | ---------- | -------- | ------------------------------------------------------------------------------------------------------------------ |
-| `overview` | 工作台   | `dashboard`（卡片挂载：隐藏菜单 `dashboard_system_info` / `dashboard_system_status`）                               |
+| `overview` | 工作台   | `dashboard`（卡片：`build_summary` / `agent_run_summary` / `system_info` / `system_status`）                               |
 | `ops`      | 运维     | `ops_processes`、`ops_dev_environments`（均 `super_admin_only`）                                                   |
 | `resource` | 资源管理 | `resource_repositories`、`resource_servers`、`resource_credentials`、`resource_clis`、`resource_tokens`            |
 | `cicd`     | CI/CD    | `cicd_build_jobs`、`cicd_build_runs`                                                                               |
@@ -300,8 +300,8 @@ database:
 | 卡片         | 内容                                                      | 绑定权限（示例）                 |
 | ------------ | --------------------------------------------------------- | -------------------------------- |
 | 构建任务卡片 | 运行中/排队数量、最近执行结果、成功率摘要、跳转到执行详情 | `cicd_build_runs:view`           |
-| 系统信息卡片 | 产品版本、OS、架构、Go/运行时信息、启动时间、主机名等     | `dashboard_system_info:view`     |
-| 系统状态卡片 | CPU/内存/磁盘占用、服务健康（API 存活）、关键目录可用空间 | `dashboard_system_status:view`   |
+| 系统信息卡片 | 产品版本、OS、架构、Go/运行时信息、启动时间、主机名等     | `dashboard:system_info`     |
+| 系统状态卡片 | CPU/内存/磁盘占用、服务健康（API 存活）、关键目录可用空间 | `dashboard:system_status`   |
 
 > 说明：进入仪表盘需 `dashboard:view`；卡片另受上表 `full_code` 约束。系统信息/状态对非超管可只读展示；进程明细与危险操作仍仅在运维模块（`super_admin_only`）。
 
