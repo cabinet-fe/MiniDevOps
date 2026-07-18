@@ -108,7 +108,7 @@ function openRunHistory(row: AiAgent) {
 
 onMounted(async () => {
   const tasks: Promise<void>[] = [];
-  if (hasPermission("ai.skills:view")) {
+  if (hasPermission("ai_skills:view")) {
     tasks.push(
       listSkills({ page: 1, page_size: 200 })
         .then((res) => {
@@ -119,7 +119,7 @@ onMounted(async () => {
         }),
     );
   }
-  if (hasPermission("cicd.build_jobs:view")) {
+  if (hasPermission("cicd_build_jobs:view")) {
     tasks.push(
       listBuildJobs({ page: 1, page_size: 200 })
         .then((res) => {
@@ -313,7 +313,7 @@ async function remove(row: AiAgent) {
     <ProTable ref="table" url="/ai/agents" pagination :columns="columns">
       <template #filters>
         <u-button
-          v-if="hasPermission('ai.agents:create')"
+          v-if="hasPermission('ai_agents:create')"
           type="primary"
           style="margin-left: auto"
           @click.prevent="openCreate"
@@ -333,17 +333,17 @@ async function remove(row: AiAgent) {
       </template>
       <template #column:action="{ rowData }">
         <u-action-group :max="3">
-          <u-action v-if="hasPermission('ai.agents:update')" @run="openEdit(rowData as AiAgent)">
+          <u-action v-if="hasPermission('ai_agents:update')" @run="openEdit(rowData as AiAgent)">
             编辑
           </u-action>
-          <u-action v-if="hasPermission('ai.agents:execute')" @run="run(rowData as AiAgent)">
+          <u-action v-if="hasPermission('ai_agents:execute')" @run="run(rowData as AiAgent)">
             运行
           </u-action>
-          <u-action v-if="hasPermission('ai.runs:view')" @run="openRunHistory(rowData as AiAgent)">
+          <u-action v-if="hasPermission('ai_runs:view')" @run="openRunHistory(rowData as AiAgent)">
             运行历史
           </u-action>
           <u-action
-            v-if="hasPermission('ai.agents:delete')"
+            v-if="hasPermission('ai_agents:delete')"
             type="danger"
             @run="remove(rowData as AiAgent)"
           >

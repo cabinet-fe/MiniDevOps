@@ -360,7 +360,7 @@ async function rotateWebhookSecret() {
         />
         <u-input v-model="query.keyword" placeholder="名称" style="width: 160px" />
         <u-button
-          v-if="hasPermission('cicd.build_jobs:create')"
+          v-if="hasPermission('cicd_build_jobs:create')"
           type="primary"
           style="margin-left: auto"
           @click.prevent="openCreate"
@@ -392,31 +392,31 @@ async function rotateWebhookSecret() {
       <template #column:action="{ rowData }">
         <u-action-group :max="4">
           <u-action
-            v-if="hasPermission('cicd.build_jobs:update')"
+            v-if="hasPermission('cicd_build_jobs:update')"
             @run="openEdit(rowData as BuildJob)"
           >
             编辑
           </u-action>
           <u-action
-            v-if="hasPermission('cicd.build_jobs:execute')"
+            v-if="hasPermission('cicd_build_jobs:execute')"
             @run="trigger(rowData as BuildJob)"
           >
             构建
           </u-action>
           <u-action
-            v-if="hasPermission('cicd.build_jobs:view')"
+            v-if="hasPermission('cicd_build_jobs:view')"
             @run="openHistory(rowData as BuildJob)"
           >
             构建历史
           </u-action>
           <u-action
-            v-if="hasPermission('cicd.build_jobs:view') && (rowData as BuildJob).trigger_webhook"
+            v-if="hasPermission('cicd_build_jobs:view') && (rowData as BuildJob).trigger_webhook"
             @run="showWebhook(rowData as BuildJob)"
           >
             Webhook
           </u-action>
           <u-action
-            v-if="hasPermission('cicd.build_jobs:delete')"
+            v-if="hasPermission('cicd_build_jobs:delete')"
             need-confirm
             type="danger"
             @run="remove(rowData as BuildJob)"
@@ -572,7 +572,7 @@ async function rotateWebhookSecret() {
       <template #footer="{ close }">
         <u-button text @click="close()">关闭</u-button>
         <u-button
-          v-if="hasPermission('cicd.build_jobs:update')"
+          v-if="hasPermission('cicd_build_jobs:update')"
           type="primary"
           @click="rotateWebhookSecret"
         >

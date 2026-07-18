@@ -60,28 +60,34 @@
 | --- | --- | --- | --- |
 | `access_token` | `string` | 是 | JWT access token（Bearer），客户端自行保存 |
 | `user` | `User` | 是 |  |
-| `permissions` | `string[]` |  |  |
-| `menus` | `MenuNode[]` |  |  |
+| `permissions` | `string[]` |  | 功能 `full_code` 列表 |
+| `menus` | `MenuGroupNode[]` |  | 两层导航，对齐 `u-group-nav` |
 
 ### MeResponse
 
 | 字段 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
 | `user` | `User` |  |  |
-| `permissions` | `string[]` |  |  |
-| `menus` | `MenuNode[]` |  |  |
+| `permissions` | `string[]` |  | 功能 `full_code` 列表 |
+| `menus` | `MenuGroupNode[]` |  | 两层导航，对齐 `u-group-nav` |
 
-### MenuNode
+### MenuGroupNode
 
-侧边栏精简菜单；title/route/icon/children 映射为 NavItem（path ← route）。
+侧边栏分组；`children` 映射为 GroupNav 子项（`path` ← 前端路由）。
 
 | 字段 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
-| `path` | `string` |  | 资源 path（如 system.users） |
-| `title` | `string` |  |  |
-| `route` | `string` |  | 前端路由，用作 NavItem.path |
-| `icon` | `string` |  | 一级图标（data URL 或 Base64） |
-| `sort` | `integer` |  |  |
-| `children` | `MenuNode[]` |  |  |
+| `title` | `string` |  | 分组标题 |
+| `children` | `MenuItemNode[]` |  |  |
+
+### MenuItemNode
+
+| 字段 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `title` | `string` |  | 菜单标题 |
+| `path` | `string` |  | 前端路由 |
+| `icon` | `string` |  | 可选；data URL 或 Base64 |
+
+过滤规则：菜单 `hidden=false`、enabled、非超管去掉 `super_admin_only`、需具备 `{menuCode}:view`；空分组不返回。
 
 PAT 对象形状（PATCreateResponse、PersonalAccessToken）见 [resource.md](resource.md)。

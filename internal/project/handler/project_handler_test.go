@@ -65,12 +65,13 @@ func TestListRequirementStatusesAllowsLeastPrivilegeMember(t *testing.T) {
 
 	users := authrepo.NewUserRepository(gdb)
 	roles := rbacrepo.NewRoleRepository(gdb)
-	roleService := rbacservice.NewRoleService(roles)
+	resources := rbacrepo.NewResourceRepository(gdb)
+	roleService := rbacservice.NewRoleService(roles, resources)
 	member := &authmodel.User{Username: "requirement_reader", PasswordHash: "hash", IsActive: true}
 	if err := users.Create(member); err != nil {
 		t.Fatal(err)
 	}
-	role, err := roleService.Create("需求只读", "requirement_reader", "", []string{"project.requirements:view"})
+	role, err := roleService.Create("需求只读", "requirement_reader", "", []string{"project_requirements:view"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -225,6 +226,7 @@ func newProjectHandlerForTestWithDB(t *testing.T) (*ProjectHandler, *projectserv
 	permissions := rbacservice.NewPermissionService(
 		rbacrepo.NewRoleRepository(gdb),
 		rbacrepo.NewResourceRepository(gdb),
+		rbacrepo.NewMenuGroupRepository(gdb),
 	)
 	return NewProjectHandler(service, permissions), service, gdb
 }

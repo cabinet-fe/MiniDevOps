@@ -205,7 +205,7 @@ func TestPrivateSkillIsolation(t *testing.T) {
 
 func TestDocsGenerateWritesDraftOnly(t *testing.T) {
 	gdb, agents, _, projectSvc := setupAI(t)
-	owner := projectservice.NewAccessContext(1, true, []string{"project.projects:create", "project.docs:execute", "project.docs:view"})
+	owner := projectservice.NewAccessContext(1, true, []string{"project_projects:create", "project_docs:execute", "project_docs:view"})
 	project, err := projectSvc.CreateProject(owner, projectservice.CreateProjectInput{Name: "P", Slug: "p-ai"})
 	if err != nil {
 		t.Fatal(err)

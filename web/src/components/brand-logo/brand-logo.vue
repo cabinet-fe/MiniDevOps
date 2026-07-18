@@ -1,15 +1,5 @@
-<script setup lang="ts">
-withDefaults(
-  defineProps<{
-    /** Compact mark only (sidebar collapsed). */
-    collapsed?: boolean;
-  }>(),
-  { collapsed: false },
-);
-</script>
-
 <template>
-  <div class="brand-logo" :class="{ 'brand-logo--collapsed': collapsed }" aria-label="Bedrock 磐石">
+  <div class="brand-logo" aria-label="Bedrock 磐石">
     <svg
       class="brand-logo__mark"
       viewBox="0 0 40 40"
@@ -57,7 +47,7 @@ withDefaults(
         class="brand-logo__brass"
       />
     </svg>
-    <div v-if="!collapsed" class="brand-logo__text">
+    <div class="brand-logo__text">
       <span class="brand-logo__name">BEDROCK</span>
       <span class="brand-logo__sub">磐石</span>
     </div>
@@ -73,10 +63,6 @@ withDefaults(
   gap: 10px;
   min-width: 0;
   color: fn.use-var(color, primary);
-}
-
-.brand-logo--collapsed {
-  justify-content: center;
 }
 
 .brand-logo__mark {

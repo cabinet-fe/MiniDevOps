@@ -45,7 +45,7 @@ type DocDiff struct {
 }
 
 func (s *ProjectService) ListDocTree(actor AccessContext, projectID uint) ([]projectmodel.ApiDocNode, error) {
-	if _, err := s.acl.Require(projectID, actor, "project.docs:view", capDocView); err != nil {
+	if _, err := s.acl.Require(projectID, actor, "project_docs:view", capDocView); err != nil {
 		return nil, err
 	}
 	nodes, err := s.repo.ListDocNodes(projectID)
@@ -63,7 +63,7 @@ func (s *ProjectService) GetDocNode(actor AccessContext, id uint) (*projectmodel
 	if err != nil {
 		return nil, err
 	}
-	if _, err := s.acl.Require(node.ProjectID, actor, "project.docs:view", capDocView); err != nil {
+	if _, err := s.acl.Require(node.ProjectID, actor, "project_docs:view", capDocView); err != nil {
 		return nil, err
 	}
 	return node, nil
@@ -91,7 +91,7 @@ func (s *ProjectService) CheckDocProject(actor AccessContext, projectID, nodeID 
 }
 
 func (s *ProjectService) CreateDocNode(actor AccessContext, projectID uint, input DocNodeInput) (*projectmodel.ApiDocNode, error) {
-	if _, err := s.acl.Require(projectID, actor, "project.docs:create", capDocEdit); err != nil {
+	if _, err := s.acl.Require(projectID, actor, "project_docs:create", capDocEdit); err != nil {
 		return nil, err
 	}
 	if err := s.requireActiveProject(projectID); err != nil {
@@ -132,7 +132,7 @@ func (s *ProjectService) UpdateDocNode(actor AccessContext, id uint, input DocNo
 	if err != nil {
 		return nil, err
 	}
-	if _, err := s.acl.Require(node.ProjectID, actor, "project.docs:update", capDocEdit); err != nil {
+	if _, err := s.acl.Require(node.ProjectID, actor, "project_docs:update", capDocEdit); err != nil {
 		return nil, err
 	}
 	if err := s.requireActiveProject(node.ProjectID); err != nil {
@@ -169,7 +169,7 @@ func (s *ProjectService) MoveDocNode(actor AccessContext, id uint, input DocMove
 	if err != nil {
 		return nil, err
 	}
-	if _, err := s.acl.Require(node.ProjectID, actor, "project.docs:update", capDocEdit); err != nil {
+	if _, err := s.acl.Require(node.ProjectID, actor, "project_docs:update", capDocEdit); err != nil {
 		return nil, err
 	}
 	if err := s.requireActiveProject(node.ProjectID); err != nil {
@@ -210,7 +210,7 @@ func (s *ProjectService) DeleteDocNode(actor AccessContext, id uint) error {
 	if err != nil {
 		return err
 	}
-	if _, err := s.acl.Require(node.ProjectID, actor, "project.docs:delete", capDocAdmin); err != nil {
+	if _, err := s.acl.Require(node.ProjectID, actor, "project_docs:delete", capDocAdmin); err != nil {
 		return err
 	}
 	nodes, err := s.repo.ListDocNodes(node.ProjectID)
@@ -221,7 +221,7 @@ func (s *ProjectService) DeleteDocNode(actor AccessContext, id uint) error {
 }
 
 func (s *ProjectService) UploadMarkdown(actor AccessContext, projectID uint, parentID *uint, filename, contentType string, source io.Reader, size int64) (*projectmodel.ApiDocNode, error) {
-	if _, err := s.acl.Require(projectID, actor, "project.docs:create", capDocEdit); err != nil {
+	if _, err := s.acl.Require(projectID, actor, "project_docs:create", capDocEdit); err != nil {
 		return nil, err
 	}
 	if err := s.requireActiveProject(projectID); err != nil {
@@ -251,7 +251,7 @@ func (s *ProjectService) UploadMarkdown(actor AccessContext, projectID uint, par
 }
 
 func (s *ProjectService) ImportZIP(actor AccessContext, projectID uint, parentID *uint, filename, contentType string, source io.Reader, size int64) ([]projectmodel.ApiDocNode, error) {
-	if _, err := s.acl.Require(projectID, actor, "project.docs:create", capDocEdit); err != nil {
+	if _, err := s.acl.Require(projectID, actor, "project_docs:create", capDocEdit); err != nil {
 		return nil, err
 	}
 	if err := s.requireActiveProject(projectID); err != nil {
@@ -368,7 +368,7 @@ func (s *ProjectService) PublishDocNode(actor AccessContext, id uint, expectedVe
 	if err != nil {
 		return nil, err
 	}
-	if _, err := s.acl.Require(node.ProjectID, actor, "project.docs:update", capDocEdit); err != nil {
+	if _, err := s.acl.Require(node.ProjectID, actor, "project_docs:update", capDocEdit); err != nil {
 		return nil, err
 	}
 	if node.Kind != projectmodel.DocNodeDocument {
@@ -418,7 +418,7 @@ type GenerateDocsResult struct {
 }
 
 func (s *ProjectService) GenerateDocs(actor AccessContext, projectID uint, input GenerateDocsInput) (*GenerateDocsResult, error) {
-	if _, err := s.acl.Require(projectID, actor, "project.docs:execute", capDocEdit); err != nil {
+	if _, err := s.acl.Require(projectID, actor, "project_docs:execute", capDocEdit); err != nil {
 		return nil, err
 	}
 	if s.docsAI == nil {

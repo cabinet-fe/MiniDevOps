@@ -25,13 +25,13 @@ func NewBuildRunHandler(svc *service.BuildRunService, perm *rbacservice.Permissi
 
 func (h *BuildRunHandler) RegisterRoutes(rg *gin.RouterGroup, authMW gin.HandlerFunc) {
 	g := rg.Group("/build-runs", authMW)
-	g.GET("", rbacmw.RequirePermission(h.perm, "cicd.build_runs:view"), h.List)
-	g.GET("/:id", rbacmw.RequirePermission(h.perm, "cicd.build_runs:view"), h.Get)
-	g.GET("/:id/log", rbacmw.RequirePermission(h.perm, "cicd.build_runs:view"), h.Log)
-	g.GET("/:id/artifact", rbacmw.RequirePermission(h.perm, "cicd.build_runs:view"), h.Artifact)
-	g.POST("/:id/cancel", rbacmw.RequirePermission(h.perm, "cicd.build_jobs:execute"), h.Cancel)
-	g.POST("/:id/retry", rbacmw.RequirePermission(h.perm, "cicd.build_jobs:execute"), h.Retry)
-	g.POST("/:id/redeploy", rbacmw.RequirePermission(h.perm, "cicd.build_jobs:execute"), h.Redeploy)
+	g.GET("", rbacmw.RequirePermission(h.perm, "cicd_build_runs:view"), h.List)
+	g.GET("/:id", rbacmw.RequirePermission(h.perm, "cicd_build_runs:view"), h.Get)
+	g.GET("/:id/log", rbacmw.RequirePermission(h.perm, "cicd_build_runs:view"), h.Log)
+	g.GET("/:id/artifact", rbacmw.RequirePermission(h.perm, "cicd_build_runs:view"), h.Artifact)
+	g.POST("/:id/cancel", rbacmw.RequirePermission(h.perm, "cicd_build_jobs:execute"), h.Cancel)
+	g.POST("/:id/retry", rbacmw.RequirePermission(h.perm, "cicd_build_jobs:execute"), h.Retry)
+	g.POST("/:id/redeploy", rbacmw.RequirePermission(h.perm, "cicd_build_jobs:execute"), h.Redeploy)
 }
 
 func (h *BuildRunHandler) List(c *gin.Context) {

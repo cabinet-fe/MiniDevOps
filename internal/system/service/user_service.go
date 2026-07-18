@@ -8,15 +8,15 @@ import (
 	authmodel "bedrock/internal/auth/model"
 	authrepo "bedrock/internal/auth/repository"
 	"bedrock/internal/pkg"
-	rbacrepo "bedrock/internal/rbac/repository"
+	rbacservice "bedrock/internal/rbac/service"
 )
 
 type UserService struct {
 	users *authrepo.UserRepository
-	roles *rbacrepo.RoleRepository
+	roles *rbacservice.RoleService
 }
 
-func NewUserService(users *authrepo.UserRepository, roles *rbacrepo.RoleRepository) *UserService {
+func NewUserService(users *authrepo.UserRepository, roles *rbacservice.RoleService) *UserService {
 	return &UserService{users: users, roles: roles}
 }
 
@@ -33,7 +33,7 @@ func (s *UserService) List(page, pageSize int) ([]UserDTO, int64, error) {
 	}
 	out := make([]UserDTO, 0, len(users))
 	for i := range users {
-		ids, _ := s.roles.ListRoleIDsByUserID(users[i].ID)
+		ids, _ := s.roles.ListRoleIDs(users[i].ID)
 		out = append(out, UserDTO{User: users[i], RoleIDs: ids})
 	}
 	return out, total, nil
@@ -44,7 +44,7 @@ func (s *UserService) Get(id uint) (*UserDTO, error) {
 	if err != nil {
 		return nil, err
 	}
-	ids, err := s.roles.ListRoleIDsByUserID(id)
+	ids, err := s.roles.ListRoleIDs(id)
 	if err != nil {
 		return nil, err
 	}
@@ -84,7 +84,7 @@ func (s *UserService) Create(in CreateUserInput) (*UserDTO, error) {
 	if err := s.users.Create(u); err != nil {
 		return nil, fmt.Errorf("创建用户失败: %w", err)
 	}
-	if err := s.roles.ReplaceUserRoles(u.ID, in.RoleIDs); err != nil {
+	if err := s.roles.SetUserRoles(u.ID, in.RoleIDs); err != nil {
 		return nil, err
 	}
 	return s.Get(u.ID)
@@ -126,8 +126,18 @@ func (s *UserService) Update(id uint, in UpdateUserInput) (*UserDTO, error) {
 		return nil, err
 	}
 	if in.RoleIDs != nil {
-		if err := s.roles.ReplaceUserRoles(id, *in.RoleIDs); err != nil {
+		if u.IsSuperAdmin {
+			// Super-admin keeps builtin role via seed sync; API may still set custom roles.
+			// Reject if payload tries to include/exclude in a way that binds super_admin role.
+		}
+		if err := s.roles.SetUserRoles(id, *in.RoleIDs); err != nil {
 			return nil, err
+		}
+		// Re-bind builtin role for the sole super-admin after ReplaceUserRoles wiped joins.
+		if u.IsSuperAdmin {
+			if err := s.roles.EnsureSuperAdminRoleBound(id); err != nil {
+				return nil, err
+			}
 		}
 	}
 	return s.Get(id)
@@ -141,7 +151,7 @@ func (s *UserService) Delete(id uint) error {
 	if u.IsSuperAdmin {
 		return errors.New("不能删除内置超级管理员")
 	}
-	if err := s.roles.ReplaceUserRoles(id, nil); err != nil {
+	if err := s.roles.SetUserRoles(id, nil); err != nil {
 		return err
 	}
 	return s.users.Delete(id)

@@ -26,18 +26,18 @@ func NewCLIHandler(svc *service.CLIService, perm *rbacservice.PermissionService)
 
 func (h *CLIHandler) RegisterRoutes(rg *gin.RouterGroup, authMW gin.HandlerFunc) {
 	clis := rg.Group("/resource/clis", authMW)
-	clis.GET("", rbacmw.RequirePermission(h.perm, "resource.clis:view"), h.List)
-	clis.POST("/:key/detect", rbacmw.RequirePermission(h.perm, "resource.clis:execute"), h.Detect)
-	clis.POST("/:key/check-update", rbacmw.RequirePermission(h.perm, "resource.clis:execute"), h.CheckUpdate)
-	clis.POST("/:key/install", rbacmw.RequirePermission(h.perm, "resource.clis:execute"), h.Install)
-	clis.POST("/:key/upgrade", rbacmw.RequirePermission(h.perm, "resource.clis:execute"), h.Upgrade)
-	clis.POST("/:key/uninstall", rbacmw.RequirePermission(h.perm, "resource.clis:execute"), h.Uninstall)
+	clis.GET("", rbacmw.RequirePermission(h.perm, "resource_clis:view"), h.List)
+	clis.POST("/:key/detect", rbacmw.RequirePermission(h.perm, "resource_clis:execute"), h.Detect)
+	clis.POST("/:key/check-update", rbacmw.RequirePermission(h.perm, "resource_clis:execute"), h.CheckUpdate)
+	clis.POST("/:key/install", rbacmw.RequirePermission(h.perm, "resource_clis:execute"), h.Install)
+	clis.POST("/:key/upgrade", rbacmw.RequirePermission(h.perm, "resource_clis:execute"), h.Upgrade)
+	clis.POST("/:key/uninstall", rbacmw.RequirePermission(h.perm, "resource_clis:execute"), h.Uninstall)
 
 	sources := rg.Group("/resource/cli-sources", authMW)
-	sources.GET("", rbacmw.RequirePermission(h.perm, "resource.clis:view"), h.ListSources)
-	sources.POST("", rbacmw.RequirePermission(h.perm, "resource.clis:create"), h.CreateSource)
-	sources.PUT("/:id", rbacmw.RequirePermission(h.perm, "resource.clis:update"), h.UpdateSource)
-	sources.DELETE("/:id", rbacmw.RequirePermission(h.perm, "resource.clis:delete"), h.DeleteSource)
+	sources.GET("", rbacmw.RequirePermission(h.perm, "resource_clis:view"), h.ListSources)
+	sources.POST("", rbacmw.RequirePermission(h.perm, "resource_clis:create"), h.CreateSource)
+	sources.PUT("/:id", rbacmw.RequirePermission(h.perm, "resource_clis:update"), h.UpdateSource)
+	sources.DELETE("/:id", rbacmw.RequirePermission(h.perm, "resource_clis:delete"), h.DeleteSource)
 }
 
 func (h *CLIHandler) List(c *gin.Context) {

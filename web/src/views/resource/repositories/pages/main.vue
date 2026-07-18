@@ -47,7 +47,7 @@ const columns = defineProTableColumns([
 ]);
 
 onMounted(async () => {
-  if (hasPermission("resource.credentials:view") || hasPermission("resource.credentials:use")) {
+  if (hasPermission("resource_credentials:view") || hasPermission("resource_credentials:use")) {
     try {
       const res = await listCredentials({ page: 1, page_size: 100 });
       credOptions.value = (res.items ?? []).map((c: Credential) => ({
@@ -124,7 +124,7 @@ async function onTest(row: Repository) {
       <template #filters>
         <u-input v-model="query.keyword" placeholder="名称/URL" style="width: 200px" />
         <u-button
-          v-if="hasPermission('resource.repositories:create')"
+          v-if="hasPermission('resource_repositories:create')"
           type="primary"
           style="margin-left: auto"
           @click.prevent="openCreate"
@@ -140,19 +140,19 @@ async function onTest(row: Repository) {
       <template #column:action="{ rowData }">
         <u-action-group :max="4">
           <u-action
-            v-if="hasPermission('resource.repositories:update')"
+            v-if="hasPermission('resource_repositories:update')"
             @run="openEdit(rowData as Repository)"
           >
             编辑
           </u-action>
           <u-action
-            v-if="hasPermission('resource.repositories:view')"
+            v-if="hasPermission('resource_repositories:view')"
             @run="onTest(rowData as Repository)"
           >
             测试
           </u-action>
           <u-action
-            v-if="hasPermission('resource.repositories:delete')"
+            v-if="hasPermission('resource_repositories:delete')"
             @run="remove(rowData as Repository)"
           >
             删除

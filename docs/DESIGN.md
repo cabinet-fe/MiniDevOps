@@ -21,11 +21,11 @@
 | D2 | 用户角色 | 多角色；权限取**并集**；**不支持**显式 deny |
 | D3 | 1.x 升级 | **仅全新安装**；不提供 1.x 数据迁移 |
 | D4 | 对象 ACL | **仅产品项目**使用成员 ACL；CI/CD、AI、凭证等只依赖全局 RBAC |
-| D5 | 全局项目权限 | 显式 `project.projects:view_all` / `manage_all`；普通 `:update` 不隐含全局越权 |
+| D5 | 全局项目权限 | 显式 `project_projects:view_all` / `manage_all`；普通 `:update` 不隐含全局越权 |
 | D6 | AI 文档发布 | 同节点双态草稿；人工确认发布；`expected_version` 乐观锁 |
 | D7 | AI CLI | Claude Code / OpenCode / Reasonix / Codex **并行**交付，均为 GA 条件 |
 | D8 | 构建事件触发 Agent | 默认 `artifact_ready`；BuildJob 可覆盖为 `distribution_finished` |
-| D9 | 父菜单可见性 | 至少一个可见后代 → 自动补齐父级分组；叶子仍需自身 `:view` |
+| D9 | 菜单可见性 | 分组下菜单需自身 `:view`；`hidden` 菜单永不进导航；空分组不返回 |
 | D10 | 系统信息 | 非超管可看与超管相同的**只读**系统信息；运维写操作仍仅超管 |
 | D11 | 自定义命令 | 自定义开发环境/CLI 命令脚本：**仅超管**可维护与执行；快照 + 强提示 + 审计 |
 
@@ -35,7 +35,7 @@
 | --- | --- | --- |
 | D12 | 命令执行 | 构建与 AI CLI **同 Bedrock 进程 UID** 直接运行；**无 OS/容器沙箱**；产品不得声称沙箱安全 |
 | D13 | Web 会话 | 允许 HTTP；`access_token` 存 **Web Storage** + Bearer；`refresh_token` 仅服务端 **Set-Cookie**（HttpOnly，不设 Secure） |
-| D14 | 凭证授权时点 | **绑定/修改**时校验 `resource.credentials:use`；之后执行仅需任务 `execute` |
+| D14 | 凭证授权时点 | **绑定/修改**时校验 `resource_credentials:use`；之后执行仅需任务 `execute` |
 | D15 | Webhook | 优先平台签名头 + delivery ID 去重；保留 URL secret 兼容；日志脱敏 |
 | D16 | Cron | 每任务 IANA 时区；禁止同任务重叠；停机错过的触发**跳过** |
 | D17 | PAT scope | 固定白名单：`skills:read`、`agents:run`；哈希存储、一次性回显、可过期/吊销；**不替代 HTTPS/TLS**；供 Skill 安装器与 `agents:run` API 对接 |
@@ -49,7 +49,7 @@
 | --- | --- | --- |
 | D21 | Build/Deploy 状态 | 归档成功后 BuildRun `status=success`；当前 `distribution_summary`；redeploy **追加** `BuildDeployAttempt` |
 | D22 | DeployTarget | BuildJob **1:N 私有**；复制任务时复制配置，不跨任务共享 |
-| D23 | 菜单/资源 | `RbacResource` 唯一资源树 + 一对一 `MenuMetadata`；统一事务管理 |
+| D23 | 菜单/资源 | `MenuGroup` + `RbacResource`（菜单含展示字段；功能挂菜单）；`full_code` 鉴权 |
 | D24 | Schema | 应用内版本化 Go migration + `schema_migrations`；禁止仅靠 AutoMigrate |
 | D25 | DB 切换 | 改 driver 只连接目标库，**不搬迁数据** |
 | D26 | API | HTTP 契约以 `api/*.md`（按域拆分的 Markdown）为真源 |
@@ -149,28 +149,29 @@ docs/
 ### 4.1 身份模型
 
 - **User**：可禁用；绑定 **多个 Role**；权限 = 各角色权限码并集。
-- **Super Admin**：内置；不可删除；恒拥有全部权限；运维唯一准入。
-- **自定义 Role**：绑定 `{path}:action` 集合。
+- **Super Admin**：`users.is_super_admin` 为鉴权真源；内置角色 `code=super_admin`（`type=builtin`）与唯一超管用户 1:1 同步；不可删、不可改权限、不可通过用户角色绑定 API 赋给他人。
+- **自定义 Role**：`type=custom`；绑定功能 `full_code` 集合。
 - **PAT**：属于 User；scope ⊆ {`skills:read`,`agents:run`}；存储哈希；创建时明文回显一次。
 
 ### 4.2 权限码
 
-格式：`{path}:action`，`path` 为 `.` 分层，整串仅一个 `:`。
+格式：`{menu_code}:{feature_code}`（`full_code`），整串仅一个 `:`；菜单 `code` **不含 `.`**（旧 path 中的 `.` 已改为 `_`，如 `system.users:view` → `system_users:view`）。
 
-常用 action：`view`、`create`、`update`、`delete`、`execute`、`download`、`cancel`、`retry`、`redeploy`、`install`、`test`、`use`、`view_all`、`manage_all`。
+常用 feature code：`view`、`create`、`update`、`delete`、`execute`、`download`、`use`、`view_all`、`manage_all` 等。
 
-### 4.3 菜单唯一真源
+### 4.3 菜单与资源真源
 
 ```text
-RbacResource (type=menu|page|action|card, path, parent, enabled, sort_key)
-    1 ── 0..1 MenuMetadata (title, route, icon_base64, icon_mime)
+MenuGroup (name, code, route_prefix, sort_key, enabled)
+RbacResource
+  menu  : code=full_code, group_id, title/route/icon_*, hidden, super_admin_only
+  feature (action|card): full_code={menu.code}:{code}, parent_id→menu, super_admin_only
 ```
 
-- 登录 / `GET /auth/me` 返回裁剪后的菜单树（含一级图标）。
+- 登录 / `GET /auth/me` 返回两层菜单（分组 → 菜单项），对齐侧栏 `u-group-nav`；过滤 `hidden`、未启用、非超管的 `super_admin_only`，且需具备 `{menuCode}:view`。
 - 前端**只渲染**下发菜单，不硬编码全量再隐藏。
-- 父级规则：存在可见后代则自动出现分组；叶子需自身 `:view`。
 - 图标：原始体积 ≤ 32KB；超限 400。
-- 运维相关 path：即使角色误勾选，服务端仍拒绝非超管。
+- `super_admin_only`：服务端拒绝写入角色权限；生效时非超管一律拒绝（不再硬编码 `ops` 前缀）。
 
 ### 4.4 项目 ACL（唯一对象级 ACL）
 
@@ -184,10 +185,10 @@ RbacResource (type=menu|page|action|card, path, parent, enabled, sort_key)
 鉴权公式：
 
 ```text
-允许 = 全局功能权限(path:action)
+允许 = 全局功能权限(full_code)
      AND (
            超管
-        OR 持有 project.projects:view_all/manage_all（按动作）
+        OR 持有 project_projects:view_all/manage_all（按动作）
         OR 是项目成员且项目角色允许该动作
          )
 ```
@@ -200,7 +201,7 @@ RbacResource (type=menu|page|action|card, path, parent, enabled, sort_key)
 ### 4.5 凭证
 
 - 密文 AES-GCM；API 永不回显明文。
-- 引用绑定（仓库认证、服务器认证、任务变量等）时校验操作者 `resource.credentials:use`。
+- 引用绑定（仓库认证、服务器认证、任务变量等）时校验操作者 `resource_credentials:use`。
 - Cron/Webhook 执行使用绑定快照；不要求「触发者」现场具备 `use`。
 - 删除保护：仍被引用时拦截并提示。
 
@@ -227,7 +228,7 @@ RbacResource (type=menu|page|action|card, path, parent, enabled, sort_key)
 flowchart TB
   User --> Role
   Role --> RolePermission
-  RbacResource --> MenuMetadata
+  MenuGroup --> RbacResource
   User --> ProjectMember
   ProductProject --> ProjectMember
   ProductProject --> Requirement
@@ -518,7 +519,7 @@ web/src/
 
 1. UI **优先** Veltra；无合适组件再自建。
 2. HTTP **只**经统一 client；401 refresh 语义对齐 DESIGN。
-3. 菜单、权限码来自 `/auth/me`；路由守卫 + 按钮级 `hasPermission`。
+3. 两层分组菜单与功能 `full_code` 来自 `/auth/me`；侧栏 `u-group-nav`；路由守卫 + 按钮级 `hasPermission`。
 4. 登录仅 `password_cipher`；密钥：`window.__BEDROCK_ENCRYPTION_KEY__` > env。
 5. 避免巨型 SFC（参考 vue-best-practices）；重型编辑器/终端可局部引入。
 6. 开发端口代理 `/api`、`/ws` → `:8080`；embed 仍输出到构建产物并由 Go 注入加密密钥。

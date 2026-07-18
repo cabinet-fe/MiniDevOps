@@ -51,7 +51,7 @@ func (h *WSHandler) HandleBuildRunLogs(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid or expired token"})
 		return
 	}
-	if err := h.perm.CheckAccess(claims.UserID, claims.IsSuperAdmin, "cicd.build_runs:view"); err != nil {
+	if err := h.perm.CheckAccess(claims.UserID, claims.IsSuperAdmin, "cicd_build_runs:view"); err != nil {
 		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
 		return
 	}

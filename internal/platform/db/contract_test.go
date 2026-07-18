@@ -54,6 +54,7 @@ func TestContract_MigrationsAndCICDTables(t *testing.T) {
 				"dev_environments", "dev_env_install_sources", "dev_env_jobs", "schema_migrations",
 				"storage_objects", "product_projects", "project_members", "requirements",
 				"requirement_comments", "requirement_attachments", "api_doc_nodes",
+				"menu_groups", "rbac_resources", "roles",
 			} {
 				if !gdb.Migrator().HasTable(table) {
 					t.Fatalf("missing table %s on %s", table, driver)

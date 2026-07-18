@@ -78,7 +78,7 @@ async function remove(row: PersonalAccessToken) {
     <ProTable ref="table" url="/resource/tokens" pagination :columns="columns">
       <template #filters>
         <u-button
-          v-if="hasPermission('resource.tokens:create')"
+          v-if="hasPermission('resource_tokens:create')"
           type="primary"
           style="margin-left: auto"
           @click.prevent="openCreate"
@@ -109,7 +109,7 @@ async function remove(row: PersonalAccessToken) {
       <template #column:action="{ rowData }">
         <u-action-group :max="2">
           <u-action
-            v-if="hasPermission('resource.tokens:delete')"
+            v-if="hasPermission('resource_tokens:delete')"
             need-confirm
             type="danger"
             @run="remove(rowData as PersonalAccessToken)"

@@ -10,8 +10,8 @@ import (
 	"bedrock/internal/rbac/service"
 )
 
-// RequirePermission enforces a {path}:action code.
-// Ops-domain permissions always require super-admin (hard gate).
+// RequirePermission enforces a feature full_code (e.g. system_users:view).
+// Resources marked super_admin_only always require is_super_admin.
 func RequirePermission(perm *service.PermissionService, required string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		userID := authmiddleware.GetUserID(c)

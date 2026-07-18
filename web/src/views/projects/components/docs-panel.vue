@@ -53,16 +53,16 @@ const canAdminProjectContent = computed(
   () => props.manageAll || props.projectRole === "owner" || props.projectRole === "admin",
 );
 const canCreate = computed(
-  () => hasPermission("project.docs:create") && canEditProjectContent.value,
+  () => hasPermission("project_docs:create") && canEditProjectContent.value,
 );
 const canUpdate = computed(
-  () => hasPermission("project.docs:update") && canEditProjectContent.value,
+  () => hasPermission("project_docs:update") && canEditProjectContent.value,
 );
 const canDelete = computed(
-  () => hasPermission("project.docs:delete") && canAdminProjectContent.value,
+  () => hasPermission("project_docs:delete") && canAdminProjectContent.value,
 );
 const canGenerate = computed(
-  () => hasPermission("project.docs:execute") && canEditProjectContent.value,
+  () => hasPermission("project_docs:execute") && canEditProjectContent.value,
 );
 // Markdown is intentionally rendered as interpolated text below, never v-html.
 // This keeps raw HTML and javascript: links inert until a vetted renderer exists.

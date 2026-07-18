@@ -23,11 +23,11 @@ func NewUserHandler(users *service.UserService, perm *rbacservice.PermissionServ
 
 func (h *UserHandler) RegisterRoutes(rg *gin.RouterGroup, authMW gin.HandlerFunc) {
 	g := rg.Group("/users", authMW)
-	g.GET("", rbacmw.RequirePermission(h.perm, "system.users:view"), h.List)
-	g.GET("/:id", rbacmw.RequirePermission(h.perm, "system.users:view"), h.Get)
-	g.POST("", rbacmw.RequirePermission(h.perm, "system.users:create"), h.Create)
-	g.PUT("/:id", rbacmw.RequirePermission(h.perm, "system.users:update"), h.Update)
-	g.DELETE("/:id", rbacmw.RequirePermission(h.perm, "system.users:delete"), h.Delete)
+	g.GET("", rbacmw.RequirePermission(h.perm, "system_users:view"), h.List)
+	g.GET("/:id", rbacmw.RequirePermission(h.perm, "system_users:view"), h.Get)
+	g.POST("", rbacmw.RequirePermission(h.perm, "system_users:create"), h.Create)
+	g.PUT("/:id", rbacmw.RequirePermission(h.perm, "system_users:update"), h.Update)
+	g.DELETE("/:id", rbacmw.RequirePermission(h.perm, "system_users:delete"), h.Delete)
 }
 
 func (h *UserHandler) List(c *gin.Context) {

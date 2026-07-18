@@ -17,11 +17,12 @@
 - **组件与工具必须优先 `@veltra/*` 与 `@cat-kit/*`**。仅确认库内无合适能力后才自研或引入第三方。
 - 本地组件目录：`web/src/components/<name>/`，必须含 `index.ts` + `<name>.vue`；类型 / `defineXxx` 等放可选 `helper.ts`。调用方从 `@/components/<name>` 导入（勿写 `.vue` 路径）。
 - 字段与交互形态对齐 `@veltra/desktop` 契约（查 `components/<name>/types.d.ts` 与 `api.md`）。例如：
-  - 侧栏：`UNav` / `UDualNav` 的 `NavItem`（`title` / `path` / `icon` / `children` 等）
+  - 侧栏：`UGroupNav` 的 `GroupNavGroup`（`title` + `children: NavItem[]`，叶子含 `title` / `path` / `icon`）；由登录 / `/auth/me` 的两层 `menus` 映射，无折叠
   - 表格列：裸 `UTable` 用 `defineTableColumns`；`ProTable` 用 `defineProTableColumns`；分页：`UPaginator`；表单：`UForm` / `UFormItem`
+- 权限码：功能 `full_code`（如 `system_users:view`，点号已改为下划线）；`hasPermission` / 路由 `meta.permission` 只认此形态
 - 状态：Pinia；权限辅助：composables。
 - Token：`access_token` → `@cat-kit/fe` `storage.local` + Bearer。HTTP / 信封 / refresh / JSON 字段约定见 [.agents/api.md](api.md)。
-- **禁止**硬编码全量菜单/权限表作为真源；菜单由后端返回(除运维相关功能外).
+- **禁止**硬编码全量菜单/权限表作为真源；菜单由 `/auth/me` 两层 `menus` 下发（含 `super_admin_only` 过滤）。
 
 ## 登录（前端侧）
 

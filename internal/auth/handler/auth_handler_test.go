@@ -68,7 +68,8 @@ func setupAuthRouter(t *testing.T) *gin.Engine {
 	users := authrepo.NewUserRepository(gdb)
 	roles := rbacrepo.NewRoleRepository(gdb)
 	resources := rbacrepo.NewResourceRepository(gdb)
-	permSvc := rbacservice.NewPermissionService(roles, resources)
+	groups := rbacrepo.NewMenuGroupRepository(gdb)
+	permSvc := rbacservice.NewPermissionService(roles, resources, groups)
 	authSvc, err := authservice.NewAuthService(cfg, users, permSvc)
 	if err != nil {
 		t.Fatal(err)

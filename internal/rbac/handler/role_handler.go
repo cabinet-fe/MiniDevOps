@@ -22,12 +22,13 @@ func NewRoleHandler(roles *service.RoleService, perm *service.PermissionService)
 
 func (h *RoleHandler) RegisterRoutes(rg *gin.RouterGroup, authMW gin.HandlerFunc) {
 	g := rg.Group("/roles", authMW)
-	g.GET("", rbacmw.RequirePermission(h.perm, "system.roles:view"), h.List)
-	g.GET("/:id", rbacmw.RequirePermission(h.perm, "system.roles:view"), h.Get)
-	g.POST("", rbacmw.RequirePermission(h.perm, "system.roles:create"), h.Create)
-	g.PUT("/:id", rbacmw.RequirePermission(h.perm, "system.roles:update"), h.Update)
-	g.PUT("/:id/permissions", rbacmw.RequirePermission(h.perm, "system.roles:update"), h.SetPermissions)
-	g.DELETE("/:id", rbacmw.RequirePermission(h.perm, "system.roles:delete"), h.Delete)
+	g.GET("", rbacmw.RequirePermission(h.perm, "system_roles:view"), h.List)
+	g.GET("/permission-catalog", rbacmw.RequirePermission(h.perm, "system_roles:update"), h.PermissionCatalog)
+	g.GET("/:id", rbacmw.RequirePermission(h.perm, "system_roles:view"), h.Get)
+	g.POST("", rbacmw.RequirePermission(h.perm, "system_roles:create"), h.Create)
+	g.PUT("/:id", rbacmw.RequirePermission(h.perm, "system_roles:update"), h.Update)
+	g.PUT("/:id/permissions", rbacmw.RequirePermission(h.perm, "system_roles:update"), h.SetPermissions)
+	g.DELETE("/:id", rbacmw.RequirePermission(h.perm, "system_roles:delete"), h.Delete)
 }
 
 func (h *RoleHandler) List(c *gin.Context) {
@@ -38,6 +39,15 @@ func (h *RoleHandler) List(c *gin.Context) {
 		return
 	}
 	pkg.PageSuccess(c, items, total, page)
+}
+
+func (h *RoleHandler) PermissionCatalog(c *gin.Context) {
+	items, err := h.perm.PermissionCatalog()
+	if err != nil {
+		pkg.Error(c, http.StatusInternalServerError, "查询失败")
+		return
+	}
+	pkg.Success(c, gin.H{"items": items})
 }
 
 func (h *RoleHandler) Get(c *gin.Context) {

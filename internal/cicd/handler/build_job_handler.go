@@ -25,15 +25,15 @@ func NewBuildJobHandler(svc *service.BuildJobService, runs *service.BuildRunServ
 
 func (h *BuildJobHandler) RegisterRoutes(rg *gin.RouterGroup, authMW gin.HandlerFunc) {
 	g := rg.Group("/build-jobs", authMW)
-	g.GET("", rbacmw.RequirePermission(h.perm, "cicd.build_jobs:view"), h.List)
-	g.GET("/:id", rbacmw.RequirePermission(h.perm, "cicd.build_jobs:view"), h.Get)
-	g.POST("", rbacmw.RequirePermission(h.perm, "cicd.build_jobs:create"), h.Create)
-	g.PUT("/:id", rbacmw.RequirePermission(h.perm, "cicd.build_jobs:update"), h.Update)
-	g.DELETE("/:id", rbacmw.RequirePermission(h.perm, "cicd.build_jobs:delete"), h.Delete)
-	g.GET("/:id/webhook-secret", rbacmw.RequirePermission(h.perm, "cicd.build_jobs:view"), h.GetWebhookSecret)
-	g.POST("/:id/webhook-secret/rotate", rbacmw.RequirePermission(h.perm, "cicd.build_jobs:update"), h.RotateWebhookSecret)
-	// Execute: only cicd.build_jobs:execute required (not credentials:use) — DESIGN §4.5 / Wave 4 engine.
-	g.POST("/:id/runs", rbacmw.RequirePermission(h.perm, "cicd.build_jobs:execute"), h.EnqueueRun)
+	g.GET("", rbacmw.RequirePermission(h.perm, "cicd_build_jobs:view"), h.List)
+	g.GET("/:id", rbacmw.RequirePermission(h.perm, "cicd_build_jobs:view"), h.Get)
+	g.POST("", rbacmw.RequirePermission(h.perm, "cicd_build_jobs:create"), h.Create)
+	g.PUT("/:id", rbacmw.RequirePermission(h.perm, "cicd_build_jobs:update"), h.Update)
+	g.DELETE("/:id", rbacmw.RequirePermission(h.perm, "cicd_build_jobs:delete"), h.Delete)
+	g.GET("/:id/webhook-secret", rbacmw.RequirePermission(h.perm, "cicd_build_jobs:view"), h.GetWebhookSecret)
+	g.POST("/:id/webhook-secret/rotate", rbacmw.RequirePermission(h.perm, "cicd_build_jobs:update"), h.RotateWebhookSecret)
+	// Execute: only cicd_build_jobs:execute required (not credentials:use) — DESIGN §4.5 / Wave 4 engine.
+	g.POST("/:id/runs", rbacmw.RequirePermission(h.perm, "cicd_build_jobs:execute"), h.EnqueueRun)
 }
 
 func (h *BuildJobHandler) List(c *gin.Context) {

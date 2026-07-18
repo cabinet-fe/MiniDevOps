@@ -51,17 +51,17 @@ const editing = ref<ProjectMember | null>(null);
 const form = reactive({ user_id: 0, role: "member" as Exclude<ProjectRole, "owner"> });
 
 const selfMember = computed(() => members.value.find((member) => member.user_id === auth.user?.id));
-const canManageAll = computed(() => hasPermission("project.projects:manage_all"));
+const canManageAll = computed(() => hasPermission("project_projects:manage_all"));
 const canManageMembers = computed(
   () =>
-    hasPermission("project.projects:update") &&
+    hasPermission("project_projects:update") &&
     (canManageAll.value ||
       selfMember.value?.role === "owner" ||
       selfMember.value?.role === "admin"),
 );
 const canTransferOwner = computed(
   () =>
-    hasPermission("project.projects:update") &&
+    hasPermission("project_projects:update") &&
     (canManageAll.value || selfMember.value?.role === "owner"),
 );
 

@@ -25,7 +25,7 @@ func NewOperationLogHandler(audit *service.AuditService, perm *rbacservice.Permi
 
 func (h *OperationLogHandler) RegisterRoutes(rg *gin.RouterGroup, authMW gin.HandlerFunc) {
 	g := rg.Group("/operation-logs", authMW)
-	g.GET("", rbacmw.RequirePermission(h.perm, "system.operation_logs:view"), h.List)
+	g.GET("", rbacmw.RequirePermission(h.perm, "system_operation_logs:view"), h.List)
 }
 
 func (h *OperationLogHandler) List(c *gin.Context) {

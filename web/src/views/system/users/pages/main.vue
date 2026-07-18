@@ -29,7 +29,9 @@ const form = reactive({
 });
 
 const roleOptions = computed(() =>
-  roles.value.map((r) => ({ label: `${r.name} (${r.code})`, value: r.id })),
+  roles.value
+    .filter((r) => r.type !== "builtin" && r.code !== "super_admin")
+    .map((r) => ({ label: `${r.name} (${r.code})`, value: r.id })),
 );
 
 const roleNameById = computed(() => {
@@ -120,7 +122,7 @@ async function remove(row: User) {
       <template #filters>
         <u-input v-model="query.keyword" placeholder="用户名关键词" style="width: 200px" />
         <u-button
-          v-if="hasPermission('system.users:create')"
+          v-if="hasPermission('system_users:create')"
           type="primary"
           style="margin-left: auto"
           @click.prevent="openCreate"
@@ -147,11 +149,11 @@ async function remove(row: User) {
       </template>
       <template #column:action="{ rowData }">
         <u-action-group :max="3">
-          <u-action v-if="hasPermission('system.users:update')" @run="openEdit(rowData as User)">
+          <u-action v-if="hasPermission('system_users:update')" @run="openEdit(rowData as User)">
             编辑
           </u-action>
           <u-action
-            v-if="hasPermission('system.users:delete') && !(rowData as User).is_super_admin"
+            v-if="hasPermission('system_users:delete') && !(rowData as User).is_super_admin"
             need-confirm
             type="danger"
             @run="remove(rowData as User)"

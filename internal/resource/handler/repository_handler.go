@@ -23,19 +23,19 @@ func NewRepositoryHandler(svc *service.RepositoryService, perm *rbacservice.Perm
 
 func (h *RepositoryHandler) RegisterRoutes(rg *gin.RouterGroup, authMW gin.HandlerFunc) {
 	g := rg.Group("/resource/repositories", authMW)
-	g.GET("", rbacmw.RequirePermission(h.perm, "resource.repositories:view"), h.List)
-	g.GET("/:id", rbacmw.RequirePermission(h.perm, "resource.repositories:view"), h.Get)
-	g.POST("", rbacmw.RequirePermission(h.perm, "resource.repositories:create"), h.Create)
-	g.PUT("/:id", rbacmw.RequirePermission(h.perm, "resource.repositories:update"), h.Update)
-	g.DELETE("/:id", rbacmw.RequirePermission(h.perm, "resource.repositories:delete"), h.Delete)
-	g.GET("/:id/branches", rbacmw.RequirePermission(h.perm, "resource.repositories:view"), h.Branches)
-	g.POST("/:id/test", rbacmw.RequirePermission(h.perm, "resource.repositories:view"), h.Test)
+	g.GET("", rbacmw.RequirePermission(h.perm, "resource_repositories:view"), h.List)
+	g.GET("/:id", rbacmw.RequirePermission(h.perm, "resource_repositories:view"), h.Get)
+	g.POST("", rbacmw.RequirePermission(h.perm, "resource_repositories:create"), h.Create)
+	g.PUT("/:id", rbacmw.RequirePermission(h.perm, "resource_repositories:update"), h.Update)
+	g.DELETE("/:id", rbacmw.RequirePermission(h.perm, "resource_repositories:delete"), h.Delete)
+	g.GET("/:id/branches", rbacmw.RequirePermission(h.perm, "resource_repositories:view"), h.Branches)
+	g.POST("/:id/test", rbacmw.RequirePermission(h.perm, "resource_repositories:view"), h.Test)
 }
 
 func (h *RepositoryHandler) canUseCredential(c *gin.Context) bool {
 	userID := authmiddleware.GetUserID(c)
 	isSuper := authmiddleware.IsSuperAdmin(c)
-	return h.perm.CheckAccess(userID, isSuper, "resource.credentials:use") == nil
+	return h.perm.CheckAccess(userID, isSuper, "resource_credentials:use") == nil
 }
 
 func (h *RepositoryHandler) List(c *gin.Context) {

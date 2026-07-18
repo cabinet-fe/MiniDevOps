@@ -136,7 +136,7 @@ async function onTest(row: Server) {
       <template #filters>
         <u-input v-model="query.keyword" placeholder="名称/主机" style="width: 200px" />
         <u-button
-          v-if="hasPermission('resource.servers:create')"
+          v-if="hasPermission('resource_servers:create')"
           type="primary"
           style="margin-left: auto"
           @click.prevent="openCreate"
@@ -157,16 +157,16 @@ async function onTest(row: Server) {
       <template #column:action="{ rowData }">
         <u-action-group :max="4">
           <u-action
-            v-if="hasPermission('resource.servers:update')"
+            v-if="hasPermission('resource_servers:update')"
             @run="openEdit(rowData as Server)"
           >
             编辑
           </u-action>
-          <u-action v-if="hasPermission('resource.servers:view')" @run="onTest(rowData as Server)">
+          <u-action v-if="hasPermission('resource_servers:view')" @run="onTest(rowData as Server)">
             测试
           </u-action>
           <u-action
-            v-if="hasPermission('resource.servers:delete')"
+            v-if="hasPermission('resource_servers:delete')"
             @run="remove(rowData as Server)"
           >
             删除

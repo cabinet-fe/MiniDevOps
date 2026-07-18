@@ -96,8 +96,8 @@ flowchart LR
 
 | 类别 | 内容 |
 | --- | --- |
-| 权限 | Role、RolePermission、RbacResource、MenuMetadata；多角色并集；`RequirePermission`；登录/me 下发裁剪菜单树；父级由可见后代自动补齐；一级菜单图标 Base64 ≤32KB；运维 path 仅超管 |
-| 资源管理 | Repository、Server、Credential；绑定/修改凭证引用时校验 `resource.credentials:use` |
+| 权限 | Role、RolePermission、MenuGroup、RbacResource；多角色并集；`RequirePermission(full_code)`；登录/me 下发两层分组菜单；菜单图标 Base64 ≤32KB；`super_admin_only` 门控运维 |
+| 资源管理 | Repository、Server、Credential；绑定/修改凭证引用时校验 `resource_credentials:use` |
 | CI/CD | BuildJob、DeployTarget（Job 私有 1:N）、BuildRun、BuildDeployAttempt；Pipeline 适配；Scheduler/Cron（IANA 时区、禁重叠、停机跳过）；Webhook（签名优先 + URL secret fallback + delivery 去重）；执行侧仅需任务 `execute` |
 | 状态机 | `status` 与 `stage` 分离；归档成功 → `status=success`；分发更新 `distribution_summary`；redeploy 追加 attempt；Run 最小配置快照；queued 恢复 / running→interrupted |
 | 前端 | 菜单驱动侧栏；资源管理（仓库/服务器/凭证）与 CI/CD（任务/执行）页面；构建日志 WS；重新分发 UI |
@@ -112,7 +112,7 @@ flowchart LR
 
 ### 3.4 退出 Gate
 
-1. 自定义角色勾选 `{path}:action` 后，菜单/路由/API 一致生效；运维对非超管恒 403。
+1. 自定义角色勾选功能 `full_code` 后，菜单/路由/API 一致生效；`super_admin_only` 对非超管恒 403。
 2. 同一仓库 ≥2 个 BuildJob 可分别执行；制品可下载。
 3. 部署失败时 BuildRun 仍为 `success`，summary 为 `partial` / `all_failed`；redeploy 追加 `BuildDeployAttempt` 且 summary 更新为最新结果。
 4. Webhook：平台签名校验优先；generic/手动仍可用 URL secret；日志脱敏。
@@ -151,7 +151,7 @@ flowchart LR
 
 ### 4.4 退出 Gate
 
-1. 无 `cicd.build_runs:view` 的角色看不到构建卡片且无法添加。
+1. 无 `cicd_build_runs:view` 的角色看不到构建卡片且无法添加。
 2. 布局刷新后保持；状态卡片按合理频率刷新且不阻塞首屏。
 3. 超管可检测/安装/升级/卸载/切版本；第一源失败第二源成功时可追踪。
 4. 非超管调用运维 API 恒 403；自定义命令非超管不可维护。
@@ -168,7 +168,7 @@ flowchart LR
 
 | 类别 | 内容 |
 | --- | --- |
-| 项目 | ProductProject、ProjectMember（Owner/Admin/Member/Readonly）；显式 `project.projects:view_all` / `manage_all` |
+| 项目 | ProductProject、ProjectMember（Owner/Admin/Member/Readonly）；显式 `project_projects:view_all` / `manage_all` |
 | 需求 | Requirement、评论、附件（走 StorageObject）；状态字典可扩展 |
 | 文档 | ApiDocNode 树；同节点 `published_content` + `draft_content` + `base_version`；上传/移动/删除；发布 `expected_version` 乐观锁 |
 | 权限 | 全局 RBAC **且** 项目成员 ACL（无 view_all/manage_all 时）；manage_all 可管理全部项目且无需加入 |
@@ -205,11 +205,11 @@ flowchart LR
 
 | 类别 | 内容 |
 | --- | --- |
-| CLI | Claude Code、OpenCode、Reasonix、Codex：检测/安装/升级/卸载、多源回退、运行时注入配置（运行时管理归属资源管理域：`/resource/clis`、`resource.clis:*`） |
+| CLI | Claude Code、OpenCode、Reasonix、Codex：检测/安装/升级/卸载、多源回退、运行时注入配置（运行时管理归属资源管理域：`/resource/clis`、`resource_clis:*`） |
 | 智能体 | AiAgent、AgentTrigger（手动/API/定时/构建事件）；AgentRun 独立异步；上下文 = 提示词 + 仓库 |
 | 构建事件 | 默认 `artifact_ready`（归档成功、制品可用）；BuildJob 可覆盖为 `distribution_finished` |
 | Skills | ZIP 上传、SKILL.md 校验、public/private、覆盖更新、工作区注入 |
-| PAT | 哈希存储、仅显示一次、可过期/吊销；固定 scope：`skills:read`、`agents:run`（管理接口归属资源管理域：`/resource/tokens`、`resource.tokens:*`） |
+| PAT | 哈希存储、仅显示一次、可过期/吊销；固定 scope：`skills:read`、`agents:run`（管理接口归属资源管理域：`/resource/tokens`、`resource_tokens:*`） |
 | 文档生成 | 接通 P3：`docs/generate` → AgentRun → 只写 draft |
 | 前端 | CLI 管理与 PAT 管理（资源管理菜单）、智能体、触发器、运行日志 WS、Skills |
 | 测试 | 四 CLI 安装与非交互运行；构建事件不改 BuildRun 成功态；PAT 鉴权；私有 Skill 隔离 |

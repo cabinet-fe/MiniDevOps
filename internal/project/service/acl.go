@@ -61,8 +61,8 @@ func (a *projectACL) Require(projectID uint, actor AccessContext, globalPermissi
 	if actor.SuperAdmin {
 		return nil, nil
 	}
-	manageAll := actor.Has("project.projects:manage_all")
-	viewAll := actor.Has("project.projects:view_all") || manageAll
+	manageAll := actor.Has("project_projects:manage_all")
+	viewAll := actor.Has("project_projects:view_all") || manageAll
 	if isReadCapability(capability) && viewAll {
 		return nil, nil
 	}
@@ -81,10 +81,10 @@ func (a *projectACL) Require(projectID uint, actor AccessContext, globalPermissi
 }
 
 func (a *projectACL) CanListProjects(actor AccessContext) (bool, error) {
-	if !actor.Has("project.projects:view") {
-		return false, NewForbidden("缺少全局权限: project.projects:view")
+	if !actor.Has("project_projects:view") {
+		return false, NewForbidden("缺少全局权限: project_projects:view")
 	}
-	return actor.SuperAdmin || actor.Has("project.projects:view_all") || actor.Has("project.projects:manage_all"), nil
+	return actor.SuperAdmin || actor.Has("project_projects:view_all") || actor.Has("project_projects:manage_all"), nil
 }
 
 func isReadCapability(capability aclCapability) bool {

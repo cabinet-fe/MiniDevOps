@@ -33,29 +33,29 @@ func NewHandler(
 
 func (h *Handler) RegisterRoutes(rg *gin.RouterGroup, authMW gin.HandlerFunc) {
 	ai := rg.Group("/ai", authMW)
-	ai.GET("/agents", rbacmw.RequirePermission(h.perm, "ai.agents:view"), h.ListAgents)
-	ai.POST("/agents", rbacmw.RequirePermission(h.perm, "ai.agents:create"), h.CreateAgent)
-	ai.GET("/agents/:id", rbacmw.RequirePermission(h.perm, "ai.agents:view"), h.GetAgent)
-	ai.PUT("/agents/:id", rbacmw.RequirePermission(h.perm, "ai.agents:update"), h.UpdateAgent)
-	ai.DELETE("/agents/:id", rbacmw.RequirePermission(h.perm, "ai.agents:delete"), h.DeleteAgent)
-	ai.GET("/agents/:id/triggers", rbacmw.RequirePermission(h.perm, "ai.agents:view"), h.ListTriggers)
-	ai.POST("/agents/:id/triggers", rbacmw.RequirePermission(h.perm, "ai.agents:update"), h.CreateTrigger)
-	ai.PUT("/agents/:id/triggers/:tid", rbacmw.RequirePermission(h.perm, "ai.agents:update"), h.UpdateTrigger)
-	ai.DELETE("/agents/:id/triggers/:tid", rbacmw.RequirePermission(h.perm, "ai.agents:update"), h.DeleteTrigger)
-	ai.POST("/agents/:id/runs", rbacmw.RequirePermission(h.perm, "ai.agents:execute"), h.ManualRun)
+	ai.GET("/agents", rbacmw.RequirePermission(h.perm, "ai_agents:view"), h.ListAgents)
+	ai.POST("/agents", rbacmw.RequirePermission(h.perm, "ai_agents:create"), h.CreateAgent)
+	ai.GET("/agents/:id", rbacmw.RequirePermission(h.perm, "ai_agents:view"), h.GetAgent)
+	ai.PUT("/agents/:id", rbacmw.RequirePermission(h.perm, "ai_agents:update"), h.UpdateAgent)
+	ai.DELETE("/agents/:id", rbacmw.RequirePermission(h.perm, "ai_agents:delete"), h.DeleteAgent)
+	ai.GET("/agents/:id/triggers", rbacmw.RequirePermission(h.perm, "ai_agents:view"), h.ListTriggers)
+	ai.POST("/agents/:id/triggers", rbacmw.RequirePermission(h.perm, "ai_agents:update"), h.CreateTrigger)
+	ai.PUT("/agents/:id/triggers/:tid", rbacmw.RequirePermission(h.perm, "ai_agents:update"), h.UpdateTrigger)
+	ai.DELETE("/agents/:id/triggers/:tid", rbacmw.RequirePermission(h.perm, "ai_agents:update"), h.DeleteTrigger)
+	ai.POST("/agents/:id/runs", rbacmw.RequirePermission(h.perm, "ai_agents:execute"), h.ManualRun)
 	// API trigger also accepts PAT scope agents:run (checked in middleware/handler).
 	ai.POST("/agents/:id/api-runs", h.APIRun)
 
-	ai.GET("/runs", rbacmw.RequirePermission(h.perm, "ai.runs:view"), h.ListRuns)
-	ai.GET("/runs/:id", rbacmw.RequirePermission(h.perm, "ai.runs:view"), h.GetRun)
-	ai.POST("/runs/:id/cancel", rbacmw.RequirePermission(h.perm, "ai.agents:execute"), h.CancelRun)
+	ai.GET("/runs", rbacmw.RequirePermission(h.perm, "ai_runs:view"), h.ListRuns)
+	ai.GET("/runs/:id", rbacmw.RequirePermission(h.perm, "ai_runs:view"), h.GetRun)
+	ai.POST("/runs/:id/cancel", rbacmw.RequirePermission(h.perm, "ai_agents:execute"), h.CancelRun)
 
 	skills := rg.Group("/skills", authMW)
-	skills.GET("", rbacmw.RequirePermission(h.perm, "ai.skills:view"), h.ListSkills)
-	skills.POST("", rbacmw.RequirePermission(h.perm, "ai.skills:create"), h.CreateSkill)
-	skills.GET("/:id", rbacmw.RequirePermission(h.perm, "ai.skills:view"), h.GetSkill)
-	skills.PUT("/:id", rbacmw.RequirePermission(h.perm, "ai.skills:update"), h.OverwriteSkill)
-	skills.DELETE("/:id", rbacmw.RequirePermission(h.perm, "ai.skills:delete"), h.DeleteSkill)
+	skills.GET("", rbacmw.RequirePermission(h.perm, "ai_skills:view"), h.ListSkills)
+	skills.POST("", rbacmw.RequirePermission(h.perm, "ai_skills:create"), h.CreateSkill)
+	skills.GET("/:id", rbacmw.RequirePermission(h.perm, "ai_skills:view"), h.GetSkill)
+	skills.PUT("/:id", rbacmw.RequirePermission(h.perm, "ai_skills:update"), h.OverwriteSkill)
+	skills.DELETE("/:id", rbacmw.RequirePermission(h.perm, "ai_skills:delete"), h.DeleteSkill)
 	skills.GET("/:id/package", h.DownloadSkill)
 }
 
@@ -178,13 +178,13 @@ func (h *Handler) ManualRun(c *gin.Context) {
 }
 
 func (h *Handler) APIRun(c *gin.Context) {
-	// JWT needs ai.agents:execute; PAT needs agents:run scope.
+	// JWT needs ai_agents:execute; PAT needs agents:run scope.
 	if authmiddleware.IsPAT(c) {
 		if err := authmiddleware.RequirePATScope(c, "agents:run"); err != nil {
 			pkg.Error(c, http.StatusForbidden, "token scope insufficient")
 			return
 		}
-	} else if err := h.perm.CheckAccess(authmiddleware.GetUserID(c), authmiddleware.IsSuperAdmin(c), "ai.agents:execute"); err != nil {
+	} else if err := h.perm.CheckAccess(authmiddleware.GetUserID(c), authmiddleware.IsSuperAdmin(c), "ai_agents:execute"); err != nil {
 		pkg.Error(c, http.StatusForbidden, "forbidden")
 		return
 	}
@@ -311,7 +311,7 @@ func (h *Handler) DownloadSkill(c *gin.Context) {
 			pkg.Error(c, http.StatusForbidden, "token scope insufficient")
 			return
 		}
-	} else if err := h.perm.CheckAccess(authmiddleware.GetUserID(c), authmiddleware.IsSuperAdmin(c), "ai.skills:download"); err != nil {
+	} else if err := h.perm.CheckAccess(authmiddleware.GetUserID(c), authmiddleware.IsSuperAdmin(c), "ai_skills:download"); err != nil {
 		pkg.Error(c, http.StatusForbidden, "forbidden")
 		return
 	}

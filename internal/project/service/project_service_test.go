@@ -29,32 +29,32 @@ import (
 func TestProjectACLListAndGlobalBypass(t *testing.T) {
 	svc := newProjectService(t)
 	owner := actor(1,
-		"project.projects:create", "project.projects:view", "project.projects:update",
-		"project.requirements:create", "project.requirements:view", "project.requirements:update",
-		"project.docs:create", "project.docs:view", "project.docs:update",
+		"project_projects:create", "project_projects:view", "project_projects:update",
+		"project_requirements:create", "project_requirements:view", "project_requirements:update",
+		"project_docs:create", "project_docs:view", "project_docs:update",
 	)
 	project := createProject(t, svc, owner, "alpha")
 	if _, err := svc.AddMember(owner, project.ID, MemberInput{UserID: 2, Role: projectmodel.ProjectRoleReadonly}); err != nil {
 		t.Fatal(err)
 	}
 
-	member := actor(2, "project.projects:view")
+	member := actor(2, "project_projects:view")
 	items, total, err := svc.ListProjects(member, ProjectListFilter{Page: 1, PageSize: 20})
 	if err != nil || total != 1 || len(items) != 1 || items[0].ID != project.ID {
 		t.Fatalf("joined list = %#v total=%d err=%v", items, total, err)
 	}
 
-	viewAll := actor(3, "project.projects:view", "project.projects:view_all")
+	viewAll := actor(3, "project_projects:view", "project_projects:view_all")
 	items, total, err = svc.ListProjects(viewAll, ProjectListFilter{Page: 1, PageSize: 20})
 	if err != nil || total != 1 || len(items) != 1 {
 		t.Fatalf("view_all list = %#v total=%d err=%v", items, total, err)
 	}
 
-	manager := actor(4, "project.projects:update", "project.projects:manage_all")
+	manager := actor(4, "project_projects:update", "project_projects:manage_all")
 	if _, err := svc.AddMember(manager, project.ID, MemberInput{UserID: 5, Role: projectmodel.ProjectRoleMember}); err != nil {
 		t.Fatalf("manage_all must manage without joining: %v", err)
 	}
-	ordinary := actor(6, "project.projects:update")
+	ordinary := actor(6, "project_projects:update")
 	if _, err := svc.AddMember(ordinary, project.ID, MemberInput{UserID: 7, Role: projectmodel.ProjectRoleMember}); !IsNotFound(err) {
 		t.Fatalf("ordinary update must not bypass membership, got %v", err)
 	}
@@ -62,14 +62,14 @@ func TestProjectACLListAndGlobalBypass(t *testing.T) {
 
 func TestProjectListCapabilitiesReflectProjectACL(t *testing.T) {
 	svc := newProjectService(t)
-	owner := actor(1, "project.projects:create", "project.projects:update", "project.projects:delete")
+	owner := actor(1, "project_projects:create", "project_projects:update", "project_projects:delete")
 	project := createProject(t, svc, owner, "capabilities")
 
 	viewAll := actor(2,
-		"project.projects:view",
-		"project.projects:view_all",
-		"project.projects:update",
-		"project.projects:delete",
+		"project_projects:view",
+		"project_projects:view_all",
+		"project_projects:update",
+		"project_projects:delete",
 	)
 	items, _, err := svc.ListProjects(viewAll, ProjectListFilter{Page: 1, PageSize: 20})
 	if err != nil {
@@ -89,10 +89,10 @@ func TestProjectListCapabilitiesReflectProjectACL(t *testing.T) {
 	}
 
 	manager := actor(3,
-		"project.projects:view",
-		"project.projects:update",
-		"project.projects:delete",
-		"project.projects:manage_all",
+		"project_projects:view",
+		"project_projects:update",
+		"project_projects:delete",
+		"project_projects:manage_all",
 	)
 	items, _, err = svc.ListProjects(manager, ProjectListFilter{Page: 1, PageSize: 20})
 	if err != nil {
@@ -105,16 +105,16 @@ func TestProjectListCapabilitiesReflectProjectACL(t *testing.T) {
 
 func TestRequirementStatusMetadataAllowsMemberWithoutDictionaryPermission(t *testing.T) {
 	svc := newProjectService(t)
-	owner := actor(1, "project.projects:create", "project.projects:update")
+	owner := actor(1, "project_projects:create", "project_projects:update")
 	project := createProject(t, svc, owner, "requirement-statuses")
 	if _, err := svc.AddMember(owner, project.ID, MemberInput{UserID: 2, Role: projectmodel.ProjectRoleReadonly}); err != nil {
 		t.Fatal(err)
 	}
 
-	member := actor(2, "project.requirements:view")
+	member := actor(2, "project_requirements:view")
 	statuses, err := svc.ListRequirementStatuses(member)
 	if err != nil {
-		t.Fatalf("member without system.dictionaries:view must read requirement statuses: %v", err)
+		t.Fatalf("member without system_dictionaries:view must read requirement statuses: %v", err)
 	}
 	values := make([]string, len(statuses))
 	for index, status := range statuses {
@@ -125,7 +125,7 @@ func TestRequirementStatusMetadataAllowsMemberWithoutDictionaryPermission(t *tes
 		t.Fatalf("requirement status values = %v, want %v", values, want)
 	}
 
-	if _, err := svc.ListRequirementStatuses(actor(3, "project.requirements:view")); !IsForbidden(err) {
+	if _, err := svc.ListRequirementStatuses(actor(3, "project_requirements:view")); !IsForbidden(err) {
 		t.Fatalf("non-member requirement reader must not read metadata, got %v", err)
 	}
 }
@@ -139,18 +139,19 @@ func TestProjectACLUsesResolvedRolePermissions(t *testing.T) {
 	users := authrepo.NewUserRepository(gdb)
 	roles := rbacrepo.NewRoleRepository(gdb)
 	resources := rbacrepo.NewResourceRepository(gdb)
-	permissions := rbacservice.NewPermissionService(roles, resources)
-	roleService := rbacservice.NewRoleService(roles)
+	groups := rbacrepo.NewMenuGroupRepository(gdb)
+	permissions := rbacservice.NewPermissionService(roles, resources, groups)
+	roleService := rbacservice.NewRoleService(roles, resources)
 
 	user := &authmodel.User{Username: "project_scope", PasswordHash: "hash", IsActive: true}
 	if err := users.Create(user); err != nil {
 		t.Fatal(err)
 	}
 	role, err := roleService.Create("项目范围管理员", "project_scope_admin", "", []string{
-		"project.projects:view",
-		"project.projects:view_all",
-		"project.projects:update",
-		"project.projects:manage_all",
+		"project_projects:view",
+		"project_projects:view_all",
+		"project_projects:update",
+		"project_projects:manage_all",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -159,7 +160,7 @@ func TestProjectACLUsesResolvedRolePermissions(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	owner := actor(99, "project.projects:create", "project.projects:update")
+	owner := actor(99, "project_projects:create", "project_projects:update")
 	project := createProject(t, svc, owner, "resolved-permissions")
 	resolved, err := permissions.ResolvePermissions(user.ID, false)
 	if err != nil {
@@ -177,7 +178,7 @@ func TestProjectACLUsesResolvedRolePermissions(t *testing.T) {
 
 func TestProjectRoleCapabilities(t *testing.T) {
 	svc := newProjectService(t)
-	owner := actor(1, "project.projects:create", "project.projects:update", "project.requirements:create")
+	owner := actor(1, "project_projects:create", "project_projects:update", "project_requirements:create")
 	project := createProject(t, svc, owner, "roles")
 	if _, err := svc.AddMember(owner, project.ID, MemberInput{UserID: 2, Role: projectmodel.ProjectRoleReadonly}); err != nil {
 		t.Fatal(err)
@@ -189,15 +190,15 @@ func TestProjectRoleCapabilities(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	readonly := actor(2, "project.requirements:create")
+	readonly := actor(2, "project_requirements:create")
 	if _, err := svc.CreateRequirement(readonly, project.ID, RequirementInput{Title: "blocked"}); !IsForbidden(err) {
 		t.Fatalf("readonly create = %v, want forbidden", err)
 	}
-	member := actor(3, "project.requirements:create")
+	member := actor(3, "project_requirements:create")
 	if _, err := svc.CreateRequirement(member, project.ID, RequirementInput{Title: "allowed"}); err != nil {
 		t.Fatalf("member create: %v", err)
 	}
-	admin := actor(4, "project.projects:update")
+	admin := actor(4, "project_projects:update")
 	if _, err := svc.AddMember(admin, project.ID, MemberInput{UserID: 5, Role: projectmodel.ProjectRoleMember}); err != nil {
 		t.Fatalf("admin member management: %v", err)
 	}
@@ -205,7 +206,7 @@ func TestProjectRoleCapabilities(t *testing.T) {
 
 func TestOwnerTransferIsOwnerOrManageAllOnly(t *testing.T) {
 	svc := newProjectService(t)
-	owner := actor(1, "project.projects:create", "project.projects:update")
+	owner := actor(1, "project_projects:create", "project_projects:update")
 	project := createProject(t, svc, owner, "owner-transfer")
 	if _, err := svc.AddMember(owner, project.ID, MemberInput{UserID: 2, Role: projectmodel.ProjectRoleAdmin}); err != nil {
 		t.Fatal(err)
@@ -213,7 +214,7 @@ func TestOwnerTransferIsOwnerOrManageAllOnly(t *testing.T) {
 	if _, err := svc.AddMember(owner, project.ID, MemberInput{UserID: 3, Role: projectmodel.ProjectRoleMember}); err != nil {
 		t.Fatal(err)
 	}
-	admin := actor(2, "project.projects:update")
+	admin := actor(2, "project_projects:update")
 	if _, err := svc.TransferOwner(admin, project.ID, 3); !IsForbidden(err) {
 		t.Fatalf("admin owner transfer = %v, want forbidden", err)
 	}
@@ -226,8 +227,8 @@ func TestOwnerTransferIsOwnerOrManageAllOnly(t *testing.T) {
 func TestDocumentPublishConflictAndImportDraftOnly(t *testing.T) {
 	svc := newProjectService(t)
 	owner := actor(1,
-		"project.projects:create", "project.projects:update",
-		"project.docs:create", "project.docs:view", "project.docs:update",
+		"project_projects:create", "project_projects:update",
+		"project_docs:create", "project_docs:view", "project_docs:update",
 	)
 	project := createProject(t, svc, owner, "docs")
 	published := "published"
@@ -259,7 +260,7 @@ func TestDocumentPublishConflictAndImportDraftOnly(t *testing.T) {
 
 func TestMarkdownUploadWritesDraftOnly(t *testing.T) {
 	svc := newProjectService(t)
-	owner := actor(1, "project.projects:create", "project.docs:create")
+	owner := actor(1, "project_projects:create", "project_docs:create")
 	project := createProject(t, svc, owner, "markdown-draft")
 
 	node, err := svc.UploadMarkdown(
@@ -286,7 +287,7 @@ func TestUploadLimitsAndZIPSafety(t *testing.T) {
 		t.Fatalf("attachment oversize = %v", err)
 	}
 
-	owner := actor(1, "project.projects:create", "project.docs:create")
+	owner := actor(1, "project_projects:create", "project_docs:create")
 	project := createProject(t, svc, owner, "zip")
 	payload := makeZIP(t, map[string]string{"../outside.md": "escape"})
 	if _, err := svc.ImportZIP(owner, project.ID, nil, "unsafe.zip", "application/zip", bytes.NewReader(payload), int64(len(payload))); err == nil {

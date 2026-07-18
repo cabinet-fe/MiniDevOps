@@ -331,13 +331,13 @@ onMounted(() => {
             <div class="actions">
               <u-action-group :max="4">
                 <u-action
-                  v-if="hasPermission('resource.clis:view')"
+                  v-if="hasPermission('resource_clis:view')"
                   @run="openSourcesManager(item)"
                 >
                   设置
                 </u-action>
                 <u-action
-                  v-if="hasPermission('resource.clis:execute') && isMissing(item.key)"
+                  v-if="hasPermission('resource_clis:execute') && isMissing(item.key)"
                   :disabled="!!pendingOps[item.key]"
                   :loading="isOpPending(item.key, 'install')"
                   @run="runOperation(item, 'install')"
@@ -345,7 +345,7 @@ onMounted(() => {
                   安装
                 </u-action>
                 <u-action
-                  v-if="hasPermission('resource.clis:execute') && isInstalled(item.key)"
+                  v-if="hasPermission('resource_clis:execute') && isInstalled(item.key)"
                   :disabled="!!pendingOps[item.key] || isCheckPending(item.key)"
                   :loading="isCheckPending(item.key)"
                   @run="runCheckUpdate(item)"
@@ -354,7 +354,7 @@ onMounted(() => {
                 </u-action>
                 <u-action
                   v-if="
-                    hasPermission('resource.clis:execute') &&
+                    hasPermission('resource_clis:execute') &&
                     isInstalled(item.key) &&
                     availableUpdate(item.key)
                   "
@@ -366,7 +366,7 @@ onMounted(() => {
                   更新到 {{ availableUpdate(item.key) }}
                 </u-action>
                 <u-action
-                  v-else-if="hasPermission('resource.clis:execute') && isInstalled(item.key)"
+                  v-else-if="hasPermission('resource_clis:execute') && isInstalled(item.key)"
                   :disabled="!!pendingOps[item.key] || isCheckPending(item.key)"
                   :loading="isOpPending(item.key, 'upgrade')"
                   @run="runOperation(item, 'upgrade')"
@@ -374,7 +374,7 @@ onMounted(() => {
                   升级
                 </u-action>
                 <u-action
-                  v-if="hasPermission('resource.clis:execute') && isInstalled(item.key)"
+                  v-if="hasPermission('resource_clis:execute') && isInstalled(item.key)"
                   :disabled="!!pendingOps[item.key] || isCheckPending(item.key)"
                   :loading="isOpPending(item.key, 'uninstall')"
                   type="danger"
@@ -398,7 +398,7 @@ onMounted(() => {
         <div class="block-head">
           <h4>安装源列表</h4>
           <u-button
-            v-if="hasPermission('resource.clis:create')"
+            v-if="hasPermission('resource_clis:create')"
             size="small"
             text
             type="primary"
@@ -419,13 +419,13 @@ onMounted(() => {
             <div class="actions">
               <u-action-group :max="2">
                 <u-action
-                  v-if="hasPermission('resource.clis:update')"
+                  v-if="hasPermission('resource_clis:update')"
                   @run="openEditSource(source)"
                 >
                   编辑
                 </u-action>
                 <u-action
-                  v-if="hasPermission('resource.clis:delete')"
+                  v-if="hasPermission('resource_clis:delete')"
                   type="danger"
                   @run="removeSource(source)"
                 >

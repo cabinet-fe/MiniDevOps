@@ -115,7 +115,7 @@ async function remove(row: Dictionary) {
     <ProTable ref="list" url="/dictionaries" :columns="columns" pagination>
       <template #filters>
         <u-button
-          v-if="hasPermission('system.dictionaries:create')"
+          v-if="hasPermission('system_dictionaries:create')"
           type="primary"
           style="margin-left: auto"
           @click.prevent="openCreate"
@@ -126,13 +126,13 @@ async function remove(row: Dictionary) {
       <template #column:action="{ rowData }">
         <u-action-group :max="3">
           <u-action
-            v-if="hasPermission('system.dictionaries:update')"
+            v-if="hasPermission('system_dictionaries:update')"
             @run="openEdit(rowData as Dictionary)"
           >
             编辑
           </u-action>
           <u-action
-            v-if="hasPermission('system.dictionaries:delete')"
+            v-if="hasPermission('system_dictionaries:delete')"
             need-confirm
             type="danger"
             @run="remove(rowData as Dictionary)"

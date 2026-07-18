@@ -126,7 +126,7 @@ function splitTags(raw?: string | null): string[] {
           style="width: 130px"
         />
         <u-button
-          v-if="hasPermission('project.projects:create')"
+          v-if="hasPermission('project_projects:create')"
           type="primary"
           style="margin-left: auto"
           @click.prevent="openCreate"

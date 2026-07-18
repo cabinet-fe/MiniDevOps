@@ -27,7 +27,7 @@ function parseRouteId(raw: unknown): number | null {
   return Number.isSafeInteger(id) && id > 0 ? id : null;
 }
 
-const canExecute = computed(() => hasPermission("ai.agents:execute"));
+const canExecute = computed(() => hasPermission("ai_agents:execute"));
 // Layout keys detail by fullPath and keep-alive caches the instance. Freeze the id at
 // setup so deactivated instances do not re-read the global route (which loses :id).
 const runId = parseRouteId(route.params.id);

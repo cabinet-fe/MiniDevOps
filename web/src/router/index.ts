@@ -27,7 +27,7 @@ const router = createRouter({
           name: "system-users",
           component: () => import("@/views/system/users/pages/main.vue"),
           meta: {
-            permission: "system.users:view",
+            permission: "system_users:view",
             title: "用户管理",
             keepAliveName: "SystemUsers",
           },
@@ -37,7 +37,7 @@ const router = createRouter({
           name: "system-roles",
           component: () => import("@/views/system/roles/pages/main.vue"),
           meta: {
-            permission: "system.roles:view",
+            permission: "system_roles:view",
             title: "角色管理",
             keepAliveName: "SystemRoles",
           },
@@ -47,7 +47,7 @@ const router = createRouter({
           name: "system-resources",
           component: () => import("@/views/system/resources/pages/main.vue"),
           meta: {
-            permission: "system.resources:view",
+            permission: "system_resources:view",
             title: "权限资源",
             keepAliveName: "SystemResources",
           },
@@ -57,7 +57,7 @@ const router = createRouter({
           name: "system-dictionaries",
           component: () => import("@/views/system/dictionaries/pages/main.vue"),
           meta: {
-            permission: "system.dictionaries:view",
+            permission: "system_dictionaries:view",
             title: "数据字典",
             keepAliveName: "SystemDictionaries",
           },
@@ -67,7 +67,7 @@ const router = createRouter({
           name: "system-operation-logs",
           component: () => import("@/views/system/operation-logs/pages/main.vue"),
           meta: {
-            permission: "system.operation_logs:view",
+            permission: "system_operation_logs:view",
             title: "操作日志",
             keepAliveName: "SystemOperationLogs",
           },
@@ -77,7 +77,7 @@ const router = createRouter({
           name: "resource-repositories",
           component: () => import("@/views/resource/repositories/pages/main.vue"),
           meta: {
-            permission: "resource.repositories:view",
+            permission: "resource_repositories:view",
             title: "代码仓库",
             keepAliveName: "ResourceRepositories",
           },
@@ -87,7 +87,7 @@ const router = createRouter({
           name: "resource-servers",
           component: () => import("@/views/resource/servers/pages/main.vue"),
           meta: {
-            permission: "resource.servers:view",
+            permission: "resource_servers:view",
             title: "服务器",
             keepAliveName: "ResourceServers",
           },
@@ -97,7 +97,7 @@ const router = createRouter({
           name: "resource-credentials",
           component: () => import("@/views/resource/credentials/pages/main.vue"),
           meta: {
-            permission: "resource.credentials:view",
+            permission: "resource_credentials:view",
             title: "凭证管理",
             keepAliveName: "ResourceCredentials",
           },
@@ -107,7 +107,7 @@ const router = createRouter({
           name: "resource-clis",
           component: () => import("@/views/resource/clis/pages/main.vue"),
           meta: {
-            permission: "resource.clis:view",
+            permission: "resource_clis:view",
             title: "AI CLI",
             keepAliveName: "ResourceClis",
           },
@@ -117,7 +117,7 @@ const router = createRouter({
           name: "resource-tokens",
           component: () => import("@/views/resource/tokens/pages/main.vue"),
           meta: {
-            permission: "resource.tokens:view",
+            permission: "resource_tokens:view",
             title: "访问令牌",
             keepAliveName: "ResourceTokens",
           },
@@ -127,7 +127,7 @@ const router = createRouter({
           name: "cicd-build-jobs",
           component: () => import("@/views/cicd/build-jobs/pages/main.vue"),
           meta: {
-            permission: "cicd.build_jobs:view",
+            permission: "cicd_build_jobs:view",
             title: "构建任务",
             keepAliveName: "CicdBuildJobs",
           },
@@ -137,7 +137,7 @@ const router = createRouter({
           name: "cicd-build-runs",
           component: () => import("@/views/cicd/build-runs/pages/main.vue"),
           meta: {
-            permission: "cicd.build_runs:view",
+            permission: "cicd_build_runs:view",
             title: "构建记录",
             keepAliveName: "CicdBuildRuns",
           },
@@ -147,7 +147,7 @@ const router = createRouter({
           name: "cicd-build-run-detail",
           component: () => import("@/views/cicd/build-runs/pages/detail.vue"),
           meta: {
-            permission: "cicd.build_runs:view",
+            permission: "cicd_build_runs:view",
             title: "构建详情",
             keepAliveName: "CicdBuildRunDetail",
           },
@@ -161,7 +161,7 @@ const router = createRouter({
           name: "projects",
           component: () => import("@/views/projects/projects/pages/main.vue"),
           meta: {
-            permission: "project.projects:view",
+            permission: "project_projects:view",
             title: "项目列表",
             keepAliveName: "Projects",
           },
@@ -171,7 +171,7 @@ const router = createRouter({
           name: "project-detail",
           component: () => import("@/views/projects/projects/pages/detail.vue"),
           meta: {
-            permission: "project.projects:view",
+            permission: "project_projects:view",
             title: "项目详情",
             keepAliveName: "ProjectDetail",
           },
@@ -182,7 +182,7 @@ const router = createRouter({
           name: "project-requirements",
           component: () => import("@/views/projects/requirements/pages/main.vue"),
           meta: {
-            permission: "project.requirements:view",
+            permission: "project_requirements:view",
             projectTab: "requirements",
             title: "需求",
             keepAliveName: "ProjectRequirements",
@@ -193,7 +193,7 @@ const router = createRouter({
           name: "project-docs",
           component: () => import("@/views/projects/docs/pages/main.vue"),
           meta: {
-            permission: "project.docs:view",
+            permission: "project_docs:view",
             projectTab: "docs",
             title: "接口文档",
             keepAliveName: "ProjectDocs",
@@ -218,7 +218,7 @@ const router = createRouter({
           name: "ops-processes",
           component: () => import("@/views/ops/processes/pages/main.vue"),
           meta: {
-            permission: "ops.processes:view",
+            permission: "ops_processes:view",
             title: "进程管理",
             keepAliveName: "OpsProcesses",
           },
@@ -228,7 +228,7 @@ const router = createRouter({
           name: "ops-dev-environments",
           component: () => import("@/views/ops/dev-environments/pages/main.vue"),
           meta: {
-            permission: "ops.dev_environments:view",
+            permission: "ops_dev_environments:view",
             title: "开发环境",
             keepAliveName: "OpsDevEnvironments",
           },
@@ -237,20 +237,20 @@ const router = createRouter({
           path: "ai/agents",
           name: "ai-agents",
           component: () => import("@/views/ai/agents/pages/main.vue"),
-          meta: { permission: "ai.agents:view", title: "Agents", keepAliveName: "AiAgents" },
+          meta: { permission: "ai_agents:view", title: "Agents", keepAliveName: "AiAgents" },
         },
         {
           path: "ai/runs",
           name: "ai-runs",
           component: () => import("@/views/ai/runs/pages/main.vue"),
-          meta: { permission: "ai.runs:view", title: "运行记录", keepAliveName: "AiRuns" },
+          meta: { permission: "ai_runs:view", title: "运行记录", keepAliveName: "AiRuns" },
         },
         {
           path: "ai/runs/:id",
           name: "ai-run-detail",
           component: () => import("@/views/ai/runs/pages/detail.vue"),
           meta: {
-            permission: "ai.runs:view",
+            permission: "ai_runs:view",
             title: "运行详情",
             keepAliveName: "AiRunDetail",
           },
@@ -259,7 +259,7 @@ const router = createRouter({
           path: "ai/skills",
           name: "ai-skills",
           component: () => import("@/views/ai/skills/pages/main.vue"),
-          meta: { permission: "ai.skills:view", title: "Skills", keepAliveName: "AiSkills" },
+          meta: { permission: "ai_skills:view", title: "Skills", keepAliveName: "AiSkills" },
         },
       ],
     },

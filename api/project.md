@@ -9,33 +9,33 @@
 
 ### GET /projects — 列出项目
 
-权限：`project.projects:view`
+权限：`project_projects:view`
 查询参数：page: integer, page_size: integer, keyword: string, status: 'active' | 'archived'
 响应 200：data = ProductProjectPage
 错误：403
 
 ### POST /projects — 创建项目（创建者成为 Owner）
 
-权限：`project.projects:create`
+权限：`project_projects:create`
 请求：{ name*, slug*, description, repository_id, tags }
 响应 201
 
 ### GET /projects/meta/requirement-statuses — 列出需求状态选项
 
-权限：`project.requirements:view`
+权限：`project_requirements:view`
 响应 200：data = RequirementStatusOptions
 错误：403
 
 ### GET /projects/{id} — 获取项目
 
-权限：`project.projects:view`
+权限：`project_projects:view`
 路径参数：id*: integer
 响应 200：data = ProductProjectView
 错误：404
 
 ### PUT /projects/{id} — 更新项目
 
-权限：`project.projects:update`
+权限：`project_projects:update`
 路径参数：id*: integer
 请求：{ name, slug, description, status, repository_id, clear_repository, tags }
 响应 200
@@ -43,27 +43,27 @@
 
 ### DELETE /projects/{id} — 解散项目
 
-权限：`project.projects:delete`
+权限：`project_projects:delete`
 路径参数：id*: integer
 响应 200
 错误：403
 
 ### POST /projects/{id}/archive — 归档项目
 
-权限：`project.projects:update`
+权限：`project_projects:update`
 路径参数：id*: integer
 响应 200：Archived
 错误：403
 
 ### GET /projects/{id}/members — 列出项目成员
 
-权限：`project.projects:view`
+权限：`project_projects:view`
 路径参数：id*: integer
 响应 200
 
 ### POST /projects/{id}/members — 添加非 Owner 成员
 
-权限：`project.projects:update`
+权限：`project_projects:update`
 路径参数：id*: integer
 请求：{ user_id*, role* }
 响应 201
@@ -71,7 +71,7 @@
 
 ### PUT /projects/{id}/members/{userID} — 修改非 Owner 成员角色
 
-权限：`project.projects:update`
+权限：`project_projects:update`
 路径参数：id*: integer, userID*: integer
 请求：{ role* }
 响应 200
@@ -79,14 +79,14 @@
 
 ### DELETE /projects/{id}/members/{userID} — 移除非 Owner 成员
 
-权限：`project.projects:update`
+权限：`project_projects:update`
 路径参数：id*: integer, userID*: integer
 响应 200
 错误：409
 
 ### POST /projects/{id}/members/transfer-owner — 转让项目所有者
 
-权限：`project.projects:update`
+权限：`project_projects:update`
 路径参数：id*: integer
 请求：{ user_id* }
 响应 200
@@ -94,14 +94,14 @@
 
 ### GET /projects/{id}/requirements — 列出需求
 
-权限：`project.requirements:view`
+权限：`project_requirements:view`
 路径参数：id*: integer
 查询参数：page: integer, page_size: integer, keyword: string, status: string, priority: 'low' | 'normal' | 'high' | 'urgent', assignee_id: integer, sort: string
 响应 200
 
 ### POST /projects/{id}/requirements — 创建需求
 
-权限：`project.requirements:create`
+权限：`project_requirements:create`
 路径参数：id*: integer
 请求：{ title*, description, status, priority, assignee_id, repository_id, tags }
 响应 201
@@ -109,14 +109,14 @@
 
 ### GET /projects/{id}/requirements/{requirementID} — 获取需求
 
-权限：`project.requirements:view`
+权限：`project_requirements:view`
 路径参数：id*: integer, requirementID*: integer
 响应 200
 错误：404
 
 ### PUT /projects/{id}/requirements/{requirementID} — 更新需求
 
-权限：`project.requirements:update`
+权限：`project_requirements:update`
 路径参数：id*: integer, requirementID*: integer
 请求：{ title*, description, status, priority, assignee_id, repository_id, tags }
 响应 200
@@ -124,46 +124,46 @@
 
 ### DELETE /projects/{id}/requirements/{requirementID} — 删除需求
 
-权限：`project.requirements:delete`
+权限：`project_requirements:delete`
 路径参数：id*: integer, requirementID*: integer
 响应 200
 错误：403
 
 ### GET /projects/{id}/requirements/{requirementID}/comments — 列出需求评论
 
-权限：`project.requirements:view`
+权限：`project_requirements:view`
 路径参数：id*: integer, requirementID*: integer
 响应 200
 
 ### POST /projects/{id}/requirements/{requirementID}/comments — 添加需求评论
 
-权限：`project.requirements:create`
+权限：`project_requirements:create`
 路径参数：id*: integer, requirementID*: integer
 请求：{ content* }
 响应 201
 
 ### PUT /projects/{id}/requirements/{requirementID}/comments/{commentID} — 编辑需求评论
 
-权限：`project.requirements:update`
+权限：`project_requirements:update`
 路径参数：id*: integer, requirementID*: integer, commentID*: integer
 请求：{ content* }
 响应 200
 
 ### DELETE /projects/{id}/requirements/{requirementID}/comments/{commentID} — 删除需求评论
 
-权限：`project.requirements:delete`
+权限：`project_requirements:delete`
 路径参数：id*: integer, requirementID*: integer, commentID*: integer
 响应 200
 
 ### GET /projects/{id}/requirements/{requirementID}/attachments — 列出需求附件
 
-权限：`project.requirements:view`
+权限：`project_requirements:view`
 路径参数：id*: integer, requirementID*: integer
 响应 200
 
 ### POST /projects/{id}/requirements/{requirementID}/attachments — 上传需求附件（默认限额 20MB）
 
-权限：`project.requirements:update`
+权限：`project_requirements:update`
 路径参数：id*: integer, requirementID*: integer
 请求：multipart: { file* }
 响应 201
@@ -171,32 +171,32 @@
 
 ### DELETE /projects/{id}/requirements/{requirementID}/attachments/{attachmentID} — 删除需求附件
 
-权限：`project.requirements:update`
+权限：`project_requirements:update`
 路径参数：id*: integer, requirementID*: integer, attachmentID*: integer
 响应 200
 
 ### GET /projects/{id}/requirements/{requirementID}/attachments/{attachmentID}/download — 下载需求附件
 
-权限：`project.requirements:view`
+权限：`project_requirements:view`
 路径参数：id*: integer, requirementID*: integer, attachmentID*: integer
 响应 200：data = binary
 
 ### GET /projects/{id}/docs — 获取项目文档树
 
-权限：`project.docs:view`
+权限：`project_docs:view`
 路径参数：id*: integer
 响应 200：Tree with published and draft content; Markdown must be sanitized at render time
 
 ### POST /projects/{id}/docs — 创建目录或文档节点
 
-权限：`project.docs:create`
+权限：`project_docs:create`
 路径参数：id*: integer
 请求：{ parent_id, kind*, name*, sort_order, repository_id, draft_content }
 响应 201
 
 ### POST /projects/{id}/docs/upload — 上传单个 Markdown 为草稿文档
 
-权限：`project.docs:create`
+权限：`project_docs:create`
 路径参数：id*: integer
 请求：multipart: { parent_id, file* }
 响应 201
@@ -204,7 +204,7 @@
 
 ### POST /projects/{id}/docs/import-zip — 导入 Markdown zip 为草稿文档
 
-权限：`project.docs:create`
+权限：`project_docs:create`
 路径参数：id*: integer
 请求：multipart: { parent_id, file* }
 响应 201：Imported
@@ -213,7 +213,7 @@
 
 ### POST /projects/{id}/docs/generate — 通过 AI 生成文档（异步）
 
-权限：`project.docs:execute`
+权限：`project_docs:execute`
 路径参数：id*: integer
 请求：{ agent_id*, node_id }
 响应 202：data = object
@@ -222,34 +222,34 @@
 
 ### GET /projects/{id}/docs/{nodeID} — 获取文档节点
 
-权限：`project.docs:view`
+权限：`project_docs:view`
 路径参数：id*: integer, nodeID*: integer
 响应 200
 错误：404
 
 ### PUT /projects/{id}/docs/{nodeID} — 重命名节点或写入文档草稿
 
-权限：`project.docs:update`
+权限：`project_docs:update`
 路径参数：id*: integer, nodeID*: integer
 请求：{ name, repository_id, draft_content }
 响应 200
 
 ### DELETE /projects/{id}/docs/{nodeID} — 删除文档节点及其子节点
 
-权限：`project.docs:delete`
+权限：`project_docs:delete`
 路径参数：id*: integer, nodeID*: integer
 响应 200
 
 ### POST /projects/{id}/docs/{nodeID}/move — 移动文档节点
 
-权限：`project.docs:update`
+权限：`project_docs:update`
 路径参数：id*: integer, nodeID*: integer
 请求：{ parent_id, sort_order }
 响应 200
 
 ### POST /projects/{id}/docs/{nodeID}/publish — 发布文档草稿
 
-权限：`project.docs:update`
+权限：`project_docs:update`
 路径参数：id*: integer, nodeID*: integer
 请求：{ expected_version* }
 响应 200：Published
@@ -257,7 +257,7 @@
 
 ### GET /projects/{id}/docs/{nodeID}/diff — 比较草稿与已发布文档
 
-权限：`project.docs:view`
+权限：`project_docs:view`
 路径参数：id*: integer, nodeID*: integer
 响应 200：data = ApiDocDiff
 

@@ -160,9 +160,9 @@ func (s *AuthService) GetByID(id uint) (*model.User, error) {
 
 // MePayload is returned by GET /auth/me.
 type MePayload struct {
-	User        *model.User          `json:"user"`
-	Permissions []string             `json:"permissions"`
-	Menus       []rbacmodel.MenuNode `json:"menus"`
+	User        *model.User               `json:"user"`
+	Permissions []string                  `json:"permissions"`
+	Menus       []rbacmodel.MenuGroupNode `json:"menus"`
 }
 
 func (s *AuthService) Me(userID uint) (*MePayload, error) {
@@ -174,7 +174,7 @@ func (s *AuthService) Me(userID uint) (*MePayload, error) {
 		return nil, errors.New("账户已被禁用")
 	}
 	perms := []string{}
-	menus := []rbacmodel.MenuNode{}
+	menus := []rbacmodel.MenuGroupNode{}
 	if s.perm != nil {
 		perms, err = s.perm.ResolvePermissions(userID, user.IsSuperAdmin)
 		if err != nil {
@@ -189,7 +189,7 @@ func (s *AuthService) Me(userID uint) (*MePayload, error) {
 		perms = []string{}
 	}
 	if menus == nil {
-		menus = []rbacmodel.MenuNode{}
+		menus = []rbacmodel.MenuGroupNode{}
 	}
 	return &MePayload{
 		User:        user,

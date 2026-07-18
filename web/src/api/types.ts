@@ -16,26 +16,29 @@ export interface User {
   role_ids?: number[];
 }
 
-export interface MenuNode {
-  path: string;
+/** Two-level nav from login /auth/me — aligns with UGroupNav GroupNavGroup. */
+export interface MenuGroupNode {
   title: string;
-  route?: string;
+  children: MenuItemNode[];
+}
+
+export interface MenuItemNode {
+  title: string;
+  path: string;
   icon?: string;
-  sort?: number;
-  children?: MenuNode[];
 }
 
 export interface LoginResponse {
   access_token: string;
   user: User;
   permissions?: string[];
-  menus?: MenuNode[];
+  menus?: MenuGroupNode[];
 }
 
 export interface MeResponse {
   user: User;
   permissions: string[];
-  menus: MenuNode[];
+  menus: MenuGroupNode[];
 }
 
 export interface PageResult<T> {
@@ -52,32 +55,74 @@ interface RolePermission {
   permission: string;
 }
 
+export type RoleType = "builtin" | "custom";
+
 export interface Role {
   id: number;
   name: string;
   code: string;
   description: string;
+  type?: RoleType;
   permissions?: RolePermission[];
 }
 
-export interface MenuMetadata {
+export interface MenuGroup {
   id: number;
-  resource_id: number;
+  name: string;
+  code: string;
+  route_prefix: string;
+  sort_key: number;
+  enabled: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export type RbacResourceType = "menu" | "action" | "card";
+
+export interface RbacResource {
+  id: number;
+  code: string;
+  full_code: string;
+  type: RbacResourceType;
+  group_id?: number | null;
+  parent_id?: number | null;
+  super_admin_only: boolean;
+  hidden: boolean;
+  enabled: boolean;
+  sort_key: number;
   title: string;
   route: string;
   icon_base64?: string;
   icon_mime?: string;
+  children?: RbacResource[];
 }
 
-export interface RbacResource {
+export interface PermissionCatalogFeature {
   id: number;
-  path: string;
-  type: "menu" | "page" | "action" | "card";
-  parent_id?: number | null;
+  code: string;
+  full_code: string;
+  type: string;
+  title?: string;
+  super_admin_only: boolean;
   enabled: boolean;
-  sort_key: number;
-  menu_metadata?: MenuMetadata;
-  children?: RbacResource[];
+}
+
+export interface PermissionCatalogMenu {
+  id: number;
+  code: string;
+  full_code: string;
+  title: string;
+  super_admin_only: boolean;
+  hidden: boolean;
+  enabled: boolean;
+  features: PermissionCatalogFeature[];
+}
+
+export interface PermissionCatalogGroup {
+  id: number;
+  name: string;
+  code: string;
+  menus: PermissionCatalogMenu[];
 }
 
 export interface Dictionary {

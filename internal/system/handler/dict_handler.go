@@ -24,11 +24,11 @@ func NewDictionaryHandler(dicts *service.DictionaryService, perm *rbacservice.Pe
 
 func (h *DictionaryHandler) RegisterRoutes(rg *gin.RouterGroup, authMW gin.HandlerFunc) {
 	g := rg.Group("/dictionaries", authMW)
-	g.GET("", rbacmw.RequirePermission(h.perm, "system.dictionaries:view"), h.List)
-	g.GET("/:id", rbacmw.RequirePermission(h.perm, "system.dictionaries:view"), h.Get)
-	g.POST("", rbacmw.RequirePermission(h.perm, "system.dictionaries:create"), h.Create)
-	g.PUT("/:id", rbacmw.RequirePermission(h.perm, "system.dictionaries:update"), h.Update)
-	g.DELETE("/:id", rbacmw.RequirePermission(h.perm, "system.dictionaries:delete"), h.Delete)
+	g.GET("", rbacmw.RequirePermission(h.perm, "system_dictionaries:view"), h.List)
+	g.GET("/:id", rbacmw.RequirePermission(h.perm, "system_dictionaries:view"), h.Get)
+	g.POST("", rbacmw.RequirePermission(h.perm, "system_dictionaries:create"), h.Create)
+	g.PUT("/:id", rbacmw.RequirePermission(h.perm, "system_dictionaries:update"), h.Update)
+	g.DELETE("/:id", rbacmw.RequirePermission(h.perm, "system_dictionaries:delete"), h.Delete)
 }
 
 func (h *DictionaryHandler) List(c *gin.Context) {

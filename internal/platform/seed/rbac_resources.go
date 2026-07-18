@@ -7,227 +7,222 @@ import (
 
 	"gorm.io/gorm"
 
+	"bedrock/internal/rbac"
 	"bedrock/internal/rbac/model"
 )
 
-type seedMenu struct {
-	Path     string
-	Title    string
-	Route    string
-	SortKey  int
-	Children []seedMenu
+type seedGroup struct {
+	Code        string
+	Name        string
+	RoutePrefix string
+	SortKey     int
+	Menus       []seedMenu
 }
 
-// EnsureRBACResources seeds missing preset resources. Existing rows matched by
-// path are left untouched (title/route/sort_key/enabled are not overwritten).
-// Ops paths are included but only effective for super-admin.
+type seedMenu struct {
+	Code           string
+	Title          string
+	Route          string
+	SortKey        int
+	Hidden         bool
+	SuperAdminOnly bool
+	Actions        []string // feature codes (type=action)
+	Cards          []seedCard
+}
+
+type seedCard struct {
+	Code    string
+	Title   string
+	SortKey int
+}
+
+var standardCRUD = []string{"view", "create", "update", "delete"}
+
+// EnsureRBACResources seeds menu groups, menus, and features. Existing rows matched
+// by full_code / group code are left untouched (admin edits preserved).
 func EnsureRBACResources(db *gorm.DB) error {
-	tree := []seedMenu{
-		{Path: "dashboard", Title: "仪表盘", Route: "/", SortKey: 10},
+	tree := []seedGroup{
 		{
-			Path: "ops", Title: "运维", Route: "/ops", SortKey: 20,
-			Children: []seedMenu{
-				{Path: "ops.processes", Title: "进程", Route: "/ops/processes", SortKey: 10},
-				{Path: "ops.dev_environments", Title: "开发环境", Route: "/ops/dev-environments", SortKey: 20},
+			Code: "overview", Name: "工作台", RoutePrefix: "", SortKey: 10,
+			Menus: []seedMenu{
+				{
+					Code: "dashboard", Title: "仪表盘", Route: "/", SortKey: 10,
+					Actions: []string{"view"},
+					Cards: []seedCard{
+						{Code: "build_summary", Title: "构建任务", SortKey: 10},
+						{Code: "agent_run_summary", Title: "智能体运行", SortKey: 20},
+					},
+				},
+				// Hidden mount menus: legacy dashboard.system_*:view → dashboard_system_*:view.
+				{
+					Code: "dashboard_system_info", Title: "系统信息卡片", SortKey: 20, Hidden: true,
+					Actions: []string{"view"},
+				},
+				{
+					Code: "dashboard_system_status", Title: "系统状态卡片", SortKey: 30, Hidden: true,
+					Actions: []string{"view"},
+				},
 			},
 		},
 		{
-			Path: "resource", Title: "资源管理", Route: "/resource", SortKey: 25,
-			Children: []seedMenu{
-				{Path: "resource.repositories", Title: "代码仓库", Route: "/resource/repositories", SortKey: 10},
-				{Path: "resource.servers", Title: "服务器", Route: "/resource/servers", SortKey: 20},
-				{Path: "resource.credentials", Title: "凭证", Route: "/resource/credentials", SortKey: 30},
-				{Path: "resource.clis", Title: "CLI", Route: "/resource/clis", SortKey: 40},
-				{Path: "resource.tokens", Title: "访问令牌", Route: "/resource/tokens", SortKey: 50},
+			Code: "ops", Name: "运维", RoutePrefix: "/ops", SortKey: 20,
+			Menus: []seedMenu{
+				{
+					Code: "ops_processes", Title: "进程", Route: "/ops/processes", SortKey: 10,
+					SuperAdminOnly: true,
+					Actions:        []string{"view", "execute"},
+				},
+				{
+					Code: "ops_dev_environments", Title: "开发环境", Route: "/ops/dev-environments", SortKey: 20,
+					SuperAdminOnly: true,
+					Actions:        []string{"view", "create", "update", "delete", "execute"},
+				},
 			},
 		},
 		{
-			Path: "cicd", Title: "CI/CD", Route: "/cicd", SortKey: 30,
-			Children: []seedMenu{
-				{Path: "cicd.build_jobs", Title: "构建任务", Route: "/cicd/build-jobs", SortKey: 10},
-				{Path: "cicd.build_runs", Title: "构建记录", Route: "/cicd/build-runs", SortKey: 20},
+			Code: "resource", Name: "资源管理", RoutePrefix: "/resource", SortKey: 25,
+			Menus: []seedMenu{
+				{Code: "resource_repositories", Title: "代码仓库", Route: "/resource/repositories", SortKey: 10, Actions: standardCRUD},
+				{Code: "resource_servers", Title: "服务器", Route: "/resource/servers", SortKey: 20, Actions: standardCRUD},
+				{Code: "resource_credentials", Title: "凭证", Route: "/resource/credentials", SortKey: 30, Actions: append(append([]string{}, standardCRUD...), "use")},
+				{Code: "resource_clis", Title: "CLI", Route: "/resource/clis", SortKey: 40, Actions: append(append([]string{}, standardCRUD...), "execute")},
+				{Code: "resource_tokens", Title: "访问令牌", Route: "/resource/tokens", SortKey: 50, Actions: []string{"view", "create", "delete"}},
 			},
 		},
 		{
-			Path: "project", Title: "项目管理", Route: "/project", SortKey: 40,
-			Children: []seedMenu{
-				{Path: "project.projects", Title: "产品项目", Route: "/project/projects", SortKey: 10},
-				{Path: "project.requirements", Title: "需求管理", Route: "/project/requirements", SortKey: 20},
-				{Path: "project.docs", Title: "接口文档", Route: "/project/docs", SortKey: 30},
+			Code: "cicd", Name: "CI/CD", RoutePrefix: "/cicd", SortKey: 30,
+			Menus: []seedMenu{
+				{Code: "cicd_build_jobs", Title: "构建任务", Route: "/cicd/build-jobs", SortKey: 10, Actions: append(append([]string{}, standardCRUD...), "execute")},
+				{Code: "cicd_build_runs", Title: "构建记录", Route: "/cicd/build-runs", SortKey: 20, Actions: []string{"view"}},
 			},
 		},
 		{
-			Path: "ai", Title: "AI", Route: "/ai", SortKey: 50,
-			Children: []seedMenu{
-				{Path: "ai.agents", Title: "智能体", Route: "/ai/agents", SortKey: 10},
-				{Path: "ai.runs", Title: "运行记录", Route: "/ai/runs", SortKey: 20},
-				{Path: "ai.skills", Title: "技能", Route: "/ai/skills", SortKey: 30},
+			Code: "project", Name: "项目管理", RoutePrefix: "/project", SortKey: 40,
+			Menus: []seedMenu{
+				{
+					Code: "project_projects", Title: "产品项目", Route: "/project/projects", SortKey: 10,
+					Actions: append(append([]string{}, standardCRUD...), "view_all", "manage_all"),
+				},
+				{Code: "project_requirements", Title: "需求管理", Route: "/project/requirements", SortKey: 20, Actions: standardCRUD},
+				{Code: "project_docs", Title: "接口文档", Route: "/project/docs", SortKey: 30, Actions: append(append([]string{}, standardCRUD...), "execute")},
 			},
 		},
 		{
-			Path: "system", Title: "系统管理", Route: "/system", SortKey: 90,
-			Children: []seedMenu{
-				{Path: "system.users", Title: "用户", Route: "/system/users", SortKey: 10},
-				{Path: "system.roles", Title: "角色", Route: "/system/roles", SortKey: 20},
-				{Path: "system.resources", Title: "权限资源", Route: "/system/resources", SortKey: 30},
-				{Path: "system.dictionaries", Title: "字典", Route: "/system/dictionaries", SortKey: 40},
-				{Path: "system.operation_logs", Title: "操作日志", Route: "/system/operation-logs", SortKey: 50},
+			Code: "ai", Name: "AI", RoutePrefix: "/ai", SortKey: 50,
+			Menus: []seedMenu{
+				{Code: "ai_agents", Title: "智能体", Route: "/ai/agents", SortKey: 10, Actions: append(append([]string{}, standardCRUD...), "execute")},
+				{Code: "ai_runs", Title: "运行记录", Route: "/ai/runs", SortKey: 20, Actions: []string{"view"}},
+				{Code: "ai_skills", Title: "技能", Route: "/ai/skills", SortKey: 30, Actions: append(append([]string{}, standardCRUD...), "download")},
+			},
+		},
+		{
+			Code: "system", Name: "系统管理", RoutePrefix: "/system", SortKey: 90,
+			Menus: []seedMenu{
+				{Code: "system_users", Title: "用户", Route: "/system/users", SortKey: 10, Actions: standardCRUD},
+				{Code: "system_roles", Title: "角色", Route: "/system/roles", SortKey: 20, Actions: standardCRUD},
+				{Code: "system_resources", Title: "权限资源", Route: "/system/resources", SortKey: 30, Actions: standardCRUD},
+				{Code: "system_dictionaries", Title: "字典", Route: "/system/dictionaries", SortKey: 40, Actions: standardCRUD},
+				{Code: "system_operation_logs", Title: "操作日志", Route: "/system/operation-logs", SortKey: 50, Actions: []string{"view"}},
 			},
 		},
 	}
 
 	now := time.Now().UTC()
 	return db.Transaction(func(tx *gorm.DB) error {
-		for _, root := range tree {
-			if err := insertMenu(tx, root, nil, now); err != nil {
+		for _, g := range tree {
+			if err := ensureGroup(tx, g, now); err != nil {
 				return err
 			}
 		}
-		if err := seedDashboardCards(tx, now); err != nil {
-			return err
-		}
-		if err := seedProjectScopeActions(tx, now); err != nil {
-			return err
-		}
-		return removeRetiredMenu(tx, "ops.toolchains")
+		return nil
 	})
 }
 
-func insertMenu(tx *gorm.DB, node seedMenu, parentID *uint, now time.Time) error {
-	var res model.RbacResource
-	err := tx.Where("path = ?", node.Path).First(&res).Error
+func ensureGroup(tx *gorm.DB, g seedGroup, now time.Time) error {
+	var group model.MenuGroup
+	err := tx.Where("code = ?", g.Code).First(&group).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		res = model.RbacResource{
-			Path:      node.Path,
-			Type:      model.ResourceTypeMenu,
-			ParentID:  parentID,
-			Enabled:   true,
-			SortKey:   node.SortKey,
-			CreatedAt: now,
-			UpdatedAt: now,
+		group = model.MenuGroup{
+			Name: g.Name, Code: g.Code, RoutePrefix: g.RoutePrefix,
+			SortKey: g.SortKey, Enabled: true, CreatedAt: now, UpdatedAt: now,
 		}
-		if err := tx.Create(&res).Error; err != nil {
-			return fmt.Errorf("create resource %s: %w", node.Path, err)
-		}
-		meta := model.MenuMetadata{
-			ResourceID: res.ID,
-			Title:      node.Title,
-			Route:      node.Route,
-		}
-		if err := tx.Create(&meta).Error; err != nil {
-			return fmt.Errorf("create menu metadata %s: %w", node.Path, err)
+		if err := tx.Create(&group).Error; err != nil {
+			return fmt.Errorf("create menu group %s: %w", g.Code, err)
 		}
 	} else if err != nil {
-		return fmt.Errorf("find resource %s: %w", node.Path, err)
-	} else {
-		// Path already exists — do not overwrite admin edits; only backfill missing metadata.
-		var meta model.MenuMetadata
-		err = tx.Where("resource_id = ?", res.ID).First(&meta).Error
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			meta = model.MenuMetadata{
-				ResourceID: res.ID,
-				Title:      node.Title,
-				Route:      node.Route,
-			}
-			if err := tx.Create(&meta).Error; err != nil {
-				return fmt.Errorf("create menu metadata %s: %w", node.Path, err)
-			}
-		} else if err != nil {
-			return fmt.Errorf("find menu metadata %s: %w", node.Path, err)
-		}
+		return fmt.Errorf("find menu group %s: %w", g.Code, err)
 	}
-	id := res.ID
-	for _, child := range node.Children {
-		if err := insertMenu(tx, child, &id, now); err != nil {
+
+	for _, m := range g.Menus {
+		if err := ensureMenu(tx, group.ID, m, now); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func seedDashboardCards(tx *gorm.DB, now time.Time) error {
-	var dashboard model.RbacResource
-	if err := tx.Where("path = ?", "dashboard").First(&dashboard).Error; err != nil {
-		return err
-	}
-	for index, path := range []string{
-		"dashboard.build_summary",
-		"dashboard.agent_run_summary",
-		"dashboard.system_info",
-		"dashboard.system_status",
-	} {
-		var existing model.RbacResource
-		err := tx.Where("path = ?", path).First(&existing).Error
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			parentID := dashboard.ID
-			card := model.RbacResource{
-				Path: path, Type: model.ResourceTypeCard, ParentID: &parentID,
-				Enabled: true, SortKey: (index + 1) * 10, CreatedAt: now, UpdatedAt: now,
-			}
-			if err := tx.Create(&card).Error; err != nil {
-				return fmt.Errorf("create dashboard card %s: %w", path, err)
-			}
-		} else if err != nil {
-			return fmt.Errorf("find dashboard card %s: %w", path, err)
-		}
-	}
-	return nil
-}
-
-// seedProjectScopeActions makes the project-wide ACL bypasses visible in the
-// resource tree. Their paths are complete permission codes because actions are
-// assigned to roles as {resource path}:{action}, while ordinary menu resources
-// represent only the resource path.
-func seedProjectScopeActions(tx *gorm.DB, now time.Time) error {
-	var projects model.RbacResource
-	if err := tx.Where("path = ?", "project.projects").First(&projects).Error; err != nil {
-		return fmt.Errorf("find project projects resource: %w", err)
-	}
-
-	for index, permission := range []string{
-		"project.projects:view_all",
-		"project.projects:manage_all",
-	} {
-		var existing model.RbacResource
-		err := tx.Where("path = ?", permission).First(&existing).Error
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			parentID := projects.ID
-			action := model.RbacResource{
-				Path:      permission,
-				Type:      model.ResourceTypeAction,
-				ParentID:  &parentID,
-				Enabled:   true,
-				SortKey:   100 + (index+1)*10,
-				CreatedAt: now,
-				UpdatedAt: now,
-			}
-			if err := tx.Create(&action).Error; err != nil {
-				return fmt.Errorf("create project scope action %s: %w", permission, err)
-			}
-		} else if err != nil {
-			return fmt.Errorf("find project scope action %s: %w", permission, err)
-		}
-	}
-	return nil
-}
-
-func removeRetiredMenu(tx *gorm.DB, path string) error {
+func ensureMenu(tx *gorm.DB, groupID uint, m seedMenu, now time.Time) error {
 	var res model.RbacResource
-	err := tx.Where("path = ?", path).First(&res).Error
+	err := tx.Where("full_code = ?", m.Code).First(&res).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
+		gid := groupID
+		res = model.RbacResource{
+			Code: m.Code, FullCode: m.Code, Type: model.ResourceTypeMenu,
+			GroupID: &gid, SuperAdminOnly: m.SuperAdminOnly, Hidden: m.Hidden,
+			Enabled: true, SortKey: m.SortKey, Title: m.Title, Route: m.Route,
+			CreatedAt: now, UpdatedAt: now,
+		}
+		if err := tx.Create(&res).Error; err != nil {
+			return fmt.Errorf("create menu %s: %w", m.Code, err)
+		}
+	} else if err != nil {
+		return fmt.Errorf("find menu %s: %w", m.Code, err)
+	}
+
+	for i, action := range m.Actions {
+		if err := ensureFeature(tx, res, action, model.ResourceTypeAction, actionTitle(action), (i+1)*10, m.SuperAdminOnly, now); err != nil {
+			return err
+		}
+	}
+	for _, card := range m.Cards {
+		if err := ensureFeature(tx, res, card.Code, model.ResourceTypeCard, card.Title, card.SortKey, m.SuperAdminOnly, now); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func ensureFeature(tx *gorm.DB, menu model.RbacResource, code, typ, title string, sortKey int, superAdminOnly bool, now time.Time) error {
+	fullCode := rbac.FeatureFullCode(menu.Code, code)
+	var existing model.RbacResource
+	err := tx.Where("full_code = ?", fullCode).First(&existing).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		parentID := menu.ID
+		feat := model.RbacResource{
+			Code: code, FullCode: fullCode, Type: typ,
+			ParentID: &parentID, SuperAdminOnly: superAdminOnly || menu.SuperAdminOnly,
+			Enabled: true, SortKey: sortKey, Title: title,
+			CreatedAt: now, UpdatedAt: now,
+		}
+		if err := tx.Create(&feat).Error; err != nil {
+			return fmt.Errorf("create feature %s: %w", fullCode, err)
+		}
 		return nil
 	}
 	if err != nil {
-		return fmt.Errorf("find retired resource %s: %w", path, err)
-	}
-	if err := tx.Where("resource_id = ?", res.ID).Delete(&model.MenuMetadata{}).Error; err != nil {
-		return fmt.Errorf("delete menu metadata %s: %w", path, err)
-	}
-	if err := tx.Where("permission LIKE ?", path+":%").Delete(&model.RolePermission{}).Error; err != nil {
-		return fmt.Errorf("delete role permissions %s: %w", path, err)
-	}
-	if err := tx.Delete(&res).Error; err != nil {
-		return fmt.Errorf("delete retired resource %s: %w", path, err)
+		return fmt.Errorf("find feature %s: %w", fullCode, err)
 	}
 	return nil
+}
+
+func actionTitle(code string) string {
+	titles := map[string]string{
+		"view": "查看", "create": "创建", "update": "更新", "delete": "删除",
+		"execute": "执行", "use": "使用", "view_all": "查看全部", "manage_all": "管理全部",
+		"download": "下载",
+	}
+	if t, ok := titles[code]; ok {
+		return t
+	}
+	return code
 }

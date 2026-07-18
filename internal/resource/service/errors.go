@@ -18,7 +18,7 @@ func IsConflict(err error) bool {
 	return errors.As(err, &c)
 }
 
-// ForbiddenError maps to HTTP 403 (e.g. missing resource.credentials:use on bind).
+// ForbiddenError maps to HTTP 403 (e.g. missing resource_credentials:use on bind).
 type ForbiddenError struct {
 	Message string
 }

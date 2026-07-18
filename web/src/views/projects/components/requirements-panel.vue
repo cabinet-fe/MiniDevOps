@@ -87,16 +87,16 @@ const canAdminProjectContent = computed(
   () => props.manageAll || props.projectRole === "owner" || props.projectRole === "admin",
 );
 const canCreateRequirement = computed(
-  () => hasPermission("project.requirements:create") && canEditProjectContent.value,
+  () => hasPermission("project_requirements:create") && canEditProjectContent.value,
 );
 const canUpdateRequirement = computed(
-  () => hasPermission("project.requirements:update") && canEditProjectContent.value,
+  () => hasPermission("project_requirements:update") && canEditProjectContent.value,
 );
 const canDeleteRequirement = computed(
-  () => hasPermission("project.requirements:delete") && canAdminProjectContent.value,
+  () => hasPermission("project_requirements:delete") && canAdminProjectContent.value,
 );
 const canCreateComment = computed(
-  () => hasPermission("project.requirements:create") && canEditProjectContent.value,
+  () => hasPermission("project_requirements:create") && canEditProjectContent.value,
 );
 const statusOptions = computed(() =>
   requirementStatuses.value
@@ -135,7 +135,7 @@ function canEditComment(comment: RequirementComment) {
 
 function canDeleteComment(comment: RequirementComment) {
   return (
-    hasPermission("project.requirements:delete") &&
+    hasPermission("project_requirements:delete") &&
     canEditProjectContent.value &&
     (props.manageAll || canAdminProjectContent.value || comment.created_by === auth.user?.id)
   );

@@ -23,16 +23,16 @@ func NewServerHandler(svc *service.ServerService, perm *rbacservice.PermissionSe
 
 func (h *ServerHandler) RegisterRoutes(rg *gin.RouterGroup, authMW gin.HandlerFunc) {
 	g := rg.Group("/resource/servers", authMW)
-	g.GET("", rbacmw.RequirePermission(h.perm, "resource.servers:view"), h.List)
-	g.GET("/:id", rbacmw.RequirePermission(h.perm, "resource.servers:view"), h.Get)
-	g.POST("", rbacmw.RequirePermission(h.perm, "resource.servers:create"), h.Create)
-	g.PUT("/:id", rbacmw.RequirePermission(h.perm, "resource.servers:update"), h.Update)
-	g.DELETE("/:id", rbacmw.RequirePermission(h.perm, "resource.servers:delete"), h.Delete)
-	g.POST("/:id/test", rbacmw.RequirePermission(h.perm, "resource.servers:view"), h.Test)
+	g.GET("", rbacmw.RequirePermission(h.perm, "resource_servers:view"), h.List)
+	g.GET("/:id", rbacmw.RequirePermission(h.perm, "resource_servers:view"), h.Get)
+	g.POST("", rbacmw.RequirePermission(h.perm, "resource_servers:create"), h.Create)
+	g.PUT("/:id", rbacmw.RequirePermission(h.perm, "resource_servers:update"), h.Update)
+	g.DELETE("/:id", rbacmw.RequirePermission(h.perm, "resource_servers:delete"), h.Delete)
+	g.POST("/:id/test", rbacmw.RequirePermission(h.perm, "resource_servers:view"), h.Test)
 }
 
 func (h *ServerHandler) canUseCredential(c *gin.Context) bool {
-	return h.perm.CheckAccess(authmiddleware.GetUserID(c), authmiddleware.IsSuperAdmin(c), "resource.credentials:use") == nil
+	return h.perm.CheckAccess(authmiddleware.GetUserID(c), authmiddleware.IsSuperAdmin(c), "resource_credentials:use") == nil
 }
 
 func (h *ServerHandler) List(c *gin.Context) {

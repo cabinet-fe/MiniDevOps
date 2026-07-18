@@ -22,26 +22,26 @@
 
 ### GET /dashboard/build-summary — 构建摘要卡片数据
 
-权限：`cicd.build_runs:view`
+权限：`cicd_build_runs:view`
 响应 200：data = BuildSummary
 错误：403
 
 ### GET /dashboard/agent-run-summary — 智能体运行摘要卡片数据
 
-权限：`ai.runs:view`
+权限：`ai_runs:view`
 响应 200：data = AgentRunSummary
 错误：403
 
 ### GET /dashboard/system-info — 系统信息卡片数据
 
-权限：`dashboard.system_info:view`
+权限：`dashboard_system_info:view`
 响应 200：data = SystemInfo
 错误：403
 说明：有权限的非超管也可见；不因此获得运维写权限。
 
 ### GET /dashboard/system-status — 系统状态卡片数据
 
-权限：`dashboard.system_status:view`
+权限：`dashboard_system_status:view`
 响应 200：data = SystemStatus
 错误：403
 说明：`disk_*` 为关键数据目录所在分区的宿主机磁盘占用；`directories` 为各关键目录自身占用大小（非分区剩余空间）。
@@ -50,7 +50,7 @@
 
 ### GET /ops/processes — 列出主机进程（仅超管）
 
-权限：`ops.processes:view`
+权限：`ops_processes:view`
 查询参数：keyword: string, pid: integer, port: integer, sort: string
 响应 200：data = object
 错误：403
@@ -58,20 +58,20 @@
 
 ### POST /ops/processes/{pid}/kill — 按 PID 结束进程
 
-权限：`ops.processes:execute`
+权限：`ops_processes:execute`
 路径参数：pid*: integer
 响应 200：Terminated
 错误：403
 
 ### GET /ops/dev-environments — 列出开发环境
 
-权限：`ops.dev_environments:view`
+权限：`ops_dev_environments:view`
 响应 200：data = object
 错误：403
 
 ### POST /ops/dev-environments — 创建自定义开发环境
 
-权限：`ops.dev_environments:create`
+权限：`ops_dev_environments:create`
 请求：{ name*, executable*, description, detect_script, install_script, upgrade_script, uninstall_script, versions_script, switch_script, default_version }
 响应 201
 错误：403
@@ -79,7 +79,7 @@
 
 ### PUT /ops/dev-environments/{id} — 更新自定义开发环境
 
-权限：`ops.dev_environments:update`
+权限：`ops_dev_environments:update`
 路径参数：id*: integer
 请求：{ name*, executable*, description, detect_script, install_script, upgrade_script, uninstall_script, versions_script, switch_script, default_version }
 响应 200：data = DevEnvironment
@@ -87,21 +87,21 @@
 
 ### DELETE /ops/dev-environments/{id} — 删除自定义开发环境
 
-权限：`ops.dev_environments:delete`
+权限：`ops_dev_environments:delete`
 路径参数：id*: integer
 响应 200
 错误：403
 
 ### POST /ops/dev-environments/{id}/detect — 检测开发环境
 
-权限：`ops.dev_environments:execute`
+权限：`ops_dev_environments:execute`
 路径参数：id*: integer
 响应 200：data = DevEnvironmentDetectResult
 错误：403
 
 ### POST /ops/dev-environments/{id}/install — 安装开发环境（异步）
 
-权限：`ops.dev_environments:execute`
+权限：`ops_dev_environments:execute`
 路径参数：id*: integer
 请求：{ version }
 响应 202：data = DevEnvJob
@@ -109,7 +109,7 @@
 
 ### POST /ops/dev-environments/{id}/upgrade — 升级开发环境（异步）
 
-权限：`ops.dev_environments:execute`
+权限：`ops_dev_environments:execute`
 路径参数：id*: integer
 请求：{ version }
 响应 202：data = DevEnvJob
@@ -117,7 +117,7 @@
 
 ### POST /ops/dev-environments/{id}/uninstall — 卸载开发环境（异步）
 
-权限：`ops.dev_environments:execute`
+权限：`ops_dev_environments:execute`
 路径参数：id*: integer
 请求：{ version }
 响应 202：data = DevEnvJob
@@ -125,7 +125,7 @@
 
 ### POST /ops/dev-environments/{id}/switch — 切换开发环境版本（异步）
 
-权限：`ops.dev_environments:execute`
+权限：`ops_dev_environments:execute`
 路径参数：id*: integer
 请求：{ version }
 响应 202：data = DevEnvJob
@@ -133,14 +133,14 @@
 
 ### GET /ops/dev-environments/{id}/sources — 列出安装源
 
-权限：`ops.dev_environments:view`
+权限：`ops_dev_environments:view`
 路径参数：id*: integer
 响应 200：data = DevEnvInstallSourceList
 错误：403
 
 ### POST /ops/dev-environments/{id}/sources — 添加安装源
 
-权限：`ops.dev_environments:create`
+权限：`ops_dev_environments:create`
 路径参数：id*: integer
 请求：{ name*, base_url*, priority*, enabled* }
 响应 201：data = DevEnvInstallSource
@@ -148,7 +148,7 @@
 
 ### PUT /ops/dev-environments/{id}/sources/{sourceId} — 更新安装源
 
-权限：`ops.dev_environments:update`
+权限：`ops_dev_environments:update`
 路径参数：id*: integer, sourceId*: integer
 请求：{ name*, base_url*, priority*, enabled* }
 响应 200：data = DevEnvInstallSource
@@ -156,21 +156,21 @@
 
 ### DELETE /ops/dev-environments/{id}/sources/{sourceId} — 删除安装源
 
-权限：`ops.dev_environments:delete`
+权限：`ops_dev_environments:delete`
 路径参数：id*: integer, sourceId*: integer
 响应 200
 错误：403
 
 ### POST /ops/dev-environments/{id}/sources/{sourceId}/ping — 探测安装源
 
-权限：`ops.dev_environments:execute`
+权限：`ops_dev_environments:execute`
 路径参数：id*: integer, sourceId*: integer
 响应 200：data = DevEnvInstallSourcePingResult
 错误：403
 
 ### GET /ops/dev-environments/{id}/jobs — 列出开发环境任务
 
-权限：`ops.dev_environments:view`
+权限：`ops_dev_environments:view`
 路径参数：id*: integer
 查询参数：page: integer, page_size: integer, status: string
 响应 200：data = DevEnvJobPage
@@ -178,21 +178,21 @@
 
 ### GET /ops/dev-environments/{id}/jobs/{jobId} — 获取开发环境任务
 
-权限：`ops.dev_environments:view`
+权限：`ops_dev_environments:view`
 路径参数：id*: integer, jobId*: integer
 响应 200：data = DevEnvJob
 错误：403
 
 ### GET /ops/dev-environments/{id}/jobs/{jobId}/logs — 获取开发环境任务日志
 
-权限：`ops.dev_environments:view`
+权限：`ops_dev_environments:view`
 路径参数：id*: integer, jobId*: integer
 响应 200：data = text/plain
 错误：403
 
 ### POST /ops/dev-environments/{id}/jobs/{jobId}/retry — 重试开发环境任务
 
-权限：`ops.dev_environments:execute`
+权限：`ops_dev_environments:execute`
 路径参数：id*: integer, jobId*: integer
 响应 202：data = DevEnvJob
 错误：403

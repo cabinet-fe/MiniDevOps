@@ -26,12 +26,12 @@ const projectID = computed(() => Number(route.params.id));
 const projectRole = computed<ProjectRole | undefined>(
   () => members.value.find((member) => member.user_id === auth.user?.id)?.role,
 );
-const canManageAll = computed(() => hasPermission("project.projects:manage_all"));
+const canManageAll = computed(() => hasPermission("project_projects:manage_all"));
 const tabs = computed(
   () =>
     [
-      hasPermission("project.requirements:view") ? { key: "requirements", name: "需求" } : null,
-      hasPermission("project.docs:view") ? { key: "docs", name: "接口文档" } : null,
+      hasPermission("project_requirements:view") ? { key: "requirements", name: "需求" } : null,
+      hasPermission("project_docs:view") ? { key: "docs", name: "接口文档" } : null,
       { key: "members", name: "成员" },
     ].filter(Boolean) as { key: string; name: string }[],
 );
@@ -96,13 +96,13 @@ watch(tab, (next) => {
     <template v-if="project">
       <u-tabs v-model="tab" :items="tabs" />
       <RequirementsPanel
-        v-if="tab === 'requirements' && hasPermission('project.requirements:view')"
+        v-if="tab === 'requirements' && hasPermission('project_requirements:view')"
         :project="project"
         :project-role="projectRole"
         :manage-all="canManageAll"
       />
       <DocsPanel
-        v-else-if="tab === 'docs' && hasPermission('project.docs:view')"
+        v-else-if="tab === 'docs' && hasPermission('project_docs:view')"
         :project="project"
         :project-role="projectRole"
         :manage-all="canManageAll"

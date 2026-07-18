@@ -23,7 +23,7 @@ import (
 	"bedrock/internal/rbac/service"
 )
 
-func setupRBAC(t *testing.T) (*service.PermissionService, *service.RoleService, *service.ResourceService, *authrepo.UserRepository) {
+func setupRBAC(t *testing.T) (*service.PermissionService, *service.RoleService, *service.ResourceService, *authrepo.UserRepository, *rbacrepo.RoleRepository) {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
 
@@ -46,18 +46,25 @@ func setupRBAC(t *testing.T) (*service.PermissionService, *service.RoleService, 
 	if err := seed.EnsureRBACResources(gdb); err != nil {
 		t.Fatal(err)
 	}
+	if err := seed.EnsureSuperAdmin(gdb, config.AdminConfig{
+		Username: "admin", Password: "admin123", DisplayName: "Admin",
+	}); err != nil {
+		t.Fatal(err)
+	}
 
 	roles := rbacrepo.NewRoleRepository(gdb)
 	resources := rbacrepo.NewResourceRepository(gdb)
+	groups := rbacrepo.NewMenuGroupRepository(gdb)
 	users := authrepo.NewUserRepository(gdb)
-	return service.NewPermissionService(roles, resources),
-		service.NewRoleService(roles),
-		service.NewResourceService(resources),
-		users
+	return service.NewPermissionService(roles, resources, groups),
+		service.NewRoleService(roles, resources),
+		service.NewResourceService(resources, groups),
+		users,
+		roles
 }
 
 func TestPermissionUnion(t *testing.T) {
-	perm, roles, _, users := setupRBAC(t)
+	perm, roles, _, users, _ := setupRBAC(t)
 
 	hash, _ := pkg.HashPassword("pass")
 	u := &authmodel.User{Username: "u1", PasswordHash: hash, IsActive: true}
@@ -65,11 +72,11 @@ func TestPermissionUnion(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	r1, err := roles.Create("A", "role_a", "", []string{"system.users:view", "resource.repositories:view"})
+	r1, err := roles.Create("A", "role_a", "", []string{"system_users:view", "resource_repositories:view"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	r2, err := roles.Create("B", "role_b", "", []string{"system.roles:view", "resource.repositories:create"})
+	r2, err := roles.Create("B", "role_b", "", []string{"system_roles:view", "resource_repositories:create"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -83,7 +90,7 @@ func TestPermissionUnion(t *testing.T) {
 	}
 	set := rbac.ToSet(codes)
 	for _, want := range []string{
-		"system.users:view", "resource.repositories:view", "system.roles:view", "resource.repositories:create",
+		"system_users:view", "resource_repositories:view", "system_roles:view", "resource_repositories:create",
 	} {
 		if !rbac.HasPermission(set, want) {
 			t.Fatalf("missing %s in %v", want, codes)
@@ -92,7 +99,7 @@ func TestPermissionUnion(t *testing.T) {
 }
 
 func TestProjectScopeActionsAreSeededAndResolvable(t *testing.T) {
-	perm, roles, resources, users := setupRBAC(t)
+	perm, roles, resources, users, _ := setupRBAC(t)
 
 	tree, err := resources.ListTree(service.ListResourcesFilter{})
 	if err != nil {
@@ -102,14 +109,14 @@ func TestProjectScopeActionsAreSeededAndResolvable(t *testing.T) {
 	var collect func([]model.RbacResource)
 	collect = func(nodes []model.RbacResource) {
 		for _, node := range nodes {
-			actions[node.Path] = node
+			actions[node.FullCode] = node
 			collect(node.Children)
 		}
 	}
 	collect(tree)
 	for _, permission := range []string{
-		"project.projects:view_all",
-		"project.projects:manage_all",
+		"project_projects:view_all",
+		"project_projects:manage_all",
 	} {
 		action, ok := actions[permission]
 		if !ok || action.Type != model.ResourceTypeAction {
@@ -122,10 +129,10 @@ func TestProjectScopeActionsAreSeededAndResolvable(t *testing.T) {
 		t.Fatal(err)
 	}
 	role, err := roles.Create("项目范围管理员", "project_scope_admin", "", []string{
-		"project.projects:view",
-		"project.projects:view_all",
-		"project.projects:update",
-		"project.projects:manage_all",
+		"project_projects:view",
+		"project_projects:view_all",
+		"project_projects:update",
+		"project_projects:manage_all",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -139,8 +146,8 @@ func TestProjectScopeActionsAreSeededAndResolvable(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, permission := range []string{
-		"project.projects:view_all",
-		"project.projects:manage_all",
+		"project_projects:view_all",
+		"project_projects:manage_all",
 	} {
 		if !rbac.HasPermission(rbac.ToSet(resolved), permission) {
 			t.Fatalf("resolved permissions missing %s: %v", permission, resolved)
@@ -148,18 +155,28 @@ func TestProjectScopeActionsAreSeededAndResolvable(t *testing.T) {
 	}
 }
 
-func TestOpsHardGate(t *testing.T) {
-	perm, roles, _, users := setupRBAC(t)
+func TestSuperAdminOnlyGate(t *testing.T) {
+	perm, roles, _, users, roleRepo := setupRBAC(t)
 
 	hash, _ := pkg.HashPassword("pass")
 	u := &authmodel.User{Username: "opsfan", PasswordHash: hash, IsActive: true}
 	if err := users.Create(u); err != nil {
 		t.Fatal(err)
 	}
-	r, err := roles.Create("OpsMistaken", "ops_mistaken", "", []string{
-		"ops:view", "ops.processes:view", "ops.processes:delete", "system.users:view",
-	})
+
+	// Binding super_admin_only features must be rejected.
+	if _, err := roles.Create("OpsMistaken", "ops_mistaken", "", []string{
+		"ops_processes:view", "system_users:view",
+	}); err == nil {
+		t.Fatal("expected reject binding ops_processes:view")
+	}
+
+	r, err := roles.Create("OpsMistaken", "ops_mistaken", "", []string{"system_users:view"})
 	if err != nil {
+		t.Fatal(err)
+	}
+	// Simulate a stale grant that slipped into role_permissions.
+	if err := roleRepo.ReplacePermissions(r.ID, []string{"ops_processes:view", "system_users:view"}); err != nil {
 		t.Fatal(err)
 	}
 	if err := roles.SetUserRoles(u.ID, []uint{r.ID}); err != nil {
@@ -171,31 +188,30 @@ func TestOpsHardGate(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, c := range codes {
-		if rbac.IsOpsPermission(c) {
+		if strings.HasPrefix(c, "ops_") {
 			t.Fatalf("ops permission leaked to non-super: %s", c)
 		}
 	}
-	if err := perm.CheckAccess(u.ID, false, "ops.processes:view"); err == nil || !service.IsForbidden(err) {
-		t.Fatalf("expected ops hard gate 403, got %v", err)
+	if err := perm.CheckAccess(u.ID, false, "ops_processes:view"); err == nil || !service.IsForbidden(err) {
+		t.Fatalf("expected super_admin_only hard gate 403, got %v", err)
 	}
-	if err := perm.CheckAccess(u.ID, false, "system.users:view"); err != nil {
-		t.Fatalf("system.users:view should pass: %v", err)
+	if err := perm.CheckAccess(u.ID, false, "system_users:view"); err != nil {
+		t.Fatalf("system_users:view should pass: %v", err)
 	}
-	if err := perm.CheckAccess(1, true, "ops.processes:view"); err != nil {
+	if err := perm.CheckAccess(1, true, "ops_processes:view"); err != nil {
 		t.Fatalf("super-admin should pass ops: %v", err)
 	}
 }
 
-func TestMenuTrimAndParentFill(t *testing.T) {
-	perm, roles, _, users := setupRBAC(t)
+func TestMenuTrimTwoLevelGroups(t *testing.T) {
+	perm, roles, _, users, _ := setupRBAC(t)
 
 	hash, _ := pkg.HashPassword("pass")
 	u := &authmodel.User{Username: "viewer", PasswordHash: hash, IsActive: true}
 	if err := users.Create(u); err != nil {
 		t.Fatal(err)
 	}
-	// Only leaf view — parent system should auto-fill.
-	r, err := roles.Create("Viewer", "viewer", "", []string{"system.users:view"})
+	r, err := roles.Create("Viewer", "viewer", "", []string{"system_users:view"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -207,15 +223,14 @@ func TestMenuTrimAndParentFill(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(menus) != 1 || menus[0].Path != "system" {
-		t.Fatalf("expected system parent, got %+v", menus)
+	if len(menus) != 1 || menus[0].Title != "系统管理" {
+		t.Fatalf("expected 系统管理 group, got %+v", menus)
 	}
-	if len(menus[0].Children) != 1 || menus[0].Children[0].Path != "system.users" {
-		t.Fatalf("expected system.users leaf, got %+v", menus[0].Children)
+	if len(menus[0].Children) != 1 || menus[0].Children[0].Title != "用户" || menus[0].Children[0].Path != "/system/users" {
+		t.Fatalf("expected 用户 leaf, got %+v", menus[0].Children)
 	}
 
-	// No :view → empty menus
-	r2, err := roles.Create("NoView", "noview", "", []string{"system.users:create"})
+	r2, err := roles.Create("NoView", "noview", "", []string{"system_users:create"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -231,34 +246,49 @@ func TestMenuTrimAndParentFill(t *testing.T) {
 	if len(menus2) != 0 {
 		t.Fatalf("expected empty menus without :view, got %+v", menus2)
 	}
-	if err := perm.CheckAccess(u2.ID, false, "system.users:view"); err == nil {
+	if err := perm.CheckAccess(u2.ID, false, "system_users:view"); err == nil {
 		t.Fatal("expected 403 without :view")
 	}
 }
 
-func TestListTreeFilterKeepsAncestors(t *testing.T) {
-	_, _, resources, _ := setupRBAC(t)
-
-	tree, err := resources.ListTree(service.ListResourcesFilter{Keyword: "system.users"})
+func TestHiddenMenusExcludedFromNav(t *testing.T) {
+	perm, _, _, _, _ := setupRBAC(t)
+	menus, err := perm.TrimMenus(1, true)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(tree) != 1 || tree[0].Path != "system" {
-		t.Fatalf("expected system root, got %+v", summarizeTree(tree))
+	for _, g := range menus {
+		for _, item := range g.Children {
+			if item.Title == "系统信息卡片" || item.Title == "系统状态卡片" {
+				t.Fatalf("hidden mount menu leaked into nav: %+v", item)
+			}
+		}
 	}
-	var foundUsers bool
+}
+
+func TestListTreeFilterKeepsAncestors(t *testing.T) {
+	_, _, resources, _, _ := setupRBAC(t)
+
+	tree, err := resources.ListTree(service.ListResourcesFilter{Keyword: "system_users"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tree) != 1 || tree[0].Code != "system_users" {
+		t.Fatalf("expected system_users root, got %+v", summarizeTree(tree))
+	}
+	var foundView bool
 	var walk func([]model.RbacResource)
 	walk = func(nodes []model.RbacResource) {
 		for _, n := range nodes {
-			if n.Path == "system.users" {
-				foundUsers = true
+			if n.FullCode == "system_users:view" {
+				foundView = true
 			}
 			walk(n.Children)
 		}
 	}
 	walk(tree)
-	if !foundUsers {
-		t.Fatalf("expected system.users under ancestors, got %+v", summarizeTree(tree))
+	if !foundView {
+		t.Fatalf("expected system_users:view under menu, got %+v", summarizeTree(tree))
 	}
 
 	actions, err := resources.ListTree(service.ListResourcesFilter{Type: model.ResourceTypeAction})
@@ -272,7 +302,7 @@ func TestListTreeFilterKeepsAncestors(t *testing.T) {
 	walkActions = func(nodes []model.RbacResource) {
 		for _, n := range nodes {
 			if len(n.Children) == 0 && n.Type != model.ResourceTypeAction {
-				t.Fatalf("leaf %q should be action when filtering type=action", n.Path)
+				t.Fatalf("leaf %q should be action when filtering type=action", n.FullCode)
 			}
 			walkActions(n.Children)
 		}
@@ -289,7 +319,7 @@ func summarizeTree(nodes []model.RbacResource) []string {
 	var walk func([]model.RbacResource, string)
 	walk = func(items []model.RbacResource, prefix string) {
 		for _, n := range items {
-			out = append(out, prefix+n.Path+":"+n.Type)
+			out = append(out, prefix+n.FullCode+":"+n.Type)
 			walk(n.Children, prefix+"  ")
 		}
 	}
@@ -298,22 +328,21 @@ func summarizeTree(nodes []model.RbacResource) []string {
 }
 
 func TestMenuIconRejectOver32KB(t *testing.T) {
-	_, _, resources, _ := setupRBAC(t)
+	_, _, resources, _, _ := setupRBAC(t)
 
-	// Find top-level system menu id
-	tree, err := resources.ListMenusTree()
+	tree, err := resources.ListTree(service.ListResourcesFilter{Type: model.ResourceTypeMenu})
 	if err != nil {
 		t.Fatal(err)
 	}
-	var systemID uint
+	var menuID uint
 	for _, n := range tree {
-		if n.Path == "system" {
-			systemID = n.ID
+		if n.Code == "system_users" {
+			menuID = n.ID
 			break
 		}
 	}
-	if systemID == 0 {
-		t.Fatal("system menu not found")
+	if menuID == 0 {
+		t.Fatal("system_users menu not found")
 	}
 
 	big := make([]byte, rbac.MaxMenuIconBytes+1)
@@ -321,24 +350,118 @@ func TestMenuIconRejectOver32KB(t *testing.T) {
 		big[i] = 'A'
 	}
 	payload := base64.StdEncoding.EncodeToString(big)
-	_, err = resources.UpdateMenuIcon(systemID, payload, "image/png")
+	_, err = resources.UpdateMenuIcon(menuID, payload, "image/png")
 	if err == nil || !strings.Contains(err.Error(), "32KB") {
 		t.Fatalf("expected 32KB reject, got %v", err)
 	}
 
 	ok := make([]byte, 16)
-	_, err = resources.UpdateMenuIcon(systemID, base64.StdEncoding.EncodeToString(ok), "image/png")
+	_, err = resources.UpdateMenuIcon(menuID, base64.StdEncoding.EncodeToString(ok), "image/png")
 	if err != nil {
 		t.Fatalf("small icon should pass: %v", err)
 	}
 }
 
-func TestIsOpsPath(t *testing.T) {
-	if !rbac.IsOpsPath("ops") || !rbac.IsOpsPath("ops.processes") {
-		t.Fatal("ops paths")
+func TestBuiltinRoleGuards(t *testing.T) {
+	_, roles, _, users, roleRepo := setupRBAC(t)
+
+	builtin, err := roleRepo.FindByCode(model.RoleCodeSuperAdmin)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if rbac.IsOpsPath("system") || rbac.IsOpsPath("options") {
-		t.Fatal("false positive ops")
+	if err := roles.Delete(builtin.ID); err == nil {
+		t.Fatal("expected delete builtin reject")
 	}
-	_ = model.ResourceTypeMenu
+	if _, err := roles.SetPermissions(builtin.ID, []string{"system_users:view"}); err == nil {
+		t.Fatal("expected set permissions on builtin reject")
+	}
+
+	hash, _ := pkg.HashPassword("pass")
+	u := &authmodel.User{Username: "normal", PasswordHash: hash, IsActive: true}
+	if err := users.Create(u); err != nil {
+		t.Fatal(err)
+	}
+	if err := roles.SetUserRoles(u.ID, []uint{builtin.ID}); err == nil {
+		t.Fatal("expected reject binding super_admin role")
+	}
+}
+
+func TestPermissionCatalog(t *testing.T) {
+	perm, _, _, _, _ := setupRBAC(t)
+	catalog, err := perm.PermissionCatalog()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(catalog) == 0 {
+		t.Fatal("expected catalog groups")
+	}
+	var foundSystemUsers bool
+	for _, g := range catalog {
+		for _, m := range g.Menus {
+			if m.Code == "system_users" && len(m.Features) > 0 {
+				foundSystemUsers = true
+			}
+			if m.Code == "ops_processes" && !m.SuperAdminOnly {
+				t.Fatal("ops_processes should be super_admin_only")
+			}
+		}
+	}
+	if !foundSystemUsers {
+		t.Fatal("expected system_users in catalog")
+	}
+}
+
+func TestValidCode(t *testing.T) {
+	if !rbac.ValidCode("system_users") {
+		t.Fatal("system_users should be valid")
+	}
+	if rbac.ValidCode("system.users") {
+		t.Fatal("dotted code should be invalid")
+	}
+}
+
+func TestMenuGroupDeleteRejectsNonEmpty(t *testing.T) {
+	gdb, err := db.Open(&config.DatabaseConfig{
+		Driver: "sqlite",
+		Path:   filepath.Join(t.TempDir(), "menu_groups.sqlite"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		sqlDB, _ := gdb.DB()
+		if sqlDB != nil {
+			_ = sqlDB.Close()
+		}
+	})
+	if err := migration.Up(context.Background(), gdb, "sqlite"); err != nil {
+		t.Fatal(err)
+	}
+	if err := seed.EnsureRBACResources(gdb); err != nil {
+		t.Fatal(err)
+	}
+
+	groups := rbacrepo.NewMenuGroupRepository(gdb)
+	svc := service.NewMenuGroupService(groups)
+
+	if _, err := svc.Create(service.CreateMenuGroupInput{Name: "Bad", Code: "bad.group"}); err == nil {
+		t.Fatal("expected dotted code reject")
+	}
+
+	created, err := svc.Create(service.CreateMenuGroupInput{
+		Name: "临时分组", Code: "tmp_group", RoutePrefix: "/tmp", SortKey: 999,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	system, err := groups.FindByCode("system")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.Delete(system.ID); err == nil {
+		t.Fatal("expected delete non-empty group reject")
+	}
+	if err := svc.Delete(created.ID); err != nil {
+		t.Fatalf("empty group should delete: %v", err)
+	}
 }

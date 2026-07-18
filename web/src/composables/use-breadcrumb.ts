@@ -2,54 +2,45 @@ import { computed } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import type { BreadcrumbItem } from "@veltra/desktop";
 
-import type { MenuNode } from "@/api/types";
+import type { MenuGroupNode, MenuItemNode } from "@/api/types";
 import { useAuthStore } from "@/stores/auth";
 
 export type AppBreadcrumbItem = BreadcrumbItem & { path?: string };
 
-function menuRoute(node: MenuNode): string {
-  return node.route || `/${node.path.replace(/\./g, "/")}`;
-}
+type MenuMatch = { group: MenuGroupNode; item: MenuItemNode };
 
-/** Longest-prefix match through the menu tree; returns root → leaf chain. */
-function matchMenuChain(nodes: MenuNode[], path: string): MenuNode[] | null {
-  let best: MenuNode[] | null = null;
+/** Longest-prefix match across two-level menus; returns group + leaf. */
+function matchMenu(groups: MenuGroupNode[], path: string): MenuMatch | null {
+  let best: MenuMatch | null = null;
   let bestLen = -1;
 
-  function walk(list: MenuNode[], chain: MenuNode[]) {
-    for (const node of list) {
-      const next = [...chain, node];
-      const route = menuRoute(node);
+  for (const group of groups) {
+    for (const item of group.children ?? []) {
+      const route = item.path;
+      if (!route) continue;
       if (path === route || path.startsWith(`${route}/`)) {
         if (route.length > bestLen) {
-          best = next;
+          best = { group, item };
           bestLen = route.length;
         }
       }
-      if (node.children?.length) {
-        walk(node.children, next);
-      }
     }
   }
-
-  walk(nodes, []);
   return best;
 }
 
 export function resolveRouteTitle(
   route: { path: string; meta: Record<string, unknown>; name?: string | symbol | null },
-  menus: MenuNode[],
+  menus: MenuGroupNode[],
 ): string {
   if (route.path === "/" || route.path === "") return "首页";
 
   const metaTitle = route.meta.title;
-  const chain = matchMenuChain(menus, route.path);
-  if (chain?.length) {
-    const leaf = chain[chain.length - 1]!;
-    const leafRoute = menuRoute(leaf);
-    if (route.path === leafRoute) return leaf.title;
+  const match = matchMenu(menus, route.path);
+  if (match) {
+    if (route.path === match.item.path) return match.item.title;
     if (typeof metaTitle === "string" && metaTitle) return metaTitle;
-    return leaf.title;
+    return match.item.title;
   }
 
   if (typeof metaTitle === "string" && metaTitle) return metaTitle;
@@ -68,14 +59,13 @@ export function useBreadcrumb() {
       return [{ title: "首页", path: "/" }];
     }
 
-    const chain = matchMenuChain(auth.menus, path);
-    if (chain?.length) {
-      const crumbs: AppBreadcrumbItem[] = chain.map((node) => ({
-        title: node.title,
-        path: menuRoute(node),
-      }));
-      const leafRoute = menuRoute(chain[chain.length - 1]!);
-      if (path !== leafRoute && path.startsWith(`${leafRoute}/`)) {
+    const match = matchMenu(auth.menus, path);
+    if (match) {
+      const crumbs: AppBreadcrumbItem[] = [
+        { title: match.group.title },
+        { title: match.item.title, path: match.item.path },
+      ];
+      if (path !== match.item.path && path.startsWith(`${match.item.path}/`)) {
         const detailTitle =
           typeof route.meta.title === "string" && route.meta.title ? route.meta.title : "详情";
         crumbs.push({ title: detailTitle, path });

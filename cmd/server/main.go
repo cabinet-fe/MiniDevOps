@@ -125,13 +125,15 @@ func main() {
 	userRepo := authrepo.NewUserRepository(gdb)
 	roleRepo := rbacrepo.NewRoleRepository(gdb)
 	resourceRepo := rbacrepo.NewResourceRepository(gdb)
+	menuGroupRepo := rbacrepo.NewMenuGroupRepository(gdb)
 	dictRepo := systemrepo.NewDictionaryRepository(gdb)
 	logRepo := systemrepo.NewOperationLogRepository(gdb)
 
-	permSvc := rbacservice.NewPermissionService(roleRepo, resourceRepo)
-	roleSvc := rbacservice.NewRoleService(roleRepo)
-	resourceSvc := rbacservice.NewResourceService(resourceRepo)
-	userSvc := systemservice.NewUserService(userRepo, roleRepo)
+	permSvc := rbacservice.NewPermissionService(roleRepo, resourceRepo, menuGroupRepo)
+	roleSvc := rbacservice.NewRoleService(roleRepo, resourceRepo)
+	resourceSvc := rbacservice.NewResourceService(resourceRepo, menuGroupRepo)
+	menuGroupSvc := rbacservice.NewMenuGroupService(menuGroupRepo)
+	userSvc := systemservice.NewUserService(userRepo, roleSvc)
 	dictSvc := systemservice.NewDictionaryService(dictRepo)
 	auditSvc := systemservice.NewAuditService(logRepo)
 
@@ -143,7 +145,7 @@ func main() {
 	authHandler := authhandler.NewAuthHandler(authSvc)
 	userHandler := systemhandler.NewUserHandler(userSvc, permSvc)
 	roleHandler := rbachandler.NewRoleHandler(roleSvc, permSvc)
-	resourceHandler := rbachandler.NewResourceHandler(resourceSvc, permSvc)
+	resourceHandler := rbachandler.NewResourceHandler(resourceSvc, menuGroupSvc, permSvc)
 	dictHandler := systemhandler.NewDictionaryHandler(dictSvc, permSvc)
 	logHandler := systemhandler.NewOperationLogHandler(auditSvc, permSvc)
 

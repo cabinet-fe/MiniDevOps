@@ -37,7 +37,7 @@ type Repository struct {
 
 func (Repository) TableName() string { return "repositories" }
 
-// Server is a deploy host. Secrets live in Credential; bind requires resource.credentials:use.
+// Server is a deploy host. Secrets live in Credential; bind requires resource_credentials:use.
 type Server struct {
 	ID                uint      `json:"id" gorm:"primaryKey"`
 	Name              string    `json:"name" gorm:"size:100;not null"`

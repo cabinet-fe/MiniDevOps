@@ -100,7 +100,7 @@ async function remove(row: SkillPackage) {
     <ProTable ref="table" url="/skills" pagination :columns="columns">
       <template #filters>
         <u-button
-          v-if="hasPermission('ai.skills:create')"
+          v-if="hasPermission('ai_skills:create')"
           type="primary"
           style="margin-left: auto"
           @click.prevent="openUpload"
@@ -119,19 +119,19 @@ async function remove(row: SkillPackage) {
       <template #column:action="{ rowData }">
         <u-action-group :max="3">
           <u-action
-            v-if="hasPermission('ai.skills:download')"
+            v-if="hasPermission('ai_skills:download')"
             @run="onDownload(rowData as SkillPackage)"
           >
             下载
           </u-action>
           <u-action
-            v-if="hasPermission('ai.skills:update')"
+            v-if="hasPermission('ai_skills:update')"
             @run="openOverwrite(rowData as SkillPackage)"
           >
             覆盖
           </u-action>
           <u-action
-            v-if="hasPermission('ai.skills:delete')"
+            v-if="hasPermission('ai_skills:delete')"
             type="danger"
             @run="remove(rowData as SkillPackage)"
           >

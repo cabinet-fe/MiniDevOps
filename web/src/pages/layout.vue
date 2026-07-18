@@ -1,27 +1,15 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from "vue";
+import { computed, onMounted, onUnmounted, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import type { NavItem } from "@veltra/desktop";
-import {
-  Books,
-  DArrowLeft,
-  DArrowRight,
-  HouseFilled,
-  FolderOpened,
-  Layers,
-  Logout,
-  Monitor,
-  Setting,
-  Tools,
-} from "@veltra/icons/normal";
-import type { DefineComponent } from "vue";
+import { Logout } from "@veltra/icons/normal";
 
 import AppBreadcrumb from "@/components/app-breadcrumb";
 import AppWorkspaceTabs from "@/components/app-workspace-tabs";
 import BrandLogo from "@/components/brand-logo";
 import NotificationBell from "@/components/notification-bell";
 import { resolveRouteTitle } from "@/composables/use-breadcrumb";
-import { menuNodesToNavItems } from "@/lib/menu-nav";
+import { menuGroupsToGroupNav } from "@/lib/menu-nav";
 import { useAuthStore } from "@/stores/auth";
 import { useTabsStore } from "@/stores/tabs";
 
@@ -30,29 +18,13 @@ const tabsStore = useTabsStore();
 const router = useRouter();
 const route = useRoute();
 
-const navCollapsed = ref(false);
 const displayName = computed(() => auth.user?.display_name || auth.user?.username || "");
 const nameInitial = computed(() => {
   const name = displayName.value.trim();
   return name ? name.charAt(0).toUpperCase() : "?";
 });
 
-const ROOT_ICONS: Record<string, DefineComponent> = {
-  dashboard: HouseFilled as DefineComponent,
-  ops: Tools as DefineComponent,
-  resource: FolderOpened as DefineComponent,
-  cicd: Layers as DefineComponent,
-  project: Books as DefineComponent,
-  system: Setting as DefineComponent,
-};
-
-const navMenus = computed(() =>
-  menuNodesToNavItems(auth.menus, ROOT_ICONS).map((item) => ({
-    ...item,
-    icon: item.icon || (Monitor as DefineComponent),
-  })),
-);
-
+const navGroups = computed(() => menuGroupsToGroupNav(auth.menus));
 const currentPath = computed(() => route.path);
 
 watch(
@@ -88,36 +60,20 @@ function onNavClick(item: NavItem) {
     void router.push(item.path);
   }
 }
-
-function toggleNav() {
-  navCollapsed.value = !navCollapsed.value;
-}
 </script>
 
 <template>
   <div class="app-shell">
-    <aside class="app-sidebar" :class="{ 'app-sidebar--collapsed': navCollapsed }">
+    <aside class="app-sidebar">
       <div class="app-sidebar__brand">
-        <BrandLogo :collapsed="navCollapsed" />
+        <BrandLogo />
       </div>
-      <u-nav
+      <u-group-nav
         class="app-nav"
-        :menus="navMenus"
+        :groups="navGroups"
         :current-path="currentPath"
-        :collapsed="navCollapsed"
         @item-click="onNavClick"
       />
-      <button
-        type="button"
-        class="app-sidebar__fold"
-        :title="navCollapsed ? '展开侧栏' : '折叠侧栏'"
-        @click="toggleNav"
-      >
-        <u-icon :size="16">
-          <DArrowRight v-if="navCollapsed" />
-          <DArrowLeft v-else />
-        </u-icon>
-      </button>
     </aside>
 
     <div class="app-body">
@@ -183,14 +139,6 @@ function toggleNav() {
   outline: none;
   background: fn.use-var(bg-color, bottom);
   box-shadow: 4px 0 24px rgb(0 0 0 / 28%);
-  transition:
-    width 0.2s ease,
-    min-width 0.2s ease,
-    max-width 0.2s ease;
-
-  &--collapsed {
-    --sidebar-width: 72px;
-  }
 }
 
 .app-sidebar__brand {
@@ -202,11 +150,6 @@ function toggleNav() {
   border: none;
 }
 
-.app-sidebar--collapsed .app-sidebar__brand {
-  justify-content: center;
-  padding: 0 8px;
-}
-
 .app-nav {
   flex: 1;
   min-height: 0;
@@ -216,26 +159,6 @@ function toggleNav() {
 
   :deep(*) {
     border: none;
-  }
-}
-
-.app-sidebar__fold {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 40px;
-  margin: 0;
-  padding: 0;
-  border: none;
-  outline: none;
-  background: transparent;
-  color: fn.use-var(text-color, second);
-  cursor: pointer;
-
-  &:hover {
-    color: fn.use-var(color, primary);
-    background: fn.use-var(bg-color, hover);
   }
 }
 

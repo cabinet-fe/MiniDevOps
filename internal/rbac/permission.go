@@ -4,14 +4,13 @@ import (
 	"strings"
 )
 
-// OpsPathPrefix is the hard-gated ops domain (ops and ops.*).
-const OpsPathPrefix = "ops"
-
 // MaxMenuIconBytes is the max raw image size for menu icons (32KB).
 const MaxMenuIconBytes = 32 * 1024
 
-// SplitPermission splits "{path}:action" into path and action.
-func SplitPermission(code string) (path, action string, ok bool) {
+// SplitPermission splits "{menu_or_feature_full_code_prefix}:{action}" — for feature
+// full_codes the whole string is already the permission (menuCode:featureCode).
+// Format: exactly one ':' separating resource code and action/feature code.
+func SplitPermission(code string) (resource, action string, ok bool) {
 	code = strings.TrimSpace(code)
 	if code == "" {
 		return "", "", false
@@ -20,43 +19,24 @@ func SplitPermission(code string) (path, action string, ok bool) {
 	if i <= 0 || i == len(code)-1 {
 		return "", "", false
 	}
-	// Exactly one ':' in the whole string per DESIGN.
 	if strings.Count(code, ":") != 1 {
 		return "", "", false
 	}
 	return code[:i], code[i+1:], true
 }
 
-// PermissionCode builds "{path}:action".
-func PermissionCode(path, action string) string {
-	return path + ":" + action
+// FeatureFullCode builds a feature full_code from menu code + feature code.
+func FeatureFullCode(menuCode, featureCode string) string {
+	return menuCode + ":" + featureCode
 }
 
-// IsOpsPath reports whether path is the ops domain (ops or ops.*).
-func IsOpsPath(path string) bool {
-	path = strings.TrimSpace(path)
-	return path == OpsPathPrefix || strings.HasPrefix(path, OpsPathPrefix+".")
-}
-
-// IsOpsPermission reports whether a permission code targets the ops domain.
-func IsOpsPermission(code string) bool {
-	path, _, ok := SplitPermission(code)
-	if !ok {
-		return IsOpsPath(code)
+// ValidCode reports whether a resource code is non-empty and contains no '.'.
+func ValidCode(code string) bool {
+	code = strings.TrimSpace(code)
+	if code == "" {
+		return false
 	}
-	return IsOpsPath(path)
-}
-
-// FilterOpsPermissions removes ops-domain codes (for non-super-admin effective sets).
-func FilterOpsPermissions(codes []string) []string {
-	out := make([]string, 0, len(codes))
-	for _, c := range codes {
-		if IsOpsPermission(c) {
-			continue
-		}
-		out = append(out, c)
-	}
-	return out
+	return !strings.Contains(code, ".")
 }
 
 // HasPermission reports membership in a permission set.

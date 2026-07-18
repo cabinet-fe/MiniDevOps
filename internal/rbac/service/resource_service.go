@@ -13,58 +13,100 @@ import (
 
 type ResourceService struct {
 	resources *repository.ResourceRepository
+	groups    *repository.MenuGroupRepository
 }
 
-func NewResourceService(resources *repository.ResourceRepository) *ResourceService {
-	return &ResourceService{resources: resources}
+func NewResourceService(resources *repository.ResourceRepository, groups *repository.MenuGroupRepository) *ResourceService {
+	return &ResourceService{resources: resources, groups: groups}
 }
 
 type CreateResourceInput struct {
-	Path     string `json:"path"`
-	Type     string `json:"type"`
-	ParentID *uint  `json:"parent_id"`
-	Enabled  *bool  `json:"enabled"`
-	SortKey  int    `json:"sort_key"`
-	Title    string `json:"title"`
-	Route    string `json:"route"`
+	Code           string `json:"code"`
+	Type           string `json:"type"`
+	GroupID        *uint  `json:"group_id"`
+	ParentID       *uint  `json:"parent_id"`
+	Enabled        *bool  `json:"enabled"`
+	SortKey        int    `json:"sort_key"`
+	Title          string `json:"title"`
+	Route          string `json:"route"`
+	Hidden         *bool  `json:"hidden"`
+	SuperAdminOnly *bool  `json:"super_admin_only"`
 }
 
-func (s *ResourceService) Create(in CreateResourceInput) (*model.RbacResource, error) {
-	path := strings.TrimSpace(in.Path)
+func (s *ResourceService) Create(in CreateResourceInput, actorIsSuperAdmin bool) (*model.RbacResource, error) {
+	code := strings.TrimSpace(in.Code)
 	typ := strings.TrimSpace(in.Type)
-	if path == "" || typ == "" {
-		return nil, errors.New("path 与 type 不能为空")
+	if code == "" || typ == "" {
+		return nil, errors.New("code 与 type 不能为空")
+	}
+	if !rbac.ValidCode(code) {
+		return nil, errors.New("code 不能包含 '.'")
 	}
 	if !validResourceType(typ) {
-		return nil, errors.New("type 必须为 menu|page|action|card")
+		return nil, errors.New("type 必须为 menu|action|card")
 	}
+
 	enabled := true
 	if in.Enabled != nil {
 		enabled = *in.Enabled
 	}
-	res := &model.RbacResource{
-		Path:     path,
-		Type:     typ,
-		ParentID: in.ParentID,
-		Enabled:  enabled,
-		SortKey:  in.SortKey,
+	hidden := false
+	if in.Hidden != nil {
+		hidden = *in.Hidden
 	}
+	superOnly := false
+	if in.SuperAdminOnly != nil {
+		if *in.SuperAdminOnly && !actorIsSuperAdmin {
+			return nil, errors.New("仅超级管理员可设置 super_admin_only")
+		}
+		superOnly = *in.SuperAdminOnly
+	}
+
+	res := &model.RbacResource{
+		Code: code, Type: typ, Enabled: enabled, SortKey: in.SortKey,
+		Title: strings.TrimSpace(in.Title), Route: strings.TrimSpace(in.Route),
+		Hidden: hidden, SuperAdminOnly: superOnly,
+	}
+
+	switch typ {
+	case model.ResourceTypeMenu:
+		if in.GroupID == nil || *in.GroupID == 0 {
+			return nil, errors.New("创建菜单必须指定 group_id")
+		}
+		if _, err := s.groups.FindByID(*in.GroupID); err != nil {
+			return nil, errors.New("菜单分组不存在")
+		}
+		if in.ParentID != nil {
+			return nil, errors.New("菜单不能设置 parent_id")
+		}
+		res.GroupID = in.GroupID
+		res.FullCode = code
+		if res.Title == "" {
+			res.Title = code
+		}
+	default:
+		if in.ParentID == nil || *in.ParentID == 0 {
+			return nil, errors.New("创建功能必须挂到菜单 parent_id")
+		}
+		parent, err := s.resources.FindByID(*in.ParentID)
+		if err != nil || !parent.IsMenu() {
+			return nil, errors.New("父资源必须是菜单")
+		}
+		if in.GroupID != nil {
+			return nil, errors.New("功能不能设置 group_id")
+		}
+		res.ParentID = in.ParentID
+		res.FullCode = rbac.FeatureFullCode(parent.Code, code)
+		if parent.SuperAdminOnly {
+			res.SuperAdminOnly = true
+		}
+		if res.Title == "" {
+			res.Title = code
+		}
+	}
+
 	if err := s.resources.Create(res); err != nil {
 		return nil, fmt.Errorf("创建资源失败: %w", err)
-	}
-	if typ == model.ResourceTypeMenu {
-		title := strings.TrimSpace(in.Title)
-		if title == "" {
-			title = path
-		}
-		meta := &model.MenuMetadata{
-			ResourceID: res.ID,
-			Title:      title,
-			Route:      strings.TrimSpace(in.Route),
-		}
-		if err := s.resources.UpsertMenuMetadata(meta); err != nil {
-			return nil, err
-		}
 	}
 	return s.resources.FindByID(res.ID)
 }
@@ -73,16 +115,15 @@ func (s *ResourceService) Get(id uint) (*model.RbacResource, error) {
 	return s.resources.FindByID(id)
 }
 
-// ListResourcesFilter filters the RBAC resource tree.
-// Matching nodes keep their ancestors so the response remains a valid tree.
 type ListResourcesFilter struct {
 	Keyword string
 	Type    string
 	Enabled *bool
+	GroupID *uint
 }
 
 func (f ListResourcesFilter) active() bool {
-	return strings.TrimSpace(f.Keyword) != "" || strings.TrimSpace(f.Type) != "" || f.Enabled != nil
+	return strings.TrimSpace(f.Keyword) != "" || strings.TrimSpace(f.Type) != "" || f.Enabled != nil || f.GroupID != nil
 }
 
 func (s *ResourceService) ListTree(filter ListResourcesFilter) ([]model.RbacResource, error) {
@@ -92,32 +133,37 @@ func (s *ResourceService) ListTree(filter ListResourcesFilter) ([]model.RbacReso
 	}
 	if filter.active() {
 		if typ := strings.TrimSpace(filter.Type); typ != "" && !validResourceType(typ) {
-			return nil, errors.New("type 必须为 menu|page|action|card")
+			return nil, errors.New("type 必须为 menu|action|card")
 		}
 		items = filterResourcesWithAncestors(items, filter)
 	}
 	return buildResourceTree(items), nil
 }
 
-func (s *ResourceService) ListMenusTree() ([]model.RbacResource, error) {
-	items, err := s.resources.ListMenus()
-	if err != nil {
-		return nil, err
-	}
-	return buildResourceTree(items), nil
-}
-
 type UpdateResourceInput struct {
-	Enabled *bool  `json:"enabled"`
-	SortKey *int   `json:"sort_key"`
-	Title   string `json:"title"`
-	Route   string `json:"route"`
+	Enabled        *bool  `json:"enabled"`
+	SortKey        *int   `json:"sort_key"`
+	Title          string `json:"title"`
+	Route          *string `json:"route"`
+	Code           *string `json:"code"`
+	GroupID        *uint  `json:"group_id"`
+	Hidden         *bool  `json:"hidden"`
+	SuperAdminOnly *bool  `json:"super_admin_only"`
 }
 
-func (s *ResourceService) Update(id uint, in UpdateResourceInput) (*model.RbacResource, error) {
+func (s *ResourceService) Update(id uint, in UpdateResourceInput, actorIsSuperAdmin bool) (*model.RbacResource, error) {
 	res, err := s.resources.FindByID(id)
 	if err != nil {
 		return nil, err
+	}
+	oldFullCode := res.FullCode
+	codeChanged := false
+
+	if in.SuperAdminOnly != nil {
+		if !actorIsSuperAdmin {
+			return nil, errors.New("仅超级管理员可修改 super_admin_only")
+		}
+		res.SuperAdminOnly = *in.SuperAdminOnly
 	}
 	if in.Enabled != nil {
 		res.Enabled = *in.Enabled
@@ -125,32 +171,82 @@ func (s *ResourceService) Update(id uint, in UpdateResourceInput) (*model.RbacRe
 	if in.SortKey != nil {
 		res.SortKey = *in.SortKey
 	}
+	if t := strings.TrimSpace(in.Title); t != "" {
+		res.Title = t
+	}
+	if in.Route != nil {
+		res.Route = strings.TrimSpace(*in.Route)
+	}
+	if in.Hidden != nil {
+		if !res.IsMenu() {
+			return nil, errors.New("仅菜单可设置 hidden")
+		}
+		res.Hidden = *in.Hidden
+	}
+	if in.GroupID != nil {
+		if !res.IsMenu() {
+			return nil, errors.New("仅菜单可设置 group_id")
+		}
+		if _, err := s.groups.FindByID(*in.GroupID); err != nil {
+			return nil, errors.New("菜单分组不存在")
+		}
+		res.GroupID = in.GroupID
+	}
+	if in.Code != nil {
+		newCode := strings.TrimSpace(*in.Code)
+		if newCode == "" {
+			return nil, errors.New("code 不能为空")
+		}
+		if !rbac.ValidCode(newCode) {
+			return nil, errors.New("code 不能包含 '.'")
+		}
+		if newCode != res.Code {
+			codeChanged = true
+			res.Code = newCode
+			if res.IsMenu() {
+				res.FullCode = newCode
+			} else if res.ParentID != nil {
+				parent, err := s.resources.FindByID(*res.ParentID)
+				if err != nil {
+					return nil, err
+				}
+				res.FullCode = rbac.FeatureFullCode(parent.Code, newCode)
+			}
+		}
+	}
+
 	if err := s.resources.Update(res); err != nil {
 		return nil, err
 	}
-	if res.Type == model.ResourceTypeMenu {
-		meta := res.MenuMetadata
-		if meta == nil {
-			meta = &model.MenuMetadata{ResourceID: res.ID}
-		}
-		if t := strings.TrimSpace(in.Title); t != "" {
-			meta.Title = t
-		}
-		if in.Route != "" || meta.Route != "" {
-			if in.Route != "" || strings.TrimSpace(in.Title) != "" {
-				// allow clearing route only when explicitly sent as empty with title update;
-				// keep existing if both empty in request beyond title.
-			}
-			meta.Route = strings.TrimSpace(in.Route)
-		}
-		if meta.Title == "" {
-			meta.Title = res.Path
-		}
-		if err := s.resources.UpsertMenuMetadata(meta); err != nil {
+
+	if codeChanged && res.IsMenu() {
+		if err := s.cascadeMenuCodeChange(res, oldFullCode); err != nil {
 			return nil, err
 		}
+	} else if codeChanged && res.IsFeature() && oldFullCode != res.FullCode {
+		_ = s.resources.DeleteRolePermissionsByFullCodes([]string{oldFullCode})
 	}
+
 	return s.resources.FindByID(id)
+}
+
+func (s *ResourceService) cascadeMenuCodeChange(menu *model.RbacResource, oldMenuFullCode string) error {
+	children, err := s.resources.ListByParentID(menu.ID)
+	if err != nil {
+		return err
+	}
+	stale := []string{oldMenuFullCode}
+	for _, child := range children {
+		stale = append(stale, child.FullCode)
+		child.FullCode = rbac.FeatureFullCode(menu.Code, child.Code)
+		if menu.SuperAdminOnly {
+			child.SuperAdminOnly = true
+		}
+		if err := s.resources.Update(&child); err != nil {
+			return err
+		}
+	}
+	return s.resources.DeleteRolePermissionsByFullCodes(stale)
 }
 
 func (s *ResourceService) Delete(id uint) error {
@@ -160,6 +256,13 @@ func (s *ResourceService) Delete(id uint) error {
 	}
 	if n > 0 {
 		return errors.New("请先删除子资源")
+	}
+	res, err := s.resources.FindByID(id)
+	if err != nil {
+		return err
+	}
+	if err := s.resources.DeleteRolePermissionsByFullCodes([]string{res.FullCode}); err != nil {
+		return err
 	}
 	return s.resources.Delete(id)
 }
@@ -173,9 +276,6 @@ func (s *ResourceService) UpdateMenuIcon(resourceID uint, iconBase64, iconMime s
 	if res.Type != model.ResourceTypeMenu {
 		return nil, errors.New("仅菜单资源可设置图标")
 	}
-	if res.ParentID != nil {
-		return nil, errors.New("仅一级菜单可上传图标")
-	}
 	raw, mime, err := decodeIconPayload(iconBase64, iconMime)
 	if err != nil {
 		return nil, err
@@ -183,19 +283,9 @@ func (s *ResourceService) UpdateMenuIcon(resourceID uint, iconBase64, iconMime s
 	if len(raw) > rbac.MaxMenuIconBytes {
 		return nil, fmt.Errorf("图标原始体积不得超过 32KB（当前 %d 字节）", len(raw))
 	}
-	stored := base64.StdEncoding.EncodeToString(raw)
-	meta := &model.MenuMetadata{
-		ResourceID: resourceID,
-		Title:      res.Path,
-		IconBase64: stored,
-		IconMime:   mime,
-	}
-	if res.MenuMetadata != nil {
-		meta.Title = res.MenuMetadata.Title
-		meta.Route = res.MenuMetadata.Route
-		meta.ID = res.MenuMetadata.ID
-	}
-	if err := s.resources.UpsertMenuMetadata(meta); err != nil {
+	res.IconBase64 = base64.StdEncoding.EncodeToString(raw)
+	res.IconMime = mime
+	if err := s.resources.Update(res); err != nil {
 		return nil, err
 	}
 	return s.resources.FindByID(resourceID)
@@ -215,7 +305,6 @@ func decodeIconPayload(iconBase64, iconMime string) ([]byte, string, error) {
 		header := parts[0]
 		payload = parts[1]
 		if mime == "" {
-			// data:image/png;base64
 			header = strings.TrimPrefix(header, "data:")
 			header = strings.TrimSuffix(header, ";base64")
 			mime = header
@@ -223,7 +312,6 @@ func decodeIconPayload(iconBase64, iconMime string) ([]byte, string, error) {
 	}
 	raw, err := base64.StdEncoding.DecodeString(payload)
 	if err != nil {
-		// try raw URL encoding variant
 		raw, err = base64.RawStdEncoding.DecodeString(payload)
 		if err != nil {
 			return nil, "", errors.New("图标 Base64 解码失败")
@@ -237,7 +325,7 @@ func decodeIconPayload(iconBase64, iconMime string) ([]byte, string, error) {
 
 func validResourceType(t string) bool {
 	switch t {
-	case model.ResourceTypeMenu, model.ResourceTypePage, model.ResourceTypeAction, model.ResourceTypeCard:
+	case model.ResourceTypeMenu, model.ResourceTypeAction, model.ResourceTypeCard:
 		return true
 	default:
 		return false
@@ -251,21 +339,35 @@ func resourceMatchesFilter(item model.RbacResource, filter ListResourcesFilter) 
 	if filter.Enabled != nil && item.Enabled != *filter.Enabled {
 		return false
 	}
+	if filter.GroupID != nil {
+		if item.IsMenu() {
+			if item.GroupID == nil || *item.GroupID != *filter.GroupID {
+				return false
+			}
+		} else if item.ParentID == nil {
+			return false
+			// features matched via ancestor menu below
+		}
+	}
 	keyword := strings.TrimSpace(filter.Keyword)
 	if keyword == "" {
+		if filter.GroupID != nil && item.IsFeature() {
+			return false // features kept only via ancestor when keyword empty — handled in filterResourcesWithAncestors
+		}
 		return true
 	}
 	kw := strings.ToLower(keyword)
-	if strings.Contains(strings.ToLower(item.Path), kw) {
+	if strings.Contains(strings.ToLower(item.Code), kw) {
 		return true
 	}
-	if item.MenuMetadata != nil {
-		if strings.Contains(strings.ToLower(item.MenuMetadata.Title), kw) {
-			return true
-		}
-		if strings.Contains(strings.ToLower(item.MenuMetadata.Route), kw) {
-			return true
-		}
+	if strings.Contains(strings.ToLower(item.FullCode), kw) {
+		return true
+	}
+	if strings.Contains(strings.ToLower(item.Title), kw) {
+		return true
+	}
+	if strings.Contains(strings.ToLower(item.Route), kw) {
+		return true
 	}
 	return false
 }
@@ -275,9 +377,39 @@ func filterResourcesWithAncestors(items []model.RbacResource, filter ListResourc
 	for _, item := range items {
 		byID[item.ID] = item
 	}
+
+	// When filtering by group, first collect menu IDs in that group.
+	groupMenuIDs := map[uint]struct{}{}
+	if filter.GroupID != nil {
+		for _, item := range items {
+			if item.IsMenu() && item.GroupID != nil && *item.GroupID == *filter.GroupID {
+				groupMenuIDs[item.ID] = struct{}{}
+			}
+		}
+	}
+
 	keep := make(map[uint]struct{})
 	for _, item := range items {
-		if !resourceMatchesFilter(item, filter) {
+		match := resourceMatchesFilter(item, filter)
+		if filter.GroupID != nil {
+			if item.IsMenu() {
+				match = match && item.GroupID != nil && *item.GroupID == *filter.GroupID
+			} else if item.ParentID != nil {
+				_, inGroup := groupMenuIDs[*item.ParentID]
+				if !inGroup {
+					match = false
+				} else if strings.TrimSpace(filter.Keyword) == "" && strings.TrimSpace(filter.Type) == "" && filter.Enabled == nil {
+					match = true
+				} else {
+					match = resourceMatchesFilter(item, ListResourcesFilter{
+						Keyword: filter.Keyword, Type: filter.Type, Enabled: filter.Enabled,
+					})
+				}
+			} else {
+				match = false
+			}
+		}
+		if !match {
 			continue
 		}
 		cur := item.ID

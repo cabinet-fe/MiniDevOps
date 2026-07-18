@@ -3,7 +3,7 @@ import { computed, ref } from "vue";
 
 import { clearTokens, loginApi, logoutApi, meApi, setAccessToken } from "@/api/auth";
 import { getAccessToken } from "@/api/http";
-import type { MenuNode, User } from "@/api/types";
+import type { MenuGroupNode, User } from "@/api/types";
 import { encryptLoginPassword } from "@/lib/login-crypto";
 
 /** Re-fetch /auth/me when menus/permissions may have changed (role edits, etc.). */
@@ -13,7 +13,7 @@ export const useAuthStore = defineStore("auth", () => {
   const token = ref<string | null>(getAccessToken());
   const user = ref<User | null>(null);
   const permissions = ref<string[]>([]);
-  const menus = ref<MenuNode[]>([]);
+  const menus = ref<MenuGroupNode[]>([]);
   const lastMeAt = ref(0);
   let meInflight: Promise<void> | null = null;
 

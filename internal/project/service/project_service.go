@@ -80,8 +80,8 @@ type ProjectView struct {
 }
 
 func (s *ProjectService) CreateProject(actor AccessContext, input CreateProjectInput) (*projectmodel.ProductProject, error) {
-	if !actor.Has("project.projects:create") {
-		return nil, NewForbidden("缺少全局权限: project.projects:create")
+	if !actor.Has("project_projects:create") {
+		return nil, NewForbidden("缺少全局权限: project_projects:create")
 	}
 	name := strings.TrimSpace(input.Name)
 	slug := normalizeSlug(input.Slug)
@@ -125,7 +125,7 @@ func (s *ProjectService) ListProjects(actor AccessContext, filter ProjectListFil
 }
 
 func (s *ProjectService) GetProject(actor AccessContext, id uint) (*ProjectView, error) {
-	if _, err := s.acl.Require(id, actor, "project.projects:view", capProjectView); err != nil {
+	if _, err := s.acl.Require(id, actor, "project_projects:view", capProjectView); err != nil {
 		return nil, err
 	}
 	project, err := s.repo.FindProject(id)
@@ -164,19 +164,19 @@ func (s *ProjectService) projectViews(actor AccessContext, projects []projectmod
 }
 
 func projectCapabilities(actor AccessContext, role string) ProjectCapabilities {
-	canManageProject := actor.SuperAdmin || actor.Has("project.projects:manage_all") ||
+	canManageProject := actor.SuperAdmin || actor.Has("project_projects:manage_all") ||
 		roleAllows(role, capProjectManage)
-	canManageMembers := actor.SuperAdmin || actor.Has("project.projects:manage_all") ||
+	canManageMembers := actor.SuperAdmin || actor.Has("project_projects:manage_all") ||
 		roleAllows(role, capMemberManage)
-	canTransferOwner := actor.SuperAdmin || actor.Has("project.projects:manage_all") ||
+	canTransferOwner := actor.SuperAdmin || actor.Has("project_projects:manage_all") ||
 		roleAllows(role, capOwnerTransfer)
 
 	return ProjectCapabilities{
-		Update:        actor.Has("project.projects:update") && canManageProject,
-		Archive:       actor.Has("project.projects:update") && canManageProject,
-		Delete:        actor.Has("project.projects:delete") && canManageProject,
-		ManageMembers: actor.Has("project.projects:update") && canManageMembers,
-		TransferOwner: actor.Has("project.projects:update") && canTransferOwner,
+		Update:        actor.Has("project_projects:update") && canManageProject,
+		Archive:       actor.Has("project_projects:update") && canManageProject,
+		Delete:        actor.Has("project_projects:delete") && canManageProject,
+		ManageMembers: actor.Has("project_projects:update") && canManageMembers,
+		TransferOwner: actor.Has("project_projects:update") && canTransferOwner,
 	}
 }
 
@@ -185,10 +185,10 @@ func projectCapabilities(actor AccessContext, role string) ProjectCapabilities {
 // but must still have project ACL visibility through membership or a global
 // project scope permission.
 func (s *ProjectService) ListRequirementStatuses(actor AccessContext) ([]projectmodel.RequirementStatusOption, error) {
-	if !actor.Has("project.requirements:view") {
-		return nil, NewForbidden("缺少全局权限: project.requirements:view")
+	if !actor.Has("project_requirements:view") {
+		return nil, NewForbidden("缺少全局权限: project_requirements:view")
 	}
-	if !actor.SuperAdmin && !actor.Has("project.projects:view_all") && !actor.Has("project.projects:manage_all") {
+	if !actor.SuperAdmin && !actor.Has("project_projects:view_all") && !actor.Has("project_projects:manage_all") {
 		member, err := s.repo.HasProjectMembership(actor.UserID)
 		if err != nil {
 			return nil, err
@@ -201,7 +201,7 @@ func (s *ProjectService) ListRequirementStatuses(actor AccessContext) ([]project
 }
 
 func (s *ProjectService) UpdateProject(actor AccessContext, id uint, input UpdateProjectInput) (*projectmodel.ProductProject, error) {
-	if _, err := s.acl.Require(id, actor, "project.projects:update", capProjectManage); err != nil {
+	if _, err := s.acl.Require(id, actor, "project_projects:update", capProjectManage); err != nil {
 		return nil, err
 	}
 	project, err := s.repo.FindProject(id)
@@ -258,7 +258,7 @@ func (s *ProjectService) ArchiveProject(actor AccessContext, id uint) (*projectm
 }
 
 func (s *ProjectService) DeleteProject(actor AccessContext, id uint) error {
-	if _, err := s.acl.Require(id, actor, "project.projects:delete", capProjectManage); err != nil {
+	if _, err := s.acl.Require(id, actor, "project_projects:delete", capProjectManage); err != nil {
 		return err
 	}
 	if _, err := s.repo.FindProject(id); errors.Is(err, gorm.ErrRecordNotFound) {
@@ -287,14 +287,14 @@ type MemberInput struct {
 }
 
 func (s *ProjectService) ListMembers(actor AccessContext, projectID uint) ([]projectmodel.ProjectMember, error) {
-	if _, err := s.acl.Require(projectID, actor, "project.projects:view", capMemberView); err != nil {
+	if _, err := s.acl.Require(projectID, actor, "project_projects:view", capMemberView); err != nil {
 		return nil, err
 	}
 	return s.repo.ListMembers(projectID)
 }
 
 func (s *ProjectService) AddMember(actor AccessContext, projectID uint, input MemberInput) (*projectmodel.ProjectMember, error) {
-	if _, err := s.acl.Require(projectID, actor, "project.projects:update", capMemberManage); err != nil {
+	if _, err := s.acl.Require(projectID, actor, "project_projects:update", capMemberManage); err != nil {
 		return nil, err
 	}
 	if input.UserID == 0 {
@@ -320,7 +320,7 @@ func (s *ProjectService) AddMember(actor AccessContext, projectID uint, input Me
 }
 
 func (s *ProjectService) UpdateMember(actor AccessContext, projectID, userID uint, role string) (*projectmodel.ProjectMember, error) {
-	operator, err := s.acl.Require(projectID, actor, "project.projects:update", capMemberManage)
+	operator, err := s.acl.Require(projectID, actor, "project_projects:update", capMemberManage)
 	if err != nil {
 		return nil, err
 	}
@@ -349,7 +349,7 @@ func (s *ProjectService) UpdateMember(actor AccessContext, projectID, userID uin
 }
 
 func (s *ProjectService) RemoveMember(actor AccessContext, projectID, userID uint) error {
-	if _, err := s.acl.Require(projectID, actor, "project.projects:update", capMemberManage); err != nil {
+	if _, err := s.acl.Require(projectID, actor, "project_projects:update", capMemberManage); err != nil {
 		return err
 	}
 	member, err := s.repo.FindMember(projectID, userID)
@@ -366,7 +366,7 @@ func (s *ProjectService) RemoveMember(actor AccessContext, projectID, userID uin
 }
 
 func (s *ProjectService) TransferOwner(actor AccessContext, projectID, userID uint) (*projectmodel.ProductProject, error) {
-	if _, err := s.acl.Require(projectID, actor, "project.projects:update", capOwnerTransfer); err != nil {
+	if _, err := s.acl.Require(projectID, actor, "project_projects:update", capOwnerTransfer); err != nil {
 		return nil, err
 	}
 	project, err := s.repo.FindProject(projectID)
@@ -417,7 +417,7 @@ type RequirementFilter struct {
 }
 
 func (s *ProjectService) ListRequirements(actor AccessContext, projectID uint, filter RequirementFilter) ([]projectmodel.Requirement, int64, error) {
-	if _, err := s.acl.Require(projectID, actor, "project.requirements:view", capRequirementView); err != nil {
+	if _, err := s.acl.Require(projectID, actor, "project_requirements:view", capRequirementView); err != nil {
 		return nil, 0, err
 	}
 	if filter.Page == 0 {
@@ -440,7 +440,7 @@ func (s *ProjectService) GetRequirement(actor AccessContext, id uint) (*projectm
 	if err != nil {
 		return nil, err
 	}
-	if _, err := s.acl.Require(requirement.ProjectID, actor, "project.requirements:view", capRequirementView); err != nil {
+	if _, err := s.acl.Require(requirement.ProjectID, actor, "project_requirements:view", capRequirementView); err != nil {
 		return nil, err
 	}
 	return requirement, nil
@@ -497,7 +497,7 @@ func (s *ProjectService) CheckAttachmentRequirementProject(actor AccessContext, 
 }
 
 func (s *ProjectService) CreateRequirement(actor AccessContext, projectID uint, input RequirementInput) (*projectmodel.Requirement, error) {
-	if _, err := s.acl.Require(projectID, actor, "project.requirements:create", capRequirementEdit); err != nil {
+	if _, err := s.acl.Require(projectID, actor, "project_requirements:create", capRequirementEdit); err != nil {
 		return nil, err
 	}
 	if err := s.requireActiveProject(projectID); err != nil {
@@ -529,7 +529,7 @@ func (s *ProjectService) UpdateRequirement(actor AccessContext, id uint, input R
 	if err != nil {
 		return nil, err
 	}
-	if _, err := s.acl.Require(requirement.ProjectID, actor, "project.requirements:update", capRequirementEdit); err != nil {
+	if _, err := s.acl.Require(requirement.ProjectID, actor, "project_requirements:update", capRequirementEdit); err != nil {
 		return nil, err
 	}
 	if err := s.requireActiveProject(requirement.ProjectID); err != nil {
@@ -565,7 +565,7 @@ func (s *ProjectService) DeleteRequirement(actor AccessContext, id uint) error {
 	if err != nil {
 		return err
 	}
-	if _, err := s.acl.Require(requirement.ProjectID, actor, "project.requirements:delete", capRequirementAdmin); err != nil {
+	if _, err := s.acl.Require(requirement.ProjectID, actor, "project_requirements:delete", capRequirementAdmin); err != nil {
 		return err
 	}
 	attachments, err := s.repo.ListAttachments(id)
@@ -592,7 +592,7 @@ func (s *ProjectService) ListComments(actor AccessContext, requirementID uint) (
 	if err != nil {
 		return nil, err
 	}
-	if _, err := s.acl.Require(requirement.ProjectID, actor, "project.requirements:view", capRequirementView); err != nil {
+	if _, err := s.acl.Require(requirement.ProjectID, actor, "project_requirements:view", capRequirementView); err != nil {
 		return nil, err
 	}
 	return s.repo.ListComments(requirementID)
@@ -606,7 +606,7 @@ func (s *ProjectService) CreateComment(actor AccessContext, requirementID uint, 
 	if err != nil {
 		return nil, err
 	}
-	if _, err := s.acl.Require(requirement.ProjectID, actor, "project.requirements:create", capRequirementEdit); err != nil {
+	if _, err := s.acl.Require(requirement.ProjectID, actor, "project_requirements:create", capRequirementEdit); err != nil {
 		return nil, err
 	}
 	content := strings.TrimSpace(input.Content)
@@ -632,11 +632,11 @@ func (s *ProjectService) UpdateComment(actor AccessContext, id uint, input Comme
 	if err != nil {
 		return nil, NewNotFound("需求不存在")
 	}
-	member, err := s.acl.Require(requirement.ProjectID, actor, "project.requirements:update", capRequirementEdit)
+	member, err := s.acl.Require(requirement.ProjectID, actor, "project_requirements:update", capRequirementEdit)
 	if err != nil {
 		return nil, err
 	}
-	if !actor.SuperAdmin && !actor.Has("project.projects:manage_all") && comment.CreatedBy != actor.UserID &&
+	if !actor.SuperAdmin && !actor.Has("project_projects:manage_all") && comment.CreatedBy != actor.UserID &&
 		(member == nil || (member.Role != projectmodel.ProjectRoleOwner && member.Role != projectmodel.ProjectRoleAdmin)) {
 		return nil, NewForbidden("只能编辑自己的评论")
 	}
@@ -663,11 +663,11 @@ func (s *ProjectService) DeleteComment(actor AccessContext, id uint) error {
 	if err != nil {
 		return NewNotFound("需求不存在")
 	}
-	member, err := s.acl.Require(requirement.ProjectID, actor, "project.requirements:delete", capRequirementEdit)
+	member, err := s.acl.Require(requirement.ProjectID, actor, "project_requirements:delete", capRequirementEdit)
 	if err != nil {
 		return err
 	}
-	if !actor.SuperAdmin && !actor.Has("project.projects:manage_all") && comment.CreatedBy != actor.UserID &&
+	if !actor.SuperAdmin && !actor.Has("project_projects:manage_all") && comment.CreatedBy != actor.UserID &&
 		(member == nil || (member.Role != projectmodel.ProjectRoleOwner && member.Role != projectmodel.ProjectRoleAdmin)) {
 		return NewForbidden("只能删除自己的评论")
 	}
@@ -689,7 +689,7 @@ func (s *ProjectService) AddAttachment(actor AccessContext, requirementID uint, 
 	if err != nil {
 		return nil, err
 	}
-	if _, err := s.acl.Require(requirement.ProjectID, actor, "project.requirements:update", capRequirementEdit); err != nil {
+	if _, err := s.acl.Require(requirement.ProjectID, actor, "project_requirements:update", capRequirementEdit); err != nil {
 		return nil, err
 	}
 	filename = safeFilename(filename)
@@ -722,7 +722,7 @@ func (s *ProjectService) OpenAttachment(actor AccessContext, id uint) (*os.File,
 	if err != nil {
 		return nil, nil, "", NewNotFound("需求不存在")
 	}
-	if _, err := s.acl.Require(requirement.ProjectID, actor, "project.requirements:view", capRequirementView); err != nil {
+	if _, err := s.acl.Require(requirement.ProjectID, actor, "project_requirements:view", capRequirementView); err != nil {
 		return nil, nil, "", err
 	}
 	file, object, err := s.storage.Open(attachment.StorageObjectID)
@@ -744,7 +744,7 @@ func (s *ProjectService) DeleteAttachment(actor AccessContext, id uint) error {
 	if err != nil {
 		return NewNotFound("需求不存在")
 	}
-	if _, err := s.acl.Require(requirement.ProjectID, actor, "project.requirements:update", capRequirementEdit); err != nil {
+	if _, err := s.acl.Require(requirement.ProjectID, actor, "project_requirements:update", capRequirementEdit); err != nil {
 		return err
 	}
 	if err := s.repo.DeleteAttachment(id); err != nil {

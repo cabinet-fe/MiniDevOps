@@ -90,6 +90,7 @@ make clean
 │   └── ai.md
 ├── web/                        # Vue 3 前端 → .agents/fe.md
 │   └── src/
+│       └── views/system/resources/  # 权限资源页：分组面板 + 菜单/功能面板
 ├── scripts/
 │   ├── check-ga-guardrails.sh
 │   └── smoke/                  # fresh-install / api-e2e / 3db / linux-package

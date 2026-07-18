@@ -11,97 +11,97 @@
 
 ### GET /build-jobs — 列出构建任务
 
-权限：`cicd.build_jobs:view`
+权限：`cicd_build_jobs:view`
 查询参数：page: integer, page_size: integer, repository_id: integer, keyword: string
 响应 200：data = BuildJobPage
 
 ### POST /build-jobs — 创建构建任务
 
-权限：`cicd.build_jobs:create`
+权限：`cicd_build_jobs:create`
 请求：{ repository_id*, name*, description, enabled, branch, shallow_clone, build_script_type, build_script, work_dir, output_dir, cache_paths, env_var_names, trigger_manual, trigger_webhook, trigger_cron, webhook_secret, webhook_type, webhook_ref_path, webhook_commit_path, webhook_message_path, cron_expression, cron_timezone, max_artifacts, artifact_format, agent_trigger_event, agent_id, deploy_targets }
 响应 201：data = BuildJob
 
 ### GET /build-jobs/{id} — 获取构建任务（含部署目标）
 
-权限：`cicd.build_jobs:view`
+权限：`cicd_build_jobs:view`
 路径参数：id*: integer
 响应 200：data = BuildJob
 
 ### PUT /build-jobs/{id} — 更新构建任务 / 替换部署目标
 
-权限：`cicd.build_jobs:update`
+权限：`cicd_build_jobs:update`
 路径参数：id*: integer
 请求：{ name, description, enabled, branch, shallow_clone, build_script_type, build_script, work_dir, output_dir, cache_paths, env_var_names, trigger_manual, trigger_webhook, trigger_cron, webhook_secret, webhook_type, webhook_ref_path, webhook_commit_path, webhook_message_path, cron_expression, cron_timezone, max_artifacts, artifact_format, agent_trigger_event, agent_id, deploy_targets }
 响应 200：data = BuildJob
 
 ### DELETE /build-jobs/{id} — 删除构建任务
 
-权限：`cicd.build_jobs:delete`
+权限：`cicd_build_jobs:delete`
 路径参数：id*: integer
 响应 200
 
 ### GET /build-jobs/{id}/webhook-secret — 查看 Webhook 密钥与 URL
 
-权限：`cicd.build_jobs:view`
+权限：`cicd_build_jobs:view`
 路径参数：id*: integer
 响应 200
 
 ### POST /build-jobs/{id}/webhook-secret/rotate — 轮换 Webhook 密钥
 
-权限：`cicd.build_jobs:update`
+权限：`cicd_build_jobs:update`
 路径参数：id*: integer
 响应 200
 
 ### POST /build-jobs/{id}/runs — 入队构建运行
 
-权限：`cicd.build_jobs:execute`
+权限：`cicd_build_jobs:execute`
 路径参数：id*: integer
 请求：{ branch, trigger_type }
 响应 202：data = BuildRun
-说明：触发时只需 `cicd.build_jobs:execute`；不要求凭证 `:use`（执行时使用已绑定凭证快照）。
+说明：触发时只需 `cicd_build_jobs:execute`；不要求凭证 `:use`（执行时使用已绑定凭证快照）。
 
 ## 构建运行
 
 ### GET /build-runs — 列出构建运行
 
-权限：`cicd.build_runs:view`
+权限：`cicd_build_runs:view`
 查询参数：page: integer, page_size: integer, build_job_id: integer, status: string
 响应 200：data = BuildRunPage
 
 ### GET /build-runs/{id} — 获取构建运行详情（含部署尝试）
 
-权限：`cicd.build_runs:view`
+权限：`cicd_build_runs:view`
 路径参数：id*: integer
 响应 200：data = BuildRun
 
 ### POST /build-runs/{id}/cancel — 取消构建运行
 
-权限：`cicd.build_jobs:execute`
+权限：`cicd_build_jobs:execute`
 路径参数：id*: integer
 响应 200：data = BuildRun
 
 ### POST /build-runs/{id}/retry — 重试（新建一次构建运行）
 
-权限：`cicd.build_jobs:execute`
+权限：`cicd_build_jobs:execute`
 路径参数：id*: integer
 响应 202：data = BuildRun
 
 ### POST /build-runs/{id}/redeploy — 在同一构建运行上重新部署
 
-权限：`cicd.build_jobs:execute`
+权限：`cicd_build_jobs:execute`
 路径参数：id*: integer
 请求：{ target_ids }
 响应 202：data = BuildRun
 
 ### GET /build-runs/{id}/artifact — 下载构建制品
 
-权限：`cicd.build_runs:view`
+权限：`cicd_build_runs:view`
 路径参数：id*: integer
 响应 200：data = binary
 
 ### GET /build-runs/{id}/log — 获取构建日志文本
 
-权限：`cicd.build_runs:view`
+权限：`cicd_build_runs:view`
 路径参数：id*: integer
 响应 200：data = text/plain
 
@@ -109,7 +109,7 @@
 
 路径前缀为 `/ws`（非 `/api/v1`）。查询参数 `token` 携带 JWT（与其它 WebSocket 一致）。
 
-权限：`cicd.build_runs:view`
+权限：`cicd_build_runs:view`
 路径参数：id*: integer
 查询参数：token*: string
 

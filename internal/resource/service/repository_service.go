@@ -66,7 +66,7 @@ func (s *RepositoryService) Create(createdBy uint, in CreateRepositoryInput, can
 			return nil, errorsNew("auth_type=credential 时必须提供 credential_id")
 		}
 		if !canUseCredential {
-			return nil, NewForbidden("绑定凭证需要 resource.credentials:use 权限")
+			return nil, NewForbidden("绑定凭证需要 resource_credentials:use 权限")
 		}
 		if _, err := s.creds.Get(*in.CredentialID); err != nil {
 			return nil, errorsNew("凭证不存在")
@@ -116,7 +116,7 @@ func (s *RepositoryService) Update(id uint, in UpdateRepositoryInput, canUseCred
 	} else if in.CredentialID != nil {
 		if !credentialIDEqual(prevCred, in.CredentialID) {
 			if !canUseCredential {
-				return nil, NewForbidden("绑定/修改凭证需要 resource.credentials:use 权限")
+				return nil, NewForbidden("绑定/修改凭证需要 resource_credentials:use 权限")
 			}
 		}
 		if *in.CredentialID == 0 {

@@ -234,16 +234,16 @@ func directoryUsedBytes(root string) (uint64, error) {
 
 func allowedCards(isSuperAdmin bool, permissions []string) map[string]struct{} {
 	allowed := map[string]struct{}{}
-	if isSuperAdmin || hasPermission(permissions, "cicd.build_runs:view") {
+	if isSuperAdmin || hasPermission(permissions, "cicd_build_runs:view") {
 		allowed[CardBuildSummary] = struct{}{}
 	}
-	if isSuperAdmin || hasPermission(permissions, "ai.runs:view") {
+	if isSuperAdmin || hasPermission(permissions, "ai_runs:view") {
 		allowed[CardAgentRunSummary] = struct{}{}
 	}
-	if isSuperAdmin || hasPermission(permissions, "dashboard.system_info:view") {
+	if isSuperAdmin || hasPermission(permissions, "dashboard_system_info:view") {
 		allowed[CardSystemInfo] = struct{}{}
 	}
-	if isSuperAdmin || hasPermission(permissions, "dashboard.system_status:view") {
+	if isSuperAdmin || hasPermission(permissions, "dashboard_system_status:view") {
 		allowed[CardSystemStatus] = struct{}{}
 	}
 	return allowed

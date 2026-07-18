@@ -1,5 +1,14 @@
 import { http } from "./http";
-import type { Dictionary, NotificationItem, PageResult, RbacResource, Role, User } from "./types";
+import type {
+  Dictionary,
+  MenuGroup,
+  NotificationItem,
+  PageResult,
+  PermissionCatalogGroup,
+  RbacResource,
+  Role,
+  User,
+} from "./types";
 
 export type ListQuery = Record<string, string | number | boolean | undefined | null>;
 
@@ -51,12 +60,43 @@ export async function deleteRole(id: number): Promise<void> {
   await http.delete(`/roles/${id}`);
 }
 
+/** Three-level catalog for role permission editor. */
+export async function getPermissionCatalog(): Promise<{ items: PermissionCatalogGroup[] }> {
+  const { body } = await http.get<{ items: PermissionCatalogGroup[] }>("/roles/permission-catalog");
+  return body;
+}
+
+export async function listMenuGroups(): Promise<{ items: MenuGroup[] }> {
+  const { body } = await http.get<{ items: MenuGroup[] }>("/menu-groups");
+  return body;
+}
+
+export async function createMenuGroup(body: Record<string, unknown>): Promise<MenuGroup> {
+  const { body: data } = await http.post<MenuGroup>("/menu-groups", body);
+  return data;
+}
+
+export async function updateMenuGroup(
+  id: number,
+  body: Record<string, unknown>,
+): Promise<MenuGroup> {
+  const { body: data } = await http.put<MenuGroup>(`/menu-groups/${id}`, body);
+  return data;
+}
+
+export async function deleteMenuGroup(id: number): Promise<void> {
+  await http.delete(`/menu-groups/${id}`);
+}
+
 export async function listResources(query?: {
   keyword?: string;
   type?: string;
   enabled?: string | boolean;
+  group_id?: number | string;
 }): Promise<{ items: RbacResource[] }> {
-  const { body } = await http.get<{ items: RbacResource[] }>("/rbac/resources", { query });
+  const { body } = await http.get<{ items: RbacResource[] }>("/rbac/resources", {
+    query: toQuery(query),
+  });
   return body;
 }
 
@@ -77,13 +117,7 @@ export async function deleteResource(id: number): Promise<void> {
   await http.delete(`/rbac/resources/${id}`);
 }
 
-/** Menu-type resource tree — used by role permission editor. */
-export async function listMenus(): Promise<{ items: RbacResource[] }> {
-  const { body } = await http.get<{ items: RbacResource[] }>("/menus");
-  return body;
-}
-
-/** Upload/replace level-1 menu icon (raw ≤32KB). */
+/** Upload/replace menu icon (raw ≤32KB). */
 export async function updateResourceIcon(
   id: number,
   iconBase64: string,

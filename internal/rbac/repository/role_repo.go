@@ -15,12 +15,21 @@ func NewRoleRepository(db *gorm.DB) *RoleRepository {
 }
 
 func (r *RoleRepository) Create(role *model.Role) error {
+	if role.Type == "" {
+		role.Type = model.RoleTypeCustom
+	}
 	return r.db.Create(role).Error
 }
 
 func (r *RoleRepository) FindByID(id uint) (*model.Role, error) {
 	var role model.Role
 	err := r.db.Preload("Permissions").First(&role, id).Error
+	return &role, err
+}
+
+func (r *RoleRepository) FindByCode(code string) (*model.Role, error) {
+	var role model.Role
+	err := r.db.Preload("Permissions").Where("code = ?", code).First(&role).Error
 	return &role, err
 }
 
@@ -104,4 +113,21 @@ func (r *RoleRepository) ListDistinctPermissions() ([]string, error) {
 	var perms []string
 	err := r.db.Model(&model.RolePermission{}).Distinct("permission").Pluck("permission", &perms).Error
 	return perms, err
+}
+
+func (r *RoleRepository) EnsureUserHasRole(userID, roleID uint) error {
+	var n int64
+	if err := r.db.Model(&model.UserRole{}).
+		Where("user_id = ? AND role_id = ?", userID, roleID).Count(&n).Error; err != nil {
+		return err
+	}
+	if n > 0 {
+		return nil
+	}
+	return r.db.Create(&model.UserRole{UserID: userID, RoleID: roleID}).Error
+}
+
+func (r *RoleRepository) RemoveRoleFromAllUsersExcept(roleID, keepUserID uint) error {
+	return r.db.Where("role_id = ? AND user_id <> ?", roleID, keepUserID).
+		Delete(&model.UserRole{}).Error
 }

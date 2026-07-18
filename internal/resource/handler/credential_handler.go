@@ -23,11 +23,11 @@ func NewCredentialHandler(svc *service.CredentialService, perm *rbacservice.Perm
 
 func (h *CredentialHandler) RegisterRoutes(rg *gin.RouterGroup, authMW gin.HandlerFunc) {
 	g := rg.Group("/resource/credentials", authMW)
-	g.GET("", rbacmw.RequirePermission(h.perm, "resource.credentials:view"), h.List)
-	g.GET("/:id", rbacmw.RequirePermission(h.perm, "resource.credentials:view"), h.Get)
-	g.POST("", rbacmw.RequirePermission(h.perm, "resource.credentials:create"), h.Create)
-	g.PUT("/:id", rbacmw.RequirePermission(h.perm, "resource.credentials:update"), h.Update)
-	g.DELETE("/:id", rbacmw.RequirePermission(h.perm, "resource.credentials:delete"), h.Delete)
+	g.GET("", rbacmw.RequirePermission(h.perm, "resource_credentials:view"), h.List)
+	g.GET("/:id", rbacmw.RequirePermission(h.perm, "resource_credentials:view"), h.Get)
+	g.POST("", rbacmw.RequirePermission(h.perm, "resource_credentials:create"), h.Create)
+	g.PUT("/:id", rbacmw.RequirePermission(h.perm, "resource_credentials:update"), h.Update)
+	g.DELETE("/:id", rbacmw.RequirePermission(h.perm, "resource_credentials:delete"), h.Delete)
 }
 
 func (h *CredentialHandler) List(c *gin.Context) {

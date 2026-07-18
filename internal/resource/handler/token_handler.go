@@ -26,9 +26,9 @@ func NewTokenHandler(svc *service.PATService, perm *rbacservice.PermissionServic
 
 func (h *TokenHandler) RegisterRoutes(rg *gin.RouterGroup, authMW gin.HandlerFunc) {
 	g := rg.Group("/resource/tokens", authMW)
-	g.GET("", rbacmw.RequirePermission(h.perm, "resource.tokens:view"), h.List)
-	g.POST("", rbacmw.RequirePermission(h.perm, "resource.tokens:create"), h.Create)
-	g.DELETE("/:id", rbacmw.RequirePermission(h.perm, "resource.tokens:delete"), h.Delete)
+	g.GET("", rbacmw.RequirePermission(h.perm, "resource_tokens:view"), h.List)
+	g.POST("", rbacmw.RequirePermission(h.perm, "resource_tokens:create"), h.Create)
+	g.DELETE("/:id", rbacmw.RequirePermission(h.perm, "resource_tokens:delete"), h.Delete)
 }
 
 func (h *TokenHandler) List(c *gin.Context) {

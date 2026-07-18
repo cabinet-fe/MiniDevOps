@@ -427,7 +427,7 @@ onUnmounted(stopJobPolling);
   <div v-loading="loading">
     <div class="page-toolbar">
       <u-button
-        v-if="hasPermission('ops.dev_environments:create')"
+        v-if="hasPermission('ops_dev_environments:create')"
         type="primary"
         @click="openCreateEnv"
       >

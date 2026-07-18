@@ -103,7 +103,7 @@ async function remove(row: Credential) {
       <template #filters>
         <u-input v-model="query.keyword" placeholder="名称关键词" style="width: 200px" />
         <u-button
-          v-if="hasPermission('resource.credentials:create')"
+          v-if="hasPermission('resource_credentials:create')"
           type="primary"
           style="margin-left: auto"
           @click.prevent="openCreate"
@@ -124,13 +124,13 @@ async function remove(row: Credential) {
       <template #column:action="{ rowData }">
         <u-action-group :max="3">
           <u-action
-            v-if="hasPermission('resource.credentials:update')"
+            v-if="hasPermission('resource_credentials:update')"
             @run="openEdit(rowData as Credential)"
           >
             编辑
           </u-action>
           <u-action
-            v-if="hasPermission('resource.credentials:delete')"
+            v-if="hasPermission('resource_credentials:delete')"
             @run="remove(rowData as Credential)"
           >
             删除

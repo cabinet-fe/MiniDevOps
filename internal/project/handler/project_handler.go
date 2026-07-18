@@ -31,47 +31,47 @@ func NewProjectHandler(svc *projectservice.ProjectService, perm *rbacservice.Per
 func (h *ProjectHandler) RegisterRoutes(rg *gin.RouterGroup, authMW gin.HandlerFunc) {
 	g := rg.Group("/projects", authMW)
 
-	g.GET("", rbacmw.RequirePermission(h.perm, "project.projects:view"), h.ListProjects)
-	g.POST("", rbacmw.RequirePermission(h.perm, "project.projects:create"), h.CreateProject)
-	g.GET("/meta/requirement-statuses", rbacmw.RequirePermission(h.perm, "project.requirements:view"), h.ListRequirementStatuses)
-	g.GET("/:id", rbacmw.RequirePermission(h.perm, "project.projects:view"), h.GetProject)
-	g.PUT("/:id", rbacmw.RequirePermission(h.perm, "project.projects:update"), h.UpdateProject)
-	g.POST("/:id/archive", rbacmw.RequirePermission(h.perm, "project.projects:update"), h.ArchiveProject)
-	g.DELETE("/:id", rbacmw.RequirePermission(h.perm, "project.projects:delete"), h.DeleteProject)
+	g.GET("", rbacmw.RequirePermission(h.perm, "project_projects:view"), h.ListProjects)
+	g.POST("", rbacmw.RequirePermission(h.perm, "project_projects:create"), h.CreateProject)
+	g.GET("/meta/requirement-statuses", rbacmw.RequirePermission(h.perm, "project_requirements:view"), h.ListRequirementStatuses)
+	g.GET("/:id", rbacmw.RequirePermission(h.perm, "project_projects:view"), h.GetProject)
+	g.PUT("/:id", rbacmw.RequirePermission(h.perm, "project_projects:update"), h.UpdateProject)
+	g.POST("/:id/archive", rbacmw.RequirePermission(h.perm, "project_projects:update"), h.ArchiveProject)
+	g.DELETE("/:id", rbacmw.RequirePermission(h.perm, "project_projects:delete"), h.DeleteProject)
 
-	g.GET("/:id/members", rbacmw.RequirePermission(h.perm, "project.projects:view"), h.ListMembers)
-	g.POST("/:id/members", rbacmw.RequirePermission(h.perm, "project.projects:update"), h.AddMember)
-	g.PUT("/:id/members/:userID", rbacmw.RequirePermission(h.perm, "project.projects:update"), h.UpdateMember)
-	g.DELETE("/:id/members/:userID", rbacmw.RequirePermission(h.perm, "project.projects:update"), h.RemoveMember)
-	g.POST("/:id/members/transfer-owner", rbacmw.RequirePermission(h.perm, "project.projects:update"), h.TransferOwner)
+	g.GET("/:id/members", rbacmw.RequirePermission(h.perm, "project_projects:view"), h.ListMembers)
+	g.POST("/:id/members", rbacmw.RequirePermission(h.perm, "project_projects:update"), h.AddMember)
+	g.PUT("/:id/members/:userID", rbacmw.RequirePermission(h.perm, "project_projects:update"), h.UpdateMember)
+	g.DELETE("/:id/members/:userID", rbacmw.RequirePermission(h.perm, "project_projects:update"), h.RemoveMember)
+	g.POST("/:id/members/transfer-owner", rbacmw.RequirePermission(h.perm, "project_projects:update"), h.TransferOwner)
 
-	g.GET("/:id/requirements", rbacmw.RequirePermission(h.perm, "project.requirements:view"), h.ListRequirements)
-	g.POST("/:id/requirements", rbacmw.RequirePermission(h.perm, "project.requirements:create"), h.CreateRequirement)
-	g.GET("/:id/requirements/:requirementID", rbacmw.RequirePermission(h.perm, "project.requirements:view"), h.GetRequirement)
-	g.PUT("/:id/requirements/:requirementID", rbacmw.RequirePermission(h.perm, "project.requirements:update"), h.UpdateRequirement)
-	g.DELETE("/:id/requirements/:requirementID", rbacmw.RequirePermission(h.perm, "project.requirements:delete"), h.DeleteRequirement)
+	g.GET("/:id/requirements", rbacmw.RequirePermission(h.perm, "project_requirements:view"), h.ListRequirements)
+	g.POST("/:id/requirements", rbacmw.RequirePermission(h.perm, "project_requirements:create"), h.CreateRequirement)
+	g.GET("/:id/requirements/:requirementID", rbacmw.RequirePermission(h.perm, "project_requirements:view"), h.GetRequirement)
+	g.PUT("/:id/requirements/:requirementID", rbacmw.RequirePermission(h.perm, "project_requirements:update"), h.UpdateRequirement)
+	g.DELETE("/:id/requirements/:requirementID", rbacmw.RequirePermission(h.perm, "project_requirements:delete"), h.DeleteRequirement)
 
-	g.GET("/:id/requirements/:requirementID/comments", rbacmw.RequirePermission(h.perm, "project.requirements:view"), h.ListComments)
-	g.POST("/:id/requirements/:requirementID/comments", rbacmw.RequirePermission(h.perm, "project.requirements:create"), h.CreateComment)
-	g.PUT("/:id/requirements/:requirementID/comments/:commentID", rbacmw.RequirePermission(h.perm, "project.requirements:update"), h.UpdateComment)
-	g.DELETE("/:id/requirements/:requirementID/comments/:commentID", rbacmw.RequirePermission(h.perm, "project.requirements:delete"), h.DeleteComment)
+	g.GET("/:id/requirements/:requirementID/comments", rbacmw.RequirePermission(h.perm, "project_requirements:view"), h.ListComments)
+	g.POST("/:id/requirements/:requirementID/comments", rbacmw.RequirePermission(h.perm, "project_requirements:create"), h.CreateComment)
+	g.PUT("/:id/requirements/:requirementID/comments/:commentID", rbacmw.RequirePermission(h.perm, "project_requirements:update"), h.UpdateComment)
+	g.DELETE("/:id/requirements/:requirementID/comments/:commentID", rbacmw.RequirePermission(h.perm, "project_requirements:delete"), h.DeleteComment)
 
-	g.GET("/:id/requirements/:requirementID/attachments", rbacmw.RequirePermission(h.perm, "project.requirements:view"), h.ListAttachments)
-	g.POST("/:id/requirements/:requirementID/attachments", rbacmw.RequirePermission(h.perm, "project.requirements:update"), h.UploadAttachment)
-	g.GET("/:id/requirements/:requirementID/attachments/:attachmentID/download", rbacmw.RequirePermission(h.perm, "project.requirements:view"), h.DownloadAttachment)
-	g.DELETE("/:id/requirements/:requirementID/attachments/:attachmentID", rbacmw.RequirePermission(h.perm, "project.requirements:update"), h.DeleteAttachment)
+	g.GET("/:id/requirements/:requirementID/attachments", rbacmw.RequirePermission(h.perm, "project_requirements:view"), h.ListAttachments)
+	g.POST("/:id/requirements/:requirementID/attachments", rbacmw.RequirePermission(h.perm, "project_requirements:update"), h.UploadAttachment)
+	g.GET("/:id/requirements/:requirementID/attachments/:attachmentID/download", rbacmw.RequirePermission(h.perm, "project_requirements:view"), h.DownloadAttachment)
+	g.DELETE("/:id/requirements/:requirementID/attachments/:attachmentID", rbacmw.RequirePermission(h.perm, "project_requirements:update"), h.DeleteAttachment)
 
-	g.GET("/:id/docs", rbacmw.RequirePermission(h.perm, "project.docs:view"), h.ListDocTree)
-	g.POST("/:id/docs", rbacmw.RequirePermission(h.perm, "project.docs:create"), h.CreateDocNode)
-	g.GET("/:id/docs/:nodeID", rbacmw.RequirePermission(h.perm, "project.docs:view"), h.GetDocNode)
-	g.PUT("/:id/docs/:nodeID", rbacmw.RequirePermission(h.perm, "project.docs:update"), h.UpdateDocNode)
-	g.POST("/:id/docs/:nodeID/move", rbacmw.RequirePermission(h.perm, "project.docs:update"), h.MoveDocNode)
-	g.DELETE("/:id/docs/:nodeID", rbacmw.RequirePermission(h.perm, "project.docs:delete"), h.DeleteDocNode)
-	g.POST("/:id/docs/upload", rbacmw.RequirePermission(h.perm, "project.docs:create"), h.UploadMarkdown)
-	g.POST("/:id/docs/import-zip", rbacmw.RequirePermission(h.perm, "project.docs:create"), h.ImportZIP)
-	g.POST("/:id/docs/:nodeID/publish", rbacmw.RequirePermission(h.perm, "project.docs:update"), h.PublishDocNode)
-	g.GET("/:id/docs/:nodeID/diff", rbacmw.RequirePermission(h.perm, "project.docs:view"), h.GetDocDiff)
-	g.POST("/:id/docs/generate", rbacmw.RequirePermission(h.perm, "project.docs:execute"), h.GenerateDocs)
+	g.GET("/:id/docs", rbacmw.RequirePermission(h.perm, "project_docs:view"), h.ListDocTree)
+	g.POST("/:id/docs", rbacmw.RequirePermission(h.perm, "project_docs:create"), h.CreateDocNode)
+	g.GET("/:id/docs/:nodeID", rbacmw.RequirePermission(h.perm, "project_docs:view"), h.GetDocNode)
+	g.PUT("/:id/docs/:nodeID", rbacmw.RequirePermission(h.perm, "project_docs:update"), h.UpdateDocNode)
+	g.POST("/:id/docs/:nodeID/move", rbacmw.RequirePermission(h.perm, "project_docs:update"), h.MoveDocNode)
+	g.DELETE("/:id/docs/:nodeID", rbacmw.RequirePermission(h.perm, "project_docs:delete"), h.DeleteDocNode)
+	g.POST("/:id/docs/upload", rbacmw.RequirePermission(h.perm, "project_docs:create"), h.UploadMarkdown)
+	g.POST("/:id/docs/import-zip", rbacmw.RequirePermission(h.perm, "project_docs:create"), h.ImportZIP)
+	g.POST("/:id/docs/:nodeID/publish", rbacmw.RequirePermission(h.perm, "project_docs:update"), h.PublishDocNode)
+	g.GET("/:id/docs/:nodeID/diff", rbacmw.RequirePermission(h.perm, "project_docs:view"), h.GetDocDiff)
+	g.POST("/:id/docs/generate", rbacmw.RequirePermission(h.perm, "project_docs:execute"), h.GenerateDocs)
 }
 
 func (h *ProjectHandler) ListProjects(c *gin.Context) {
@@ -351,7 +351,7 @@ func (h *ProjectHandler) CreateRequirement(c *gin.Context) {
 }
 
 func (h *ProjectHandler) GetRequirement(c *gin.Context) {
-	_, requirementID, actor, ok := h.requirementActor(c, "project.requirements:view", false)
+	_, requirementID, actor, ok := h.requirementActor(c, "project_requirements:view", false)
 	if !ok {
 		return
 	}
@@ -364,7 +364,7 @@ func (h *ProjectHandler) GetRequirement(c *gin.Context) {
 }
 
 func (h *ProjectHandler) UpdateRequirement(c *gin.Context) {
-	_, requirementID, actor, ok := h.requirementActor(c, "project.requirements:update", true)
+	_, requirementID, actor, ok := h.requirementActor(c, "project_requirements:update", true)
 	if !ok {
 		return
 	}
@@ -382,7 +382,7 @@ func (h *ProjectHandler) UpdateRequirement(c *gin.Context) {
 }
 
 func (h *ProjectHandler) DeleteRequirement(c *gin.Context) {
-	_, requirementID, actor, ok := h.requirementActor(c, "project.requirements:delete", true)
+	_, requirementID, actor, ok := h.requirementActor(c, "project_requirements:delete", true)
 	if !ok {
 		return
 	}
@@ -394,7 +394,7 @@ func (h *ProjectHandler) DeleteRequirement(c *gin.Context) {
 }
 
 func (h *ProjectHandler) ListComments(c *gin.Context) {
-	_, requirementID, actor, ok := h.requirementActor(c, "project.requirements:view", false)
+	_, requirementID, actor, ok := h.requirementActor(c, "project_requirements:view", false)
 	if !ok {
 		return
 	}
@@ -407,7 +407,7 @@ func (h *ProjectHandler) ListComments(c *gin.Context) {
 }
 
 func (h *ProjectHandler) CreateComment(c *gin.Context) {
-	_, requirementID, actor, ok := h.requirementActor(c, "project.requirements:create", true)
+	_, requirementID, actor, ok := h.requirementActor(c, "project_requirements:create", true)
 	if !ok {
 		return
 	}
@@ -425,7 +425,7 @@ func (h *ProjectHandler) CreateComment(c *gin.Context) {
 }
 
 func (h *ProjectHandler) UpdateComment(c *gin.Context) {
-	projectID, requirementID, actor, ok := h.requirementActor(c, "project.requirements:update", true)
+	projectID, requirementID, actor, ok := h.requirementActor(c, "project_requirements:update", true)
 	if !ok {
 		return
 	}
@@ -433,7 +433,7 @@ func (h *ProjectHandler) UpdateComment(c *gin.Context) {
 	if !ok {
 		return
 	}
-	if err := h.svc.CheckCommentRequirementProject(actor, projectID, requirementID, commentID, "project.requirements:update", true); err != nil {
+	if err := h.svc.CheckCommentRequirementProject(actor, projectID, requirementID, commentID, "project_requirements:update", true); err != nil {
 		writeServiceError(c, err)
 		return
 	}
@@ -451,7 +451,7 @@ func (h *ProjectHandler) UpdateComment(c *gin.Context) {
 }
 
 func (h *ProjectHandler) DeleteComment(c *gin.Context) {
-	projectID, requirementID, actor, ok := h.requirementActor(c, "project.requirements:delete", true)
+	projectID, requirementID, actor, ok := h.requirementActor(c, "project_requirements:delete", true)
 	if !ok {
 		return
 	}
@@ -459,7 +459,7 @@ func (h *ProjectHandler) DeleteComment(c *gin.Context) {
 	if !ok {
 		return
 	}
-	if err := h.svc.CheckCommentRequirementProject(actor, projectID, requirementID, commentID, "project.requirements:delete", true); err != nil {
+	if err := h.svc.CheckCommentRequirementProject(actor, projectID, requirementID, commentID, "project_requirements:delete", true); err != nil {
 		writeServiceError(c, err)
 		return
 	}
@@ -471,7 +471,7 @@ func (h *ProjectHandler) DeleteComment(c *gin.Context) {
 }
 
 func (h *ProjectHandler) ListAttachments(c *gin.Context) {
-	_, requirementID, actor, ok := h.requirementActor(c, "project.requirements:view", false)
+	_, requirementID, actor, ok := h.requirementActor(c, "project_requirements:view", false)
 	if !ok {
 		return
 	}
@@ -484,7 +484,7 @@ func (h *ProjectHandler) ListAttachments(c *gin.Context) {
 }
 
 func (h *ProjectHandler) UploadAttachment(c *gin.Context) {
-	_, requirementID, actor, ok := h.requirementActor(c, "project.requirements:update", true)
+	_, requirementID, actor, ok := h.requirementActor(c, "project_requirements:update", true)
 	if !ok {
 		return
 	}
@@ -508,7 +508,7 @@ func (h *ProjectHandler) UploadAttachment(c *gin.Context) {
 }
 
 func (h *ProjectHandler) DownloadAttachment(c *gin.Context) {
-	projectID, requirementID, actor, ok := h.requirementActor(c, "project.requirements:view", false)
+	projectID, requirementID, actor, ok := h.requirementActor(c, "project_requirements:view", false)
 	if !ok {
 		return
 	}
@@ -516,7 +516,7 @@ func (h *ProjectHandler) DownloadAttachment(c *gin.Context) {
 	if !ok {
 		return
 	}
-	if err := h.svc.CheckAttachmentRequirementProject(actor, projectID, requirementID, attachmentID, "project.requirements:view", false); err != nil {
+	if err := h.svc.CheckAttachmentRequirementProject(actor, projectID, requirementID, attachmentID, "project_requirements:view", false); err != nil {
 		writeServiceError(c, err)
 		return
 	}
@@ -534,7 +534,7 @@ func (h *ProjectHandler) DownloadAttachment(c *gin.Context) {
 }
 
 func (h *ProjectHandler) DeleteAttachment(c *gin.Context) {
-	projectID, requirementID, actor, ok := h.requirementActor(c, "project.requirements:update", true)
+	projectID, requirementID, actor, ok := h.requirementActor(c, "project_requirements:update", true)
 	if !ok {
 		return
 	}
@@ -542,7 +542,7 @@ func (h *ProjectHandler) DeleteAttachment(c *gin.Context) {
 	if !ok {
 		return
 	}
-	if err := h.svc.CheckAttachmentRequirementProject(actor, projectID, requirementID, attachmentID, "project.requirements:update", true); err != nil {
+	if err := h.svc.CheckAttachmentRequirementProject(actor, projectID, requirementID, attachmentID, "project_requirements:update", true); err != nil {
 		writeServiceError(c, err)
 		return
 	}
@@ -593,7 +593,7 @@ func (h *ProjectHandler) CreateDocNode(c *gin.Context) {
 }
 
 func (h *ProjectHandler) GetDocNode(c *gin.Context) {
-	_, nodeID, actor, ok := h.docActor(c, "project.docs:view", false)
+	_, nodeID, actor, ok := h.docActor(c, "project_docs:view", false)
 	if !ok {
 		return
 	}
@@ -606,7 +606,7 @@ func (h *ProjectHandler) GetDocNode(c *gin.Context) {
 }
 
 func (h *ProjectHandler) UpdateDocNode(c *gin.Context) {
-	_, nodeID, actor, ok := h.docActor(c, "project.docs:update", true)
+	_, nodeID, actor, ok := h.docActor(c, "project_docs:update", true)
 	if !ok {
 		return
 	}
@@ -624,7 +624,7 @@ func (h *ProjectHandler) UpdateDocNode(c *gin.Context) {
 }
 
 func (h *ProjectHandler) MoveDocNode(c *gin.Context) {
-	_, nodeID, actor, ok := h.docActor(c, "project.docs:update", true)
+	_, nodeID, actor, ok := h.docActor(c, "project_docs:update", true)
 	if !ok {
 		return
 	}
@@ -642,7 +642,7 @@ func (h *ProjectHandler) MoveDocNode(c *gin.Context) {
 }
 
 func (h *ProjectHandler) DeleteDocNode(c *gin.Context) {
-	_, nodeID, actor, ok := h.docActor(c, "project.docs:delete", true)
+	_, nodeID, actor, ok := h.docActor(c, "project_docs:delete", true)
 	if !ok {
 		return
 	}
@@ -718,7 +718,7 @@ func (h *ProjectHandler) ImportZIP(c *gin.Context) {
 }
 
 func (h *ProjectHandler) PublishDocNode(c *gin.Context) {
-	_, nodeID, actor, ok := h.docActor(c, "project.docs:update", true)
+	_, nodeID, actor, ok := h.docActor(c, "project_docs:update", true)
 	if !ok {
 		return
 	}
@@ -742,7 +742,7 @@ func (h *ProjectHandler) PublishDocNode(c *gin.Context) {
 }
 
 func (h *ProjectHandler) GetDocDiff(c *gin.Context) {
-	_, nodeID, actor, ok := h.docActor(c, "project.docs:view", false)
+	_, nodeID, actor, ok := h.docActor(c, "project_docs:view", false)
 	if !ok {
 		return
 	}

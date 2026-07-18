@@ -9,41 +9,50 @@ import (
 	"bedrock/internal/rbac/repository"
 )
 
-// PermissionService computes permission unions and trimmed menu trees.
+// PermissionService computes permission unions and trimmed menu groups.
 type PermissionService struct {
 	roles     *repository.RoleRepository
 	resources *repository.ResourceRepository
+	groups    *repository.MenuGroupRepository
 }
 
-func NewPermissionService(roles *repository.RoleRepository, resources *repository.ResourceRepository) *PermissionService {
-	return &PermissionService{roles: roles, resources: resources}
+func NewPermissionService(
+	roles *repository.RoleRepository,
+	resources *repository.ResourceRepository,
+	groups *repository.MenuGroupRepository,
+) *PermissionService {
+	return &PermissionService{roles: roles, resources: resources, groups: groups}
 }
 
 // ResolvePermissions returns the effective permission code set for a user.
-// Super-admin receives every known resource action derived from the resource tree
-// (including ops). Non-super-admin gets role union with ops codes stripped.
+// Super-admin receives every feature full_code. Non-super gets role union with
+// super_admin_only features stripped.
 func (s *PermissionService) ResolvePermissions(userID uint, isSuperAdmin bool) ([]string, error) {
 	if isSuperAdmin {
-		return s.allPermissions()
+		return s.allFeaturePermissions()
 	}
 	codes, err := s.roles.ListPermissionsByUserID(userID)
 	if err != nil {
 		return nil, err
 	}
-	return rbac.FilterOpsPermissions(uniqSorted(codes)), nil
+	return s.filterSuperAdminOnly(uniqSorted(codes))
 }
 
 // CheckAccess returns nil if the user may perform required permission.
-// Ops paths always require super-admin regardless of role grants.
+// Resources marked super_admin_only always require is_super_admin.
 func (s *PermissionService) CheckAccess(userID uint, isSuperAdmin bool, required string) error {
 	if required == "" {
 		return errForbidden("missing permission")
 	}
-	if rbac.IsOpsPermission(required) && !isSuperAdmin {
-		return errForbidden("仅超级管理员可访问运维功能")
-	}
 	if isSuperAdmin {
 		return nil
+	}
+	only, err := s.resources.IsSuperAdminOnly(required)
+	if err != nil {
+		return err
+	}
+	if only {
+		return errForbidden("仅超级管理员可访问该功能")
 	}
 	codes, err := s.ResolvePermissions(userID, false)
 	if err != nil {
@@ -55,19 +64,24 @@ func (s *PermissionService) CheckAccess(userID uint, isSuperAdmin bool, required
 	return nil
 }
 
-// TrimMenus builds the menu tree for /auth/me.
-// Rules: leaf needs own :view; parents auto-filled when a visible descendant exists;
-// ops menus only for super-admin; disabled resources omitted.
-func (s *PermissionService) TrimMenus(userID uint, isSuperAdmin bool) ([]model.MenuNode, error) {
+// TrimMenus builds two-level menu groups for /auth/me (GroupNav).
+// Rules: menu must be enabled, not hidden; non-super drops super_admin_only;
+// user needs {menuCode}:view; empty groups omitted.
+func (s *PermissionService) TrimMenus(userID uint, isSuperAdmin bool) ([]model.MenuGroupNode, error) {
+	groups, err := s.groups.List()
+	if err != nil {
+		return nil, err
+	}
 	menus, err := s.resources.ListMenus()
 	if err != nil {
 		return nil, err
 	}
+
 	var viewSet map[string]struct{}
 	if isSuperAdmin {
 		viewSet = map[string]struct{}{}
 		for _, m := range menus {
-			viewSet[m.Path] = struct{}{}
+			viewSet[m.Code] = struct{}{}
 		}
 	} else {
 		perms, err := s.ResolvePermissions(userID, false)
@@ -76,36 +90,138 @@ func (s *PermissionService) TrimMenus(userID uint, isSuperAdmin bool) ([]model.M
 		}
 		viewSet = map[string]struct{}{}
 		for _, p := range perms {
-			path, action, ok := rbac.SplitPermission(p)
+			menuCode, action, ok := rbac.SplitPermission(p)
 			if ok && action == "view" {
-				viewSet[path] = struct{}{}
+				viewSet[menuCode] = struct{}{}
 			}
 		}
 	}
-	return buildTrimmedMenuTree(menus, viewSet, isSuperAdmin), nil
+
+	menusByGroup := map[uint][]model.RbacResource{}
+	for _, m := range menus {
+		if !m.Enabled || m.Hidden {
+			continue
+		}
+		if m.SuperAdminOnly && !isSuperAdmin {
+			continue
+		}
+		if _, ok := viewSet[m.Code]; !ok {
+			continue
+		}
+		if m.GroupID == nil {
+			continue
+		}
+		menusByGroup[*m.GroupID] = append(menusByGroup[*m.GroupID], m)
+	}
+
+	out := make([]model.MenuGroupNode, 0, len(groups))
+	for _, g := range groups {
+		if !g.Enabled {
+			continue
+		}
+		items := menusByGroup[g.ID]
+		if len(items) == 0 {
+			continue
+		}
+		sort.Slice(items, func(i, j int) bool {
+			if items[i].SortKey != items[j].SortKey {
+				return items[i].SortKey < items[j].SortKey
+			}
+			return items[i].ID < items[j].ID
+		})
+		children := make([]model.MenuItemNode, 0, len(items))
+		for _, m := range items {
+			children = append(children, model.MenuItemNode{
+				Title: menuTitle(m),
+				Path:  m.Route,
+				Icon:  menuIcon(m),
+			})
+		}
+		out = append(out, model.MenuGroupNode{
+			Title:    g.Name,
+			Children: children,
+		})
+	}
+	return out, nil
 }
 
-var commonActions = []string{
-	"view", "create", "update", "delete", "execute",
-	"download", "cancel", "retry", "redeploy", "install", "test", "use",
-	"view_all", "manage_all",
+// PermissionCatalog returns group → menu → feature for role editors.
+func (s *PermissionService) PermissionCatalog() ([]model.PermissionCatalogGroup, error) {
+	groups, err := s.groups.List()
+	if err != nil {
+		return nil, err
+	}
+	menus, err := s.resources.ListMenus()
+	if err != nil {
+		return nil, err
+	}
+	features, err := s.resources.ListFeatures()
+	if err != nil {
+		return nil, err
+	}
+
+	featuresByParent := map[uint][]model.RbacResource{}
+	for _, f := range features {
+		if f.ParentID == nil {
+			continue
+		}
+		featuresByParent[*f.ParentID] = append(featuresByParent[*f.ParentID], f)
+	}
+	menusByGroup := map[uint][]model.RbacResource{}
+	for _, m := range menus {
+		if m.GroupID == nil {
+			continue
+		}
+		menusByGroup[*m.GroupID] = append(menusByGroup[*m.GroupID], m)
+	}
+
+	out := make([]model.PermissionCatalogGroup, 0, len(groups))
+	for _, g := range groups {
+		ms := menusByGroup[g.ID]
+		sort.Slice(ms, func(i, j int) bool {
+			if ms[i].SortKey != ms[j].SortKey {
+				return ms[i].SortKey < ms[j].SortKey
+			}
+			return ms[i].ID < ms[j].ID
+		})
+		catMenus := make([]model.PermissionCatalogMenu, 0, len(ms))
+		for _, m := range ms {
+			fs := featuresByParent[m.ID]
+			sort.Slice(fs, func(i, j int) bool {
+				if fs[i].SortKey != fs[j].SortKey {
+					return fs[i].SortKey < fs[j].SortKey
+				}
+				return fs[i].ID < fs[j].ID
+			})
+			catFeats := make([]model.PermissionCatalogFeature, 0, len(fs))
+			for _, f := range fs {
+				catFeats = append(catFeats, model.PermissionCatalogFeature{
+					ID: f.ID, Code: f.Code, FullCode: f.FullCode, Type: f.Type,
+					Title: f.Title, SuperAdminOnly: f.SuperAdminOnly, Enabled: f.Enabled,
+				})
+			}
+			catMenus = append(catMenus, model.PermissionCatalogMenu{
+				ID: m.ID, Code: m.Code, FullCode: m.FullCode, Title: menuTitle(m),
+				SuperAdminOnly: m.SuperAdminOnly, Hidden: m.Hidden, Enabled: m.Enabled,
+				Features: catFeats,
+			})
+		}
+		out = append(out, model.PermissionCatalogGroup{
+			ID: g.ID, Name: g.Name, Code: g.Code, Menus: catMenus,
+		})
+	}
+	return out, nil
 }
 
-func (s *PermissionService) allPermissions() ([]string, error) {
-	resources, err := s.resources.ListAll()
+func (s *PermissionService) allFeaturePermissions() ([]string, error) {
+	features, err := s.resources.ListFeatures()
 	if err != nil {
 		return nil, err
 	}
 	set := map[string]struct{}{}
-	for _, res := range resources {
-		if res.Type == model.ResourceTypeAction {
-			if _, _, ok := rbac.SplitPermission(res.Path); ok {
-				set[res.Path] = struct{}{}
-			}
-			continue
-		}
-		for _, action := range commonActions {
-			set[rbac.PermissionCode(res.Path, action)] = struct{}{}
+	for _, f := range features {
+		if f.FullCode != "" {
+			set[f.FullCode] = struct{}{}
 		}
 	}
 	stored, err := s.roles.ListDistinctPermissions()
@@ -120,6 +236,30 @@ func (s *PermissionService) allPermissions() ([]string, error) {
 		out = append(out, p)
 	}
 	sort.Strings(out)
+	return out, nil
+}
+
+func (s *PermissionService) filterSuperAdminOnly(codes []string) ([]string, error) {
+	gated, err := s.resources.ListSuperAdminOnlyFullCodes()
+	if err != nil {
+		return nil, err
+	}
+	deny := rbac.ToSet(gated)
+	out := make([]string, 0, len(codes))
+	for _, c := range codes {
+		if _, ok := deny[c]; ok {
+			continue
+		}
+		// Also deny if parent menu is super_admin_only.
+		only, err := s.resources.IsSuperAdminOnly(c)
+		if err != nil {
+			return nil, err
+		}
+		if only {
+			continue
+		}
+		out = append(out, c)
+	}
 	return out, nil
 }
 
@@ -145,106 +285,19 @@ func uniqSorted(codes []string) []string {
 	return out
 }
 
-type menuFlat struct {
-	res  model.RbacResource
-	meta *model.MenuMetadata
+func menuTitle(m model.RbacResource) string {
+	if strings.TrimSpace(m.Title) != "" {
+		return m.Title
+	}
+	return m.Code
 }
 
-func buildTrimmedMenuTree(menus []model.RbacResource, viewSet map[string]struct{}, isSuperAdmin bool) []model.MenuNode {
-	byID := make(map[uint]*menuFlat, len(menus))
-	childrenOf := map[uint][]uint{}
-	var roots []uint
-
-	for i := range menus {
-		m := &menus[i]
-		if !m.Enabled {
-			continue
-		}
-		if rbac.IsOpsPath(m.Path) && !isSuperAdmin {
-			continue
-		}
-		byID[m.ID] = &menuFlat{res: *m, meta: m.MenuMetadata}
-		if m.ParentID == nil {
-			roots = append(roots, m.ID)
-		} else {
-			childrenOf[*m.ParentID] = append(childrenOf[*m.ParentID], m.ID)
-		}
+func menuIcon(m model.RbacResource) string {
+	if m.IconBase64 == "" {
+		return ""
 	}
-
-	var build func(id uint) (model.MenuNode, bool)
-	build = func(id uint) (model.MenuNode, bool) {
-		flat, ok := byID[id]
-		if !ok {
-			return model.MenuNode{}, false
-		}
-		childIDs := childrenOf[id]
-		sort.Slice(childIDs, func(i, j int) bool {
-			a, b := byID[childIDs[i]], byID[childIDs[j]]
-			if a.res.SortKey != b.res.SortKey {
-				return a.res.SortKey < b.res.SortKey
-			}
-			return a.res.ID < b.res.ID
-		})
-
-		var kids []model.MenuNode
-		for _, cid := range childIDs {
-			if node, ok := build(cid); ok {
-				kids = append(kids, node)
-			}
-		}
-
-		_, hasView := viewSet[flat.res.Path]
-		isLeaf := len(childIDs) == 0
-		include := false
-		if isLeaf {
-			include = hasView
-		} else {
-			// Parent auto-filled when any visible descendant exists.
-			include = len(kids) > 0
-		}
-		if !include {
-			return model.MenuNode{}, false
-		}
-
-		title := flat.res.Path
-		route := ""
-		icon := ""
-		if flat.meta != nil {
-			if flat.meta.Title != "" {
-				title = flat.meta.Title
-			}
-			route = flat.meta.Route
-			if flat.meta.IconBase64 != "" {
-				if flat.meta.IconMime != "" && !strings.HasPrefix(flat.meta.IconBase64, "data:") {
-					icon = "data:" + flat.meta.IconMime + ";base64," + flat.meta.IconBase64
-				} else {
-					icon = flat.meta.IconBase64
-				}
-			}
-		}
-		return model.MenuNode{
-			Path:     flat.res.Path,
-			Title:    title,
-			Route:    route,
-			Icon:     icon,
-			Sort:     flat.res.SortKey,
-			Children: kids,
-		}, true
+	if m.IconMime != "" && !strings.HasPrefix(m.IconBase64, "data:") {
+		return "data:" + m.IconMime + ";base64," + m.IconBase64
 	}
-
-	sort.Slice(roots, func(i, j int) bool {
-		a, b := byID[roots[i]], byID[roots[j]]
-		if a.res.SortKey != b.res.SortKey {
-			return a.res.SortKey < b.res.SortKey
-		}
-		return a.res.ID < b.res.ID
-	})
-
-	out := make([]model.MenuNode, 0, len(roots))
-	for _, id := range roots {
-		if node, ok := build(id); ok {
-			out = append(out, node)
-		}
-	}
-	return out
+	return m.IconBase64
 }

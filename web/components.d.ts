@@ -42,6 +42,7 @@ declare module 'vue' {
     UFilePicker: typeof import('@veltra/desktop')['UFilePicker']
     UForm: typeof import('@veltra/desktop')['UForm']
     UFormItem: typeof import('@veltra/desktop')['UFormItem']
+    UGroupNav: typeof import('@veltra/desktop')['UGroupNav']
     UIcon: typeof import('@veltra/desktop')['UIcon']
     UInput: typeof import('@veltra/desktop')['UInput']
     UMultiSelect: typeof import('@veltra/desktop')['UMultiSelect']
