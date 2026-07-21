@@ -23,16 +23,19 @@ func (Credential) TableName() string { return "credentials" }
 
 // Repository is a Git source configuration (URL + auth only).
 type Repository struct {
-	ID           uint      `json:"id" gorm:"primaryKey"`
-	Name         string    `json:"name" gorm:"size:100;not null;uniqueIndex"`
-	Description  string    `json:"description" gorm:"size:500"`
-	Tags         string    `json:"tags" gorm:"size:500"`
-	RepoURL      string    `json:"repo_url" gorm:"size:500;not null"`
-	AuthType     string    `json:"auth_type" gorm:"size:20;not null;default:none"`
-	CredentialID *uint     `json:"credential_id" gorm:"index"`
-	CreatedBy    uint      `json:"created_by" gorm:"index"`
-	CreatedAt    time.Time `json:"created_at"`
-	UpdatedAt    time.Time `json:"updated_at"`
+	ID               uint       `json:"id" gorm:"primaryKey"`
+	Name             string     `json:"name" gorm:"size:100;not null;uniqueIndex"`
+	Description      string     `json:"description" gorm:"size:500"`
+	Tags             string     `json:"tags" gorm:"size:500"`
+	RepoURL          string     `json:"repo_url" gorm:"size:500;not null"`
+	AuthType         string     `json:"auth_type" gorm:"size:20;not null;default:none"`
+	CredentialID     *uint      `json:"credential_id" gorm:"index"`
+	BranchesJSON     string     `json:"-" gorm:"type:text"`
+	Branches         []string   `json:"branches" gorm:"-"`
+	BranchesSyncedAt *time.Time `json:"branches_synced_at"`
+	CreatedBy        uint       `json:"created_by" gorm:"index"`
+	CreatedAt        time.Time  `json:"created_at"`
+	UpdatedAt        time.Time  `json:"updated_at"`
 }
 
 func (Repository) TableName() string { return "repositories" }

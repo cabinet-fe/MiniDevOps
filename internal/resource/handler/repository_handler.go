@@ -24,11 +24,13 @@ func NewRepositoryHandler(svc *service.RepositoryService, perm *rbacservice.Perm
 func (h *RepositoryHandler) RegisterRoutes(rg *gin.RouterGroup, authMW gin.HandlerFunc) {
 	g := rg.Group("/resource/repositories", authMW)
 	g.GET("", rbacmw.RequirePermission(h.perm, "resource_repositories:view"), h.List)
-	g.GET("/:id", rbacmw.RequirePermission(h.perm, "resource_repositories:view"), h.Get)
 	g.POST("", rbacmw.RequirePermission(h.perm, "resource_repositories:create"), h.Create)
+	g.POST("/sync-branches", rbacmw.RequirePermission(h.perm, "resource_repositories:update"), h.SyncBranchesBatch)
+	g.GET("/:id", rbacmw.RequirePermission(h.perm, "resource_repositories:view"), h.Get)
 	g.PUT("/:id", rbacmw.RequirePermission(h.perm, "resource_repositories:update"), h.Update)
 	g.DELETE("/:id", rbacmw.RequirePermission(h.perm, "resource_repositories:delete"), h.Delete)
 	g.GET("/:id/branches", rbacmw.RequirePermission(h.perm, "resource_repositories:view"), h.Branches)
+	g.POST("/:id/sync-branches", rbacmw.RequirePermission(h.perm, "resource_repositories:update"), h.SyncBranches)
 	g.POST("/:id/test", rbacmw.RequirePermission(h.perm, "resource_repositories:view"), h.Test)
 }
 
@@ -114,12 +116,43 @@ func (h *RepositoryHandler) Branches(c *gin.Context) {
 		pkg.Error(c, http.StatusBadRequest, "无效 ID")
 		return
 	}
-	branches, err := h.svc.ListBranches(id)
+	items, syncedAt, err := h.svc.CachedBranches(id)
 	if err != nil {
 		writeServiceError(c, err)
 		return
 	}
-	pkg.Success(c, gin.H{"items": branches})
+	pkg.Success(c, gin.H{"items": items, "synced_at": syncedAt})
+}
+
+func (h *RepositoryHandler) SyncBranches(c *gin.Context) {
+	id, err := parseID(c)
+	if err != nil {
+		pkg.Error(c, http.StatusBadRequest, "无效 ID")
+		return
+	}
+	repo, err := h.svc.SyncBranches(id)
+	if err != nil {
+		writeServiceError(c, err)
+		return
+	}
+	pkg.Success(c, gin.H{
+		"items":     repo.Branches,
+		"synced_at": repo.BranchesSyncedAt,
+	})
+}
+
+type syncBranchesBatchRequest struct {
+	IDs []uint `json:"ids"`
+}
+
+func (h *RepositoryHandler) SyncBranchesBatch(c *gin.Context) {
+	var req syncBranchesBatchRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		pkg.Error(c, http.StatusBadRequest, "参数错误")
+		return
+	}
+	results := h.svc.SyncBranchesBatch(req.IDs)
+	pkg.Success(c, gin.H{"items": results})
 }
 
 func (h *RepositoryHandler) Test(c *gin.Context) {

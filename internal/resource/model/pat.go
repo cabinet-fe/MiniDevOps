@@ -4,8 +4,10 @@ import "time"
 
 // PAT scopes (fixed whitelist, DESIGN D17).
 const (
-	ScopeSkillsRead = "skills:read"
-	ScopeAgentsRun  = "agents:run"
+	ScopeSkillsRead  = "skills:read"
+	ScopeAgentsRun   = "agents:run"
+	ScopeDocsWrite   = "docs:write"
+	ScopeDocsPublish = "docs:publish"
 )
 
 // PersonalAccessToken stores only the hash; plaintext is returned once on create.

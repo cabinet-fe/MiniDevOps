@@ -17,8 +17,11 @@ import (
 var (
 	ErrPATInvalid    = errors.New("invalid or expired token")
 	ErrPATWrongScope = errors.New("token scope insufficient")
-	ErrPATBadScope   = errors.New("scope 仅允许 skills:read 与 agents:run")
+	ErrPATBadScope   = errors.New("scope 仅允许 skills:read、agents:run、docs:write、docs:publish")
 )
+
+// Allowed PAT expires_in_days presets (UI / API whitelist).
+var allowedPATExpireDays = map[int]struct{}{30: {}, 90: {}, 180: {}, 365: {}}
 
 type PATService struct {
 	repo  *repository.PATRepository
@@ -34,14 +37,36 @@ func NewPATService(repo *repository.PATRepository, audit ...AuditWriter) *PATSer
 }
 
 type CreatePATInput struct {
-	Name      string     `json:"name"`
-	Scopes    []string   `json:"scopes"`
-	ExpiresAt *time.Time `json:"expires_at"`
+	Name          string     `json:"name"`
+	Scopes        []string   `json:"scopes"`
+	ExpiresAt     *time.Time `json:"expires_at"`
+	ExpiresInDays *int       `json:"expires_in_days"`
 }
 
 type CreatePATResult struct {
 	Token    string                    `json:"token"` // plaintext, only in create response
 	Metadata model.PersonalAccessToken `json:"metadata"`
+}
+
+func resolvePATExpiresAt(in CreatePATInput) (*time.Time, error) {
+	if in.ExpiresAt != nil && in.ExpiresInDays != nil {
+		return nil, errors.New("expires_at 与 expires_in_days 不可同时传")
+	}
+	if in.ExpiresInDays != nil {
+		days := *in.ExpiresInDays
+		if _, ok := allowedPATExpireDays[days]; !ok {
+			return nil, errors.New("expires_in_days 仅允许 30、90、180、365")
+		}
+		at := time.Now().UTC().Add(time.Duration(days) * 24 * time.Hour)
+		return &at, nil
+	}
+	if in.ExpiresAt != nil {
+		if !in.ExpiresAt.After(time.Now().UTC()) {
+			return nil, errors.New("expires_at 必须晚于当前时间")
+		}
+		return in.ExpiresAt, nil
+	}
+	return nil, nil
 }
 
 func (s *PATService) Create(userID uint, in CreatePATInput) (*CreatePATResult, error) {
@@ -50,6 +75,10 @@ func (s *PATService) Create(userID uint, in CreatePATInput) (*CreatePATResult, e
 		return nil, errors.New("名称不能为空")
 	}
 	scopes, err := normalizeScopes(in.Scopes)
+	if err != nil {
+		return nil, err
+	}
+	expiresAt, err := resolvePATExpiresAt(in)
 	if err != nil {
 		return nil, err
 	}
@@ -66,7 +95,7 @@ func (s *PATService) Create(userID uint, in CreatePATInput) (*CreatePATResult, e
 		TokenHash:   hash,
 		ScopesJSON:  string(scopesJSON),
 		Scopes:      scopes,
-		ExpiresAt:   in.ExpiresAt,
+		ExpiresAt:   expiresAt,
 	}
 	if err := s.repo.Create(item); err != nil {
 		return nil, err
@@ -108,9 +137,10 @@ func (s *PATService) Delete(userID uint, id uint) error {
 }
 
 // ValidateBearer returns userID and scopes for a valid PAT; otherwise ErrPATInvalid.
+// Only accepts prefix "br_" + hex; legacy "br_pat_" tokens are rejected.
 func (s *PATService) ValidateBearer(raw string) (userID uint, scopes []string, err error) {
 	raw = strings.TrimSpace(raw)
-	if !strings.HasPrefix(raw, "br_pat_") {
+	if !isPATPlaintext(raw) {
 		return 0, nil, ErrPATInvalid
 	}
 	token, err := s.repo.FindByHash(hashToken(raw))
@@ -147,7 +177,9 @@ func normalizeScopes(scopes []string) ([]string, error) {
 	out := make([]string, 0, len(scopes))
 	for _, sc := range scopes {
 		sc = strings.TrimSpace(sc)
-		if sc != model.ScopeSkillsRead && sc != model.ScopeAgentsRun {
+		switch sc {
+		case model.ScopeSkillsRead, model.ScopeAgentsRun, model.ScopeDocsWrite, model.ScopeDocsPublish:
+		default:
 			return nil, ErrPATBadScope
 		}
 		if !seen[sc] {
@@ -167,7 +199,24 @@ func generatePATPlaintext() (string, error) {
 	if _, err := rand.Read(buf); err != nil {
 		return "", err
 	}
-	return "br_pat_" + hex.EncodeToString(buf), nil
+	return "br_" + hex.EncodeToString(buf), nil
+}
+
+// isPATPlaintext accepts only "br_" + hex (rejects legacy "br_pat_...").
+func isPATPlaintext(raw string) bool {
+	if !strings.HasPrefix(raw, "br_") {
+		return false
+	}
+	rest := raw[len("br_"):]
+	if len(rest) == 0 {
+		return false
+	}
+	for _, c := range rest {
+		if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
+			return false
+		}
+	}
+	return true
 }
 
 func hashToken(plain string) string {

@@ -52,3 +52,9 @@ func (r *RepositoryRepository) CountJobs(repositoryID uint) (int64, error) {
 	err := r.db.Table("build_jobs").Where("repository_id = ?", repositoryID).Count(&n).Error
 	return n, err
 }
+
+func (r *RepositoryRepository) CountAgentBindings(repositoryID uint) (int64, error) {
+	var n int64
+	err := r.db.Table("ai_agent_repo_bindings").Where("repository_id = ?", repositoryID).Count(&n).Error
+	return n, err
+}

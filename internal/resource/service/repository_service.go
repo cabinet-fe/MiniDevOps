@@ -1,7 +1,9 @@
 package service
 
 import (
+	"encoding/json"
 	"strings"
+	"time"
 
 	"bedrock/internal/engine"
 	"bedrock/internal/resource/model"
@@ -152,6 +154,13 @@ func (s *RepositoryService) Delete(id uint) error {
 	if n > 0 {
 		return NewConflict("该仓库仍被构建任务引用，无法删除")
 	}
+	bindings, err := s.repo.CountAgentBindings(id)
+	if err != nil {
+		return err
+	}
+	if bindings > 0 {
+		return NewConflict("该仓库仍被智能体绑定引用，无法删除")
+	}
 	return s.repo.Delete(id)
 }
 
@@ -160,6 +169,7 @@ func (s *RepositoryService) Get(id uint) (*model.Repository, error) {
 	if err != nil {
 		return nil, NewNotFound("仓库不存在")
 	}
+	decodeRepoBranches(repo)
 	return repo, nil
 }
 
@@ -168,14 +178,78 @@ func (s *RepositoryService) List(page, pageSize int, keyword string) ([]model.Re
 	if err != nil {
 		return nil, 0, err
 	}
+	for i := range items {
+		decodeRepoBranches(&items[i])
+	}
 	return items, total, nil
 }
 
-func (s *RepositoryService) ListBranches(id uint) ([]string, error) {
+// CachedBranches returns previously synced branch names (may be empty).
+func (s *RepositoryService) CachedBranches(id uint) (items []string, syncedAt *time.Time, err error) {
+	repo, err := s.repo.FindByID(id)
+	if err != nil {
+		return nil, nil, NewNotFound("仓库不存在")
+	}
+	decodeRepoBranches(repo)
+	return repo.Branches, repo.BranchesSyncedAt, nil
+}
+
+// SyncBranches fetches remote branches and writes the cache.
+func (s *RepositoryService) SyncBranches(id uint) (*model.Repository, error) {
 	repo, err := s.repo.FindByID(id)
 	if err != nil {
 		return nil, NewNotFound("仓库不存在")
 	}
+	branches, err := s.fetchRemoteBranches(repo)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.writeBranchCache(repo, branches); err != nil {
+		return nil, err
+	}
+	decodeRepoBranches(repo)
+	return repo, nil
+}
+
+// BranchSyncResult is one item in a batch sync-branches response.
+type BranchSyncResult struct {
+	ID          uint       `json:"id"`
+	OK          bool       `json:"ok"`
+	BranchCount int        `json:"branch_count,omitempty"`
+	Error       string     `json:"error,omitempty"`
+	SyncedAt    *time.Time `json:"synced_at,omitempty"`
+}
+
+// SyncBranchesBatch syncs the given repository IDs. Empty ids returns an empty list.
+func (s *RepositoryService) SyncBranchesBatch(ids []uint) []BranchSyncResult {
+	out := make([]BranchSyncResult, 0, len(ids))
+	for _, id := range ids {
+		repo, err := s.SyncBranches(id)
+		if err != nil {
+			out = append(out, BranchSyncResult{ID: id, OK: false, Error: err.Error()})
+			continue
+		}
+		out = append(out, BranchSyncResult{
+			ID: id, OK: true, BranchCount: len(repo.Branches), SyncedAt: repo.BranchesSyncedAt,
+		})
+	}
+	return out
+}
+
+func (s *RepositoryService) TestFetch(id uint) (map[string]interface{}, error) {
+	repo, err := s.SyncBranches(id)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]interface{}{
+		"ok":           true,
+		"branch_count": len(repo.Branches),
+		"branches":     repo.Branches,
+		"synced_at":    repo.BranchesSyncedAt,
+	}, nil
+}
+
+func (s *RepositoryService) fetchRemoteBranches(repo *model.Repository) ([]string, error) {
 	authType := "none"
 	username, password := "", ""
 	if repo.AuthType == "credential" && repo.CredentialID != nil {
@@ -193,16 +267,35 @@ func (s *RepositoryService) ListBranches(id uint) ([]string, error) {
 	return s.git.ListBranches(repo.RepoURL, authType, username, password)
 }
 
-func (s *RepositoryService) TestFetch(id uint) (map[string]interface{}, error) {
-	branches, err := s.ListBranches(id)
-	if err != nil {
-		return nil, err
+func (s *RepositoryService) writeBranchCache(repo *model.Repository, branches []string) error {
+	if branches == nil {
+		branches = []string{}
 	}
-	return map[string]interface{}{
-		"ok":           true,
-		"branch_count": len(branches),
-		"branches":     branches,
-	}, nil
+	raw, err := json.Marshal(branches)
+	if err != nil {
+		return err
+	}
+	now := time.Now().UTC()
+	repo.BranchesJSON = string(raw)
+	repo.BranchesSyncedAt = &now
+	repo.Branches = branches
+	return s.repo.Update(repo)
+}
+
+func decodeRepoBranches(repo *model.Repository) {
+	if repo == nil {
+		return
+	}
+	if strings.TrimSpace(repo.BranchesJSON) == "" {
+		repo.Branches = []string{}
+		return
+	}
+	var items []string
+	if err := json.Unmarshal([]byte(repo.BranchesJSON), &items); err != nil || items == nil {
+		repo.Branches = []string{}
+		return
+	}
+	repo.Branches = items
 }
 
 func normalizeRepoAuth(t string) string {

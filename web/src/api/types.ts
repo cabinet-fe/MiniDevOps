@@ -187,6 +187,8 @@ export interface Repository {
   repo_url: string;
   auth_type: string;
   credential_id?: number | null;
+  branches?: string[];
+  branches_synced_at?: string | null;
   created_by: number;
   created_at: string;
   updated_at: string;
@@ -562,6 +564,11 @@ export interface CliCheckUpdateResult {
   error?: string;
 }
 
+export interface AiAgentRepoBinding {
+  repository_id: number;
+  branch: string;
+}
+
 export interface AiAgent {
   id: number;
   name: string;
@@ -570,10 +577,12 @@ export interface AiAgent {
   cli_key: string;
   system_prompt: string;
   skill_ids: number[];
-  build_job_ids: number[];
+  repo_bindings: AiAgentRepoBinding[];
   output_dir: string;
   stream_output: boolean;
   timeout_sec: number;
+  workspace_status: "pending" | "ready" | "failed";
+  workspace_error?: string;
   created_by: number;
   created_at: string;
   updated_at: string;
@@ -601,6 +610,9 @@ export interface AgentRun {
   doc_node_id?: number | null;
   error_message?: string;
   output_text?: string;
+  duration_ms?: number;
+  started_at?: string | null;
+  finished_at?: string | null;
   created_at: string;
 }
 

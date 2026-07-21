@@ -32,7 +32,7 @@ func Auth(authSvc *authservice.AuthService) gin.HandlerFunc {
 	return AuthWithPAT(authSvc, nil)
 }
 
-// AuthWithPAT accepts JWT or PAT (br_pat_*) under Authorization: Bearer.
+// AuthWithPAT accepts JWT or PAT (br_*) under Authorization: Bearer.
 func AuthWithPAT(authSvc *authservice.AuthService, patSvc PATValidator) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		authHeader := c.GetHeader("Authorization")
@@ -48,7 +48,7 @@ func AuthWithPAT(authSvc *authservice.AuthService, patSvc PATValidator) gin.Hand
 		}
 		raw := parts[1]
 
-		if patSvc != nil && strings.HasPrefix(raw, "br_pat_") {
+		if patSvc != nil && strings.HasPrefix(raw, "br_") {
 			userID, scopes, err := patSvc.ValidateBearer(raw)
 			if err != nil {
 				pkg.Error(c, http.StatusUnauthorized, "invalid or expired token")

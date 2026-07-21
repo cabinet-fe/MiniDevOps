@@ -56,8 +56,31 @@ export async function listRepositories(params?: ListQuery): Promise<PageResult<R
   return body;
 }
 
-export async function listRepositoryBranches(id: number): Promise<string[]> {
-  const { body } = await http.get<{ items: string[] }>(`/resource/repositories/${id}/branches`);
+export async function listRepositoryBranches(
+  id: number,
+): Promise<{ items: string[]; synced_at?: string | null }> {
+  const { body } = await http.get<{ items: string[]; synced_at?: string | null }>(
+    `/resource/repositories/${id}/branches`,
+  );
+  return { items: body.items ?? [], synced_at: body.synced_at };
+}
+
+export async function syncRepositoryBranches(
+  id: number,
+): Promise<{ items: string[]; synced_at?: string | null }> {
+  const { body } = await http.post<{ items: string[]; synced_at?: string | null }>(
+    `/resource/repositories/${id}/sync-branches`,
+    {},
+  );
+  return { items: body.items ?? [], synced_at: body.synced_at };
+}
+
+export async function syncRepositoryBranchesBatch(
+  ids: number[],
+): Promise<{ id: number; ok: boolean; branch_count?: number; error?: string }[]> {
+  const { body } = await http.post<{
+    items: { id: number; ok: boolean; branch_count?: number; error?: string }[];
+  }>("/resource/repositories/sync-branches", { ids });
   return body.items ?? [];
 }
 
@@ -199,6 +222,7 @@ export async function createToken(input: {
   name: string;
   scopes: string[];
   expires_at?: string;
+  expires_in_days?: number;
 }): Promise<{ token: string; metadata: PersonalAccessToken }> {
   const { body } = await http.post<{ token: string; metadata: PersonalAccessToken }>(
     "/resource/tokens",

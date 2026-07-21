@@ -52,7 +52,7 @@ func TestContract_ResourceCliPat_CRUD(t *testing.T) {
 
 			patRepo := repository.NewPATRepository(gdb)
 			pat := &model.PersonalAccessToken{
-				UserID: 1, Name: "p", TokenPrefix: "br_pat_xxxx", TokenHash: "hash-" + driver,
+				UserID: 1, Name: "p", TokenPrefix: "br_xxxxxxxx", TokenHash: "hash-" + driver,
 				ScopesJSON: `["skills:read"]`,
 			}
 			if err := patRepo.Create(pat); err != nil {

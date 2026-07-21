@@ -9,6 +9,8 @@ import {
   createRepository,
   deleteRepository,
   listCredentials,
+  syncRepositoryBranches,
+  syncRepositoryBranchesBatch,
   testRepository,
   updateRepository,
 } from "@/api/resource";
@@ -16,6 +18,7 @@ import type { Credential, Repository } from "@/api/types";
 import FormDialog from "@/components/form-dialog";
 import ProTable, { defineProTableColumns } from "@/components/pro-table";
 import { usePermission } from "@/composables/use-permission";
+import { formatDateTime } from "@/lib/datetime";
 import { tagType, type TagType } from "@/lib/tag";
 
 const AUTH_TYPE_TAG: Record<string, TagType> = {
@@ -26,6 +29,7 @@ const AUTH_TYPE_TAG: Record<string, TagType> = {
 const { hasPermission } = usePermission();
 const listRef = useTemplateRef("list");
 const query = reactive({ keyword: "" });
+const checked = ref<Repository[]>([]);
 const dialogOpen = ref(false);
 const editing = ref<Repository | null>(null);
 const credOptions = ref<{ label: string; value: number }[]>([]);
@@ -43,7 +47,9 @@ const columns = defineProTableColumns([
   { key: "name", name: "名称" },
   { key: "repo_url", name: "URL" },
   { key: "auth_type", name: "认证", width: 100 },
-  { key: "action", name: "操作", width: 200, align: "center", fixed: "right" },
+  { key: "branches", name: "分支数", width: 90 },
+  { key: "branches_synced_at", name: "分支同步", width: 170 },
+  { key: "action", name: "操作", width: 240, align: "center", fixed: "right" },
 ]);
 
 onMounted(async () => {
@@ -106,17 +112,63 @@ async function onTest(row: Repository) {
   try {
     const res = await testRepository(row.id);
     message.success(`拉取成功，分支 ${res.branches?.length ?? 0} 个`);
+    await listRef.value?.reload();
   } catch (err) {
     message.error(err instanceof Error ? err.message : "测试失败");
+  }
+}
+
+async function onSyncBranches(row: Repository) {
+  try {
+    const res = await syncRepositoryBranches(row.id);
+    message.success(`已同步 ${res.items.length} 个分支`);
+    await listRef.value?.reload();
+  } catch (err) {
+    message.error(err instanceof Error ? err.message : "同步失败");
+  }
+}
+
+async function onBatchSyncBranches() {
+  if (!checked.value.length) {
+    message.warning("请先勾选要同步的仓库");
+    return;
+  }
+  try {
+    const results = await syncRepositoryBranchesBatch(checked.value.map((r) => r.id));
+    const ok = results.filter((r) => r.ok).length;
+    const fail = results.length - ok;
+    if (fail === 0) {
+      message.success(`已同步 ${ok} 个仓库`);
+    } else {
+      message.warning(`同步完成：成功 ${ok}，失败 ${fail}`);
+    }
+    checked.value = [];
+    await listRef.value?.reload();
+  } catch (err) {
+    message.error(err instanceof Error ? err.message : "批量同步失败");
   }
 }
 </script>
 
 <template>
   <div>
-    <ProTable ref="list" url="/resource/repositories" :query="query" :columns="columns" pagination>
+    <ProTable
+      ref="list"
+      v-model:checked="checked"
+      url="/resource/repositories"
+      :query="query"
+      :columns="columns"
+      checkable
+      pagination
+    >
       <template #filters>
         <u-input v-model="query.keyword" placeholder="名称/URL" style="width: 200px" />
+        <u-button
+          v-if="hasPermission('resource_repositories:update')"
+          @click.prevent="onBatchSyncBranches"
+        >
+          批量同步分支
+        </u-button>
         <u-button
           v-if="hasPermission('resource_repositories:create')"
           type="primary"
@@ -131,6 +183,12 @@ async function onTest(row: Repository) {
           {{ (rowData as Repository).auth_type === "credential" ? "凭证" : "无" }}
         </u-tag>
       </template>
+      <template #column:branches="{ rowData }">
+        {{ (rowData as Repository).branches?.length ?? 0 }}
+      </template>
+      <template #column:branches_synced_at="{ rowData }">
+        {{ formatDateTime((rowData as Repository).branches_synced_at) || "—" }}
+      </template>
       <template #column:action="{ rowData }">
         <u-action-group :max="4">
           <u-action
@@ -138,6 +196,12 @@ async function onTest(row: Repository) {
             @run="openEdit(rowData as Repository)"
           >
             编辑
+          </u-action>
+          <u-action
+            v-if="hasPermission('resource_repositories:update')"
+            @run="onSyncBranches(rowData as Repository)"
+          >
+            同步分支
           </u-action>
           <u-action
             v-if="hasPermission('resource_repositories:view')"

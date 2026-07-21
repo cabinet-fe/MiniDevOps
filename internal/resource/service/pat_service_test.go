@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"bedrock/internal/platform/config"
 	"bedrock/internal/platform/db"
@@ -38,7 +39,7 @@ func TestPATPlaintextOnceAndScopes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.HasPrefix(created.Token, "br_pat_") {
+	if !strings.HasPrefix(created.Token, "br_") || strings.HasPrefix(created.Token, "br_pat_") {
 		t.Fatalf("unexpected token %s", created.Token)
 	}
 	list, _, err := pats.List(1, 1, 20)
@@ -49,8 +50,11 @@ func TestPATPlaintextOnceAndScopes(t *testing.T) {
 	if strings.Contains(list[0].TokenHash, created.Token) {
 		t.Fatal("plaintext must not be stored")
 	}
-	if _, _, err := pats.ValidateBearer("br_pat_deadbeef"); err == nil {
+	if _, _, err := pats.ValidateBearer("br_deadbeef"); err == nil {
 		t.Fatal("invalid PAT must fail")
+	}
+	if _, _, err := pats.ValidateBearer("br_pat_" + strings.Repeat("ab", 32)); err == nil {
+		t.Fatal("legacy br_pat_ prefix must be rejected")
 	}
 	uid, scopes, err := pats.ValidateBearer(created.Token)
 	if err != nil || uid != 1 {
@@ -71,6 +75,73 @@ func TestPATPlaintextOnceAndScopes(t *testing.T) {
 	list, _, err = pats.List(1, 1, 20)
 	if err != nil || len(list) != 0 {
 		t.Fatalf("deleted PAT must be removed from list: %v %#v", err, list)
+	}
+}
+
+func TestPATDocsScopesAndExpiresAt(t *testing.T) {
+	pats := setupPAT(t)
+	past := time.Now().UTC().Add(-time.Hour)
+	if _, err := pats.Create(1, service.CreatePATInput{
+		Name: "expired", Scopes: []string{model.ScopeDocsWrite}, ExpiresAt: &past,
+	}); err == nil {
+		t.Fatal("past expires_at must be rejected")
+	}
+	future := time.Now().UTC().Add(time.Hour)
+	created, err := pats.Create(1, service.CreatePATInput{
+		Name: "docs", Scopes: []string{model.ScopeDocsWrite, model.ScopeDocsPublish}, ExpiresAt: &future,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, scopes, err := pats.ValidateBearer(created.Token)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := pats.RequireScope(scopes, model.ScopeDocsWrite); err != nil {
+		t.Fatal(err)
+	}
+	if err := pats.RequireScope(scopes, model.ScopeDocsPublish); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestPATExpiresInDays(t *testing.T) {
+	pats := setupPAT(t)
+	bad := 7
+	if _, err := pats.Create(1, service.CreatePATInput{
+		Name: "bad-days", Scopes: []string{model.ScopeSkillsRead}, ExpiresInDays: &bad,
+	}); err == nil {
+		t.Fatal("non-whitelist expires_in_days must be rejected")
+	}
+	days := 30
+	future := time.Now().UTC().Add(time.Hour)
+	if _, err := pats.Create(1, service.CreatePATInput{
+		Name: "both", Scopes: []string{model.ScopeSkillsRead}, ExpiresAt: &future, ExpiresInDays: &days,
+	}); err == nil {
+		t.Fatal("expires_at and expires_in_days together must be rejected")
+	}
+	created, err := pats.Create(1, service.CreatePATInput{
+		Name: "days", Scopes: []string{model.ScopeSkillsRead}, ExpiresInDays: &days,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if created.Metadata.ExpiresAt == nil {
+		t.Fatal("expires_in_days must persist expires_at")
+	}
+	wantMin := time.Now().UTC().Add(29 * 24 * time.Hour)
+	wantMax := time.Now().UTC().Add(31 * 24 * time.Hour)
+	if created.Metadata.ExpiresAt.Before(wantMin) || created.Metadata.ExpiresAt.After(wantMax) {
+		t.Fatalf("expires_at out of range: %v", created.Metadata.ExpiresAt)
+	}
+	never, err := pats.Create(1, service.CreatePATInput{
+		Name: "never", Scopes: []string{model.ScopeSkillsRead},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if never.Metadata.ExpiresAt != nil {
+		t.Fatal("omit expire fields must mean never expires")
 	}
 }
 
