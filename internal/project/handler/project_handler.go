@@ -69,6 +69,9 @@ func (h *ProjectHandler) RegisterRoutes(rg *gin.RouterGroup, authMW gin.HandlerF
 	g.DELETE("/:id/docs/:nodeID", rbacmw.RequirePermission(h.perm, "project_docs:delete"), h.DeleteDocNode)
 	g.POST("/:id/docs/upload", rbacmw.RequirePermission(h.perm, "project_docs:create"), h.UploadMarkdown)
 	g.POST("/:id/docs/import-zip", rbacmw.RequirePermission(h.perm, "project_docs:create"), h.ImportZIP)
+	// External push/publish: PAT scope or JWT RBAC checked inside handler (see APIRun pattern).
+	g.POST("/:id/docs/push", h.PushDocByPath)
+	g.POST("/:id/docs/publish-path", h.PublishDocByPath)
 	g.POST("/:id/docs/:nodeID/publish", rbacmw.RequirePermission(h.perm, "project_docs:update"), h.PublishDocNode)
 	g.GET("/:id/docs/:nodeID/diff", rbacmw.RequirePermission(h.perm, "project_docs:view"), h.GetDocDiff)
 	g.POST("/:id/docs/generate", rbacmw.RequirePermission(h.perm, "project_docs:execute"), h.GenerateDocs)
@@ -715,6 +718,101 @@ func (h *ProjectHandler) ImportZIP(c *gin.Context) {
 		return
 	}
 	pkg.Created(c, gin.H{"items": items})
+}
+
+func (h *ProjectHandler) PushDocByPath(c *gin.Context) {
+	if !h.requireDocsAuth(c, "docs:write", "project_docs:create") {
+		return
+	}
+	projectID, ok := parseID(c, "id")
+	if !ok {
+		return
+	}
+	var input struct {
+		ApiDir     string `json:"api_dir"`
+		ApiDocName string `json:"api_doc_name"`
+		ApiDoc     string `json:"api_doc"`
+	}
+	if err := c.ShouldBindJSON(&input); err != nil {
+		pkg.Error(c, http.StatusBadRequest, "无效推送参数")
+		return
+	}
+	if strings.TrimSpace(input.ApiDocName) == "" {
+		pkg.Error(c, http.StatusBadRequest, "api_doc_name 不能为空")
+		return
+	}
+	if input.ApiDoc == "" {
+		pkg.Error(c, http.StatusBadRequest, "api_doc 不能为空")
+		return
+	}
+	actor, ok := h.actor(c)
+	if !ok {
+		return
+	}
+	if authmiddleware.IsPAT(c) {
+		actor.Permissions["project_docs:create"] = struct{}{}
+	}
+	node, created, err := h.svc.UpsertDocByPath(actor, projectID, input.ApiDir, input.ApiDocName, input.ApiDoc)
+	if err != nil {
+		writeServiceError(c, err)
+		return
+	}
+	if created {
+		pkg.Created(c, node)
+		return
+	}
+	pkg.Success(c, node)
+}
+
+func (h *ProjectHandler) PublishDocByPath(c *gin.Context) {
+	if !h.requireDocsAuth(c, "docs:publish", "project_docs:update") {
+		return
+	}
+	projectID, ok := parseID(c, "id")
+	if !ok {
+		return
+	}
+	var input struct {
+		ApiDir     string `json:"api_dir"`
+		ApiDocName string `json:"api_doc_name"`
+	}
+	if err := c.ShouldBindJSON(&input); err != nil {
+		pkg.Error(c, http.StatusBadRequest, "无效发布参数")
+		return
+	}
+	if strings.TrimSpace(input.ApiDocName) == "" {
+		pkg.Error(c, http.StatusBadRequest, "api_doc_name 不能为空")
+		return
+	}
+	actor, ok := h.actor(c)
+	if !ok {
+		return
+	}
+	if authmiddleware.IsPAT(c) {
+		actor.Permissions["project_docs:update"] = struct{}{}
+	}
+	node, err := h.svc.PublishDocByPath(actor, projectID, input.ApiDir, input.ApiDocName)
+	if err != nil {
+		writeServiceError(c, err)
+		return
+	}
+	pkg.Success(c, node)
+}
+
+// requireDocsAuth mirrors AI APIRun: PAT needs scope; JWT needs RBAC permission.
+func (h *ProjectHandler) requireDocsAuth(c *gin.Context, patScope, rbacPermission string) bool {
+	if authmiddleware.IsPAT(c) {
+		if err := authmiddleware.RequirePATScope(c, patScope); err != nil {
+			pkg.Error(c, http.StatusForbidden, "token scope insufficient")
+			return false
+		}
+		return true
+	}
+	if err := h.perm.CheckAccess(authmiddleware.GetUserID(c), authmiddleware.IsSuperAdmin(c), rbacPermission); err != nil {
+		pkg.Error(c, http.StatusForbidden, "forbidden")
+		return false
+	}
+	return true
 }
 
 func (h *ProjectHandler) PublishDocNode(c *gin.Context) {

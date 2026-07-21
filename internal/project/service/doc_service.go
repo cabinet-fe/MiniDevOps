@@ -360,6 +360,111 @@ func (s *ProjectService) ImportZIP(actor AccessContext, projectID uint, parentID
 	return imported, nil
 }
 
+// UpsertDocByPath creates missing directories under api_dir and upserts a draft document by name.
+// created is true when a new document node was inserted.
+func (s *ProjectService) UpsertDocByPath(actor AccessContext, projectID uint, apiDir, apiDocName, content string) (*projectmodel.ApiDocNode, bool, error) {
+	if _, err := s.acl.Require(projectID, actor, "project_docs:create", capDocEdit); err != nil {
+		return nil, false, err
+	}
+	if err := s.requireActiveProject(projectID); err != nil {
+		return nil, false, err
+	}
+	dirs, err := parseDocDirPath(apiDir)
+	if err != nil {
+		return nil, false, err
+	}
+	docName, err := normalizeDocFileName(apiDocName)
+	if err != nil {
+		return nil, false, err
+	}
+
+	nodes, err := s.repo.ListDocNodes(projectID)
+	if err != nil {
+		return nil, false, err
+	}
+	index := newDocImportIndex(nodes, nil)
+	currentParent := (*uint)(nil)
+	currentKey := "root"
+	for _, directory := range dirs {
+		key := currentKey + "/" + directory
+		if existing, ok := index[key]; ok {
+			if existing.Kind != projectmodel.DocNodeDirectory {
+				return nil, false, fmt.Errorf("路径与文档节点冲突: %s", directory)
+			}
+			id := existing.ID
+			currentParent = &id
+			currentKey = key
+			continue
+		}
+		directoryNode := &projectmodel.ApiDocNode{
+			ProjectID: projectID, ParentID: currentParent, Kind: projectmodel.DocNodeDirectory, Name: directory,
+			CreatedBy: actor.UserID, UpdatedBy: actor.UserID,
+		}
+		if err := s.repo.CreateDocNode(directoryNode); err != nil {
+			return nil, false, err
+		}
+		index[key] = *directoryNode
+		id := directoryNode.ID
+		currentParent = &id
+		currentKey = key
+	}
+
+	documentKey := currentKey + "/" + docName
+	if existing, ok := index[documentKey]; ok {
+		if existing.Kind != projectmodel.DocNodeDocument {
+			return nil, false, fmt.Errorf("路径与目录节点冲突: %s", docName)
+		}
+		node := existing
+		s.writeDraft(&node, content, actor.UserID)
+		if err := s.repo.UpdateDocNode(&node); err != nil {
+			return nil, false, err
+		}
+		return &node, false, nil
+	}
+	node, err := s.createImportedDocument(projectID, currentParent, docName, content, actor.UserID)
+	if err != nil {
+		return nil, false, err
+	}
+	return node, true, nil
+}
+
+// PublishDocByPath publishes the draft at api_dir/api_doc_name using the node's current ContentVersion.
+func (s *ProjectService) PublishDocByPath(actor AccessContext, projectID uint, apiDir, apiDocName string) (*projectmodel.ApiDocNode, error) {
+	if _, err := s.acl.Require(projectID, actor, "project_docs:update", capDocEdit); err != nil {
+		return nil, err
+	}
+	if err := s.requireActiveProject(projectID); err != nil {
+		return nil, err
+	}
+	dirs, err := parseDocDirPath(apiDir)
+	if err != nil {
+		return nil, err
+	}
+	docName, err := normalizeDocFileName(apiDocName)
+	if err != nil {
+		return nil, err
+	}
+	nodes, err := s.repo.ListDocNodes(projectID)
+	if err != nil {
+		return nil, err
+	}
+	index := newDocImportIndex(nodes, nil)
+	key := "root"
+	for _, directory := range dirs {
+		key = key + "/" + directory
+		existing, ok := index[key]
+		if !ok || existing.Kind != projectmodel.DocNodeDirectory {
+			return nil, NewNotFound("文档路径不存在")
+		}
+	}
+	documentKey := key + "/" + docName
+	existing, ok := index[documentKey]
+	if !ok || existing.Kind != projectmodel.DocNodeDocument {
+		return nil, NewNotFound("文档路径不存在")
+	}
+	return s.PublishDocNode(actor, existing.ID, existing.ContentVersion)
+}
+
 func (s *ProjectService) PublishDocNode(actor AccessContext, id uint, expectedVersion int) (*projectmodel.ApiDocNode, error) {
 	node, err := s.repo.FindDocNode(id)
 	if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -408,8 +513,8 @@ func (s *ProjectService) GetDocDiff(actor AccessContext, id uint) (*DocDiff, err
 }
 
 type GenerateDocsInput struct {
-	AgentID  uint  `json:"agent_id"`
-	NodeID   *uint `json:"node_id"`
+	AgentID uint  `json:"agent_id"`
+	NodeID  *uint `json:"node_id"`
 }
 
 type GenerateDocsResult struct {
@@ -566,6 +671,52 @@ func safeDocName(value string) string {
 		return ""
 	}
 	return name
+}
+
+// parseDocDirPath splits a relative document directory path; empty means project root.
+func parseDocDirPath(apiDir string) ([]string, error) {
+	raw := strings.TrimSpace(strings.ReplaceAll(apiDir, "\\", "/"))
+	if raw == "" || raw == "." {
+		return nil, nil
+	}
+	if strings.HasPrefix(raw, "/") {
+		return nil, errors.New("api_dir 不能为绝对路径")
+	}
+	parts := strings.Split(raw, "/")
+	out := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if part == "" || part == "." {
+			return nil, errors.New("api_dir 包含非法空段")
+		}
+		if part == ".." || strings.Contains(part, "\x00") {
+			return nil, errors.New("api_dir 包含非法路径")
+		}
+		name := safeDocName(part)
+		if name == "" || name != part {
+			return nil, errors.New("api_dir 包含非法路径")
+		}
+		out = append(out, name)
+	}
+	return out, nil
+}
+
+func normalizeDocFileName(apiDocName string) (string, error) {
+	name := strings.TrimSpace(apiDocName)
+	if name == "" {
+		return "", errors.New("api_doc_name 不能为空")
+	}
+	name = strings.ReplaceAll(name, "\\", "/")
+	if strings.Contains(name, "/") {
+		return "", errors.New("api_doc_name 不能包含路径分隔符")
+	}
+	if !strings.EqualFold(path.Ext(name), ".md") {
+		name = name + ".md"
+	}
+	safe := safeDocName(name)
+	if safe == "" {
+		return "", errors.New("api_doc_name 无效")
+	}
+	return safe, nil
 }
 
 func validateZIPEntry(entry *zip.File) error {

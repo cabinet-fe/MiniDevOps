@@ -258,6 +258,71 @@ func TestDocumentPublishConflictAndImportDraftOnly(t *testing.T) {
 	}
 }
 
+func TestUpsertAndPublishDocByPath(t *testing.T) {
+	svc := newProjectService(t)
+	owner := actor(1,
+		"project_projects:create",
+		"project_docs:create", "project_docs:view", "project_docs:update",
+	)
+	project := createProject(t, svc, owner, "docs-path")
+
+	if _, _, err := svc.UpsertDocByPath(owner, project.ID, "../escape", "UserController", "# bad"); err == nil {
+		t.Fatal("path traversal must be rejected")
+	}
+	if _, _, err := svc.UpsertDocByPath(owner, project.ID, "/abs", "UserController", "# bad"); err == nil {
+		t.Fatal("absolute api_dir must be rejected")
+	}
+
+	created, isNew, err := svc.UpsertDocByPath(owner, project.ID, "ic-common-resource/controllers", "UserController", "# v1")
+	if err != nil || !isNew {
+		t.Fatalf("create upsert = %#v new=%v err=%v", created, isNew, err)
+	}
+	if created.Name != "UserController.md" || created.DraftContent != "# v1" || created.PublishedContent != "" {
+		t.Fatalf("created draft: %#v", created)
+	}
+	tree, err := svc.ListDocTree(owner, project.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tree) != 1 || tree[0].Name != "ic-common-resource" || len(tree[0].Children) != 1 {
+		t.Fatalf("dirs must be auto-created: %#v", tree)
+	}
+
+	updated, isNew, err := svc.UpsertDocByPath(owner, project.ID, "ic-common-resource/controllers", "UserController.md", "# v2")
+	if err != nil || isNew || updated.ID != created.ID {
+		t.Fatalf("update upsert = %#v new=%v err=%v", updated, isNew, err)
+	}
+	if updated.DraftContent != "# v2" || updated.PublishedContent != "" {
+		t.Fatalf("upsert must overwrite draft only: %#v", updated)
+	}
+
+	if _, err := svc.PublishDocByPath(owner, project.ID, "missing/dir", "UserController"); !IsNotFound(err) {
+		t.Fatalf("missing path = %v", err)
+	}
+	published, err := svc.PublishDocByPath(owner, project.ID, "ic-common-resource/controllers", "UserController")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if published.PublishedContent != "# v2" || published.DraftUpdatedAt != nil {
+		t.Fatalf("publish-path: %#v", published)
+	}
+	if _, err := svc.PublishDocByPath(owner, project.ID, "ic-common-resource/controllers", "UserController"); err == nil {
+		t.Fatal("publish without draft must fail")
+	}
+
+	// Conflict: dir name occupied by a document.
+	blocker, err := svc.CreateDocNode(owner, project.ID, DocNodeInput{
+		Kind: projectmodel.DocNodeDocument, Name: "blocked-dir",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = blocker
+	if _, _, err := svc.UpsertDocByPath(owner, project.ID, "blocked-dir/nested", "x", "#"); err == nil {
+		t.Fatal("path conflict with document must fail")
+	}
+}
+
 func TestMarkdownUploadWritesDraftOnly(t *testing.T) {
 	svc := newProjectService(t)
 	owner := actor(1, "project_projects:create", "project_docs:create")

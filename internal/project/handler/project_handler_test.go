@@ -8,11 +8,13 @@ import (
 	"net/http/httptest"
 	"strconv"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 
+	aimodel "bedrock/internal/ai/model"
 	airepository "bedrock/internal/ai/repository"
 	aiservice "bedrock/internal/ai/service"
 	authmodel "bedrock/internal/auth/model"
@@ -54,6 +56,63 @@ func TestPublishDocNodeRequiresExpectedVersion(t *testing.T) {
 	if got := publishDocNodeRequest(t, handler, project.ID, node.ID, `{"expected_version":1}`); got != http.StatusConflict {
 		t.Fatalf("stale expected_version status = %d, want %d", got, http.StatusConflict)
 	}
+}
+
+func TestPushAndPublishPathPATScope(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	handler, service := newProjectHandlerForTest(t)
+	owner := projectservice.NewAccessContext(1, true, nil)
+	project, err := service.CreateProject(owner, projectservice.CreateProjectInput{Name: "PAT Docs", Slug: "pat-docs"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	projectID := strconv.FormatUint(uint64(project.ID), 10)
+
+	pushBody := `{"api_dir":"a/b","api_doc_name":"Doc","api_doc":"# hi"}`
+	if got := docsPathRequest(t, handler, http.MethodPost, "/docs/push", projectID, pushBody, true, nil); got != http.StatusForbidden {
+		t.Fatalf("PAT without docs:write = %d, want 403", got)
+	}
+	if got := docsPathRequest(t, handler, http.MethodPost, "/docs/push", projectID, pushBody, true, []string{"skills:read"}); got != http.StatusForbidden {
+		t.Fatalf("PAT wrong scope = %d, want 403", got)
+	}
+	if got := docsPathRequest(t, handler, http.MethodPost, "/docs/push", projectID, pushBody, true, []string{"docs:write"}); got != http.StatusCreated {
+		t.Fatalf("PAT docs:write push = %d, want 201", got)
+	}
+	if got := docsPathRequest(t, handler, http.MethodPost, "/docs/push", projectID, pushBody, true, []string{"docs:write"}); got != http.StatusOK {
+		t.Fatalf("PAT docs:write upsert = %d, want 200", got)
+	}
+
+	pubBody := `{"api_dir":"a/b","api_doc_name":"Doc"}`
+	if got := docsPathRequest(t, handler, http.MethodPost, "/docs/publish-path", projectID, pubBody, true, []string{"docs:write"}); got != http.StatusForbidden {
+		t.Fatalf("PAT without docs:publish = %d, want 403", got)
+	}
+	if got := docsPathRequest(t, handler, http.MethodPost, "/docs/publish-path", projectID, pubBody, true, []string{"docs:publish"}); got != http.StatusOK {
+		t.Fatalf("PAT docs:publish = %d, want 200", got)
+	}
+}
+
+func docsPathRequest(t *testing.T, handler *ProjectHandler, method, suffix, projectID, body string, isPAT bool, scopes []string) int {
+	t.Helper()
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(method, "/api/v1/projects/"+projectID+suffix, bytes.NewBufferString(body))
+	c.Request.Header.Set("Content-Type", "application/json")
+	c.Params = gin.Params{{Key: "id", Value: projectID}}
+	c.Set("user_id", uint(1))
+	c.Set("is_super_admin", !isPAT)
+	c.Set("is_pat", isPAT)
+	if scopes != nil {
+		c.Set("pat_scopes", scopes)
+	}
+	switch suffix {
+	case "/docs/push":
+		handler.PushDocByPath(c)
+	case "/docs/publish-path":
+		handler.PublishDocByPath(c)
+	default:
+		t.Fatalf("unknown suffix %s", suffix)
+	}
+	return recorder.Code
 }
 
 func TestListRequirementStatusesAllowsLeastPrivilegeMember(t *testing.T) {
@@ -152,6 +211,17 @@ func TestGenerateDocsWiredReturnsAccepted(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatal(err)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		got, err := agents.GetAgent(agent.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.WorkspaceStatus == aimodel.WorkspaceReady {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
 	}
 
 	body := fmt.Sprintf(`{"agent_id":%d}`, agent.ID)

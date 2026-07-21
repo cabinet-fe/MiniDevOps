@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from "vue";
 import { message } from "@veltra/desktop";
+import MarkdownRender from "markstream-vue";
+import "markstream-vue/index.css";
 
 import { listAgents } from "@/api/ai";
 import {
@@ -64,8 +66,6 @@ const canDelete = computed(
 const canGenerate = computed(
   () => hasPermission("project_docs:execute") && canEditProjectContent.value,
 );
-// Markdown is intentionally rendered as interpolated text below, never v-html.
-// This keeps raw HTML and javascript: links inert until a vetted renderer exists.
 const renderedContent = computed(() =>
   previewMode.value === "published"
     ? (selected.value?.published_content ?? "")
@@ -334,7 +334,9 @@ onMounted(() => {
             :rows="16"
             placeholder="Markdown 草稿"
           />
-          <pre class="markdown-preview">{{ renderedContent }}</pre>
+          <div class="markdown-preview">
+            <MarkdownRender :content="renderedContent" />
+          </div>
           <div v-if="diff" class="diff-summary">
             草稿 {{ diff.draft_lines }} 行，已发布 {{ diff.published_lines }} 行，新增
             {{ diff.added_lines }} 行，移除 {{ diff.removed_lines }} 行。
@@ -430,13 +432,10 @@ onMounted(() => {
 }
 .markdown-preview {
   max-height: 260px;
-  margin: 0;
   overflow: auto;
   padding: 12px;
   border-radius: 6px;
   background: var(--u-bg-color-middle, #f6f7f9);
-  white-space: pre-wrap;
-  word-break: break-word;
 }
 .diff-summary {
   color: var(--u-text-color-second, #626b7d);
