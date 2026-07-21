@@ -1,31 +1,27 @@
 <script setup lang="ts">
 defineOptions({ name: "DashboardGrid" });
 
-import {
-  h,
-  nextTick,
-  onBeforeUnmount,
-  onMounted,
-  reactive,
-  render,
-  useTemplateRef,
-  watch,
-} from "vue";
-import { GridStack, type GridStackWidget } from "gridstack";
+import { nextTick, provide, reactive, useTemplateRef, watch } from "vue";
 import "gridstack/dist/gridstack.min.css";
 
 import type {
   AgentRunSummary,
   BuildSummary,
-  DashboardCardID,
   DashboardCardLayout,
   SystemInfo,
   SystemStatus,
 } from "@/api/types";
+import {
+  GridStackComponent,
+  type ComponentMap,
+  type GridStackNode,
+  type GridStackOptions,
+} from "@/lib/gridstack-vue";
 
 import DashboardWidgetHost from "./dashboard-widget-host.vue";
 import {
   DASHBOARD_GRID_COLUMNS,
+  DASHBOARD_WIDGET_CTX,
   geometryFromWidgets,
   toGridWidgets,
   visibleCardsSignature,
@@ -47,14 +43,48 @@ const emit = defineEmits<{
   openAgentRun: [id: number];
 }>();
 
-const gridEl = useTemplateRef<HTMLElement>("gridEl");
-
-/** Plain instance — never put GridStack into ref/reactive (Proxy breaks internals). */
-let grid: GridStack | null = null;
-const mountHosts = new Map<string, HTMLElement>();
+const gridRef = useTemplateRef("gridRef");
 let syncingFromGrid = false;
 
-/** Shared reactive context for renderCB-mounted hosts (stays live without remount). */
+/** 12 列桌面布局；按网格容器宽度降列：>1450 用 12 列，≤1450 用 8 列，≤1100 用 6 列，
+ *  ≤720 用 2 列（断点需降序排列；gridstack 构造时会再排一次，乱序也安全）。
+ *  降列重排用 list：丢弃列坐标、按从左到右顺序重新装箱（保持卡片宽度，放不下的换行）。
+ *  不要用 moveScale —— 它等比压缩卡片宽高，卡片再窄也挤在同一行，内容被挤烂；
+ *  也不要用 move —— 它按列比缩放 x 坐标，相邻卡片 x 重叠后只会互相往下推，排成楼梯状。
+ *  注意：options 必须保持静态引用 —— wrapper 会 watch options 并调用 updateOptions，
+ *  而 updateOptions 会把 children 当作全量布局重新 load。若 options 随 editing 重建，
+ *  每次进出编辑模式都会用过期的 children 覆盖当前布局。editing 改走 setStatic。 */
+const gridOptions: GridStackOptions = {
+  column: DASHBOARD_GRID_COLUMNS,
+  columnOpts: {
+    breakpoints: [
+      { w: 1450, c: 8 },
+      { w: 1100, c: 6 },
+      { w: 720, c: 2 },
+    ],
+    layout: "list",
+  },
+  cellHeight: 80,
+  margin: 10,
+  animate: true,
+  float: false,
+  handle: ".dashboard-widget__drag",
+  alwaysShowResizeHandle: true,
+  minRow: 1,
+  staticGrid: !props.editing,
+  // children 仅在初始化时生效；后续可见性/布局变更走 watch → load()
+  children: toGridWidgets(props.items.filter((card) => card.visible)),
+};
+
+/** 每个卡片 id 映射到同一个宿主组件，宿主内部按 id 分发具体卡片。 */
+const components: ComponentMap = {
+  build_summary: DashboardWidgetHost,
+  agent_run_summary: DashboardWidgetHost,
+  system_info: DashboardWidgetHost,
+  system_status: DashboardWidgetHost,
+};
+
+/** 经 provide 共享给 Teleport 挂载的卡片宿主（Teleport 下注入链保持不变）。 */
 const hostCtx = reactive<DashboardWidgetHostContext>({
   editing: false,
   buildSummary: null,
@@ -64,6 +94,7 @@ const hostCtx = reactive<DashboardWidgetHostContext>({
   openBuildRun: (id: number) => emit("openBuildRun", id),
   openAgentRun: (id: number) => emit("openAgentRun", id),
 });
+provide(DASHBOARD_WIDGET_CTX, hostCtx);
 
 function syncHostCtx() {
   hostCtx.editing = props.editing;
@@ -73,91 +104,14 @@ function syncHostCtx() {
   hostCtx.systemStatus = props.systemStatus;
 }
 
-function renderWidget(el: HTMLElement, widget: GridStackWidget) {
-  const id = String(widget.id ?? "") as DashboardCardID;
-  if (!id) return;
-
-  mountHosts.set(id, el);
-  render(
-    h(DashboardWidgetHost, {
-      id,
-      ctx: hostCtx,
-    }),
-    el,
-  );
-}
-
-function unmountWidget(id: string) {
-  const el = mountHosts.get(id);
-  if (!el) return;
-  render(null, el);
-  mountHosts.delete(id);
-}
-
-function unmountAll() {
-  for (const el of mountHosts.values()) {
-    render(null, el);
-  }
-  mountHosts.clear();
-}
-
-function emitLayoutChange() {
-  if (!grid) return;
-  const saved = (grid.save(false) as GridStackWidget[]) ?? [];
+function onGridChange(_event: Event, nodes: GridStackNode[]) {
+  if (!props.editing) return;
   syncingFromGrid = true;
-  emit("change", geometryFromWidgets(saved, props.items));
+  emit("change", geometryFromWidgets(nodes, props.items));
   void nextTick(() => {
     syncingFromGrid = false;
   });
 }
-
-function loadItems(items: DashboardCardLayout[]) {
-  if (!grid) return;
-  grid.load(toGridWidgets(items.filter((card) => card.visible)));
-}
-
-onMounted(() => {
-  if (!gridEl.value) return;
-
-  syncHostCtx();
-  GridStack.renderCB = renderWidget;
-
-  grid = GridStack.init(
-    {
-      column: DASHBOARD_GRID_COLUMNS,
-      cellHeight: 80,
-      margin: 12,
-      animate: true,
-      float: false,
-      handle: ".dashboard-widget__drag",
-      staticGrid: !props.editing,
-      alwaysShowResizeHandle: true,
-      minRow: 1,
-      children: toGridWidgets(props.items.filter((card) => card.visible)),
-    },
-    gridEl.value,
-  );
-
-  grid.on("change", () => {
-    if (!props.editing) return;
-    emitLayoutChange();
-  });
-
-  grid.on("removed", (_event, items) => {
-    for (const item of items) {
-      if (item.id != null) unmountWidget(String(item.id));
-    }
-  });
-});
-
-onBeforeUnmount(() => {
-  unmountAll();
-  grid?.destroy(false);
-  grid = null;
-  if (GridStack.renderCB === renderWidget) {
-    GridStack.renderCB = undefined;
-  }
-});
 
 watch(
   () =>
@@ -171,29 +125,33 @@ watch(
   () => {
     syncHostCtx();
   },
+  { immediate: true },
 );
 
 watch(
   () => props.editing,
   (editing) => {
-    grid?.setStatic(!editing);
+    gridRef.value?.getGrid()?.setStatic(!editing);
   },
 );
 
 watch(
   () => visibleCardsSignature(props.items),
   () => {
-    if (syncingFromGrid || !grid) return;
-    loadItems(props.items);
+    if (syncingFromGrid) return;
+    gridRef.value?.getGrid()?.load(toGridWidgets(props.items.filter((card) => card.visible)));
   },
 );
 </script>
 
 <template>
-  <div
-    ref="gridEl"
-    class="dashboard-grid grid-stack"
+  <GridStackComponent
+    ref="gridRef"
+    class="dashboard-grid"
     :class="{ 'dashboard-grid--editing': editing }"
+    :options="gridOptions"
+    :components="components"
+    @change="onGridChange"
   />
 </template>
 
@@ -201,13 +159,11 @@ watch(
 @use "pkg:@veltra/styles/functions" as fn;
 
 .dashboard-grid {
-  flex: 1;
   width: 100%;
   min-height: 160px;
 
-  :deep(.grid-stack-item-content) {
-    inset: 0;
-    overflow: visible;
+  :deep(.grid-stack) {
+    min-height: 160px;
   }
 
   :deep(.grid-stack-item) {

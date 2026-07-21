@@ -1,6 +1,7 @@
 <script setup lang="ts">
 defineOptions({ name: "DashboardWidgetHost" });
 
+import { inject } from "vue";
 import { Move } from "@veltra/icons/normal";
 
 import type { DashboardCardID } from "@/api/types";
@@ -8,13 +9,15 @@ import DashboardAgentRunCard from "@/components/dashboard-agent-run-card";
 import DashboardBuildCard from "@/components/dashboard-build-card";
 import DashboardSystemInfoCard from "@/components/dashboard-system-info-card";
 import DashboardSystemStatusCard from "@/components/dashboard-system-status-card";
+import { useGridStackItem } from "@/lib/gridstack-vue";
 
-import type { DashboardWidgetHostContext } from "./helper";
+import { DASHBOARD_WIDGET_CTX } from "./helper";
 
-defineProps<{
-  id: DashboardCardID;
-  ctx: DashboardWidgetHostContext;
-}>();
+const { id } = useGridStackItem();
+const ctx = inject(DASHBOARD_WIDGET_CTX);
+if (!ctx) throw new Error("DashboardWidgetHost must be used inside DashboardGrid");
+
+const cardId = id as DashboardCardID;
 </script>
 
 <template>
@@ -25,17 +28,17 @@ defineProps<{
     </div>
     <div class="dashboard-widget__body">
       <DashboardBuildCard
-        v-if="id === 'build_summary'"
+        v-if="cardId === 'build_summary'"
         :data="ctx.buildSummary"
         @open-run="ctx.openBuildRun"
       />
       <DashboardAgentRunCard
-        v-else-if="id === 'agent_run_summary'"
+        v-else-if="cardId === 'agent_run_summary'"
         :data="ctx.agentRunSummary"
         @open-run="ctx.openAgentRun"
       />
-      <DashboardSystemInfoCard v-else-if="id === 'system_info'" :data="ctx.systemInfo" />
-      <DashboardSystemStatusCard v-else-if="id === 'system_status'" :data="ctx.systemStatus" />
+      <DashboardSystemInfoCard v-else-if="cardId === 'system_info'" :data="ctx.systemInfo" />
+      <DashboardSystemStatusCard v-else-if="cardId === 'system_status'" :data="ctx.systemStatus" />
     </div>
   </div>
 </template>

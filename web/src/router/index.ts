@@ -23,6 +23,16 @@ const router = createRouter({
           meta: { title: "首页", keepAliveName: "HomePage" },
         },
         {
+          path: "handbook",
+          name: "handbook",
+          component: () => import("@/views/help/handbook/pages/main.vue"),
+          meta: {
+            permission: "handbook:view",
+            title: "操作手册",
+            keepAliveName: "HelpHandbook",
+          },
+        },
+        {
           path: "system/users",
           name: "system-users",
           component: () => import("@/views/system/users/pages/main.vue"),

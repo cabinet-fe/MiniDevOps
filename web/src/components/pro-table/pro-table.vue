@@ -50,6 +50,8 @@ const props = withDefaults(
     immediate?: boolean;
     /** Expand all tree nodes by default */
     defaultExpandAll?: boolean;
+    /** Enable row checkboxes (UTable checkable) */
+    checkable?: boolean;
   }>(),
   {
     query: () => ({}),
@@ -62,8 +64,11 @@ const props = withDefaults(
     height: "100%",
     immediate: true,
     defaultExpandAll: false,
+    checkable: false,
   },
 );
+
+const checked = defineModel<T[]>("checked", { default: () => [] });
 
 const emit = defineEmits<{
   loaded: [items: T[]];
@@ -292,12 +297,13 @@ defineExpose({ search, reload, load });
       <div class="pro-table__filters">
         <slot name="filters" :search="search" :reload="reload" :query="query" />
       </div>
-      <u-button type="primary" native-type="submit" class="pro-table__search">查询</u-button>
+      <u-button type="primary" class="pro-table__search" @click="search">查询</u-button>
     </form>
 
     <div class="pro-table__panel" :style="height !== '100%' ? { height, flex: 'none' } : undefined">
       <div v-loading="loading" class="pro-table__body">
         <u-table
+          v-model:checked="checked"
           :columns="resolvedColumns"
           :data="items"
           :border="false"
@@ -305,6 +311,7 @@ defineExpose({ search, reload, load });
           :tree="tableTree"
           :default-expand-all="defaultExpandAll"
           :stripe="mode !== 'tree'"
+          :checkable="checkable"
         >
           <template v-for="(_, name) in slots" :key="name" #[name]="slotData">
             <slot

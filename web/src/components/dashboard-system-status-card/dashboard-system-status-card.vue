@@ -188,6 +188,7 @@ function shortPath(path: string): string {
 
 .gauges {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-around;
   gap: 12px;
   padding: 8px 0 4px;

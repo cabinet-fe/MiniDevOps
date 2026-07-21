@@ -9,16 +9,17 @@ const router = useRouter();
 
 function activate(key: string) {
   if (key === tabsStore.activeKey) return;
-  const tab = tabsStore.tabs.find((t) => t.key === key);
+  const tab = tabsStore.findByKey(key);
   if (!tab) return;
-  void router.push(tab.path);
+  void router.push(tab.fullPath);
 }
 
 function handleClose(item: TabItem) {
   const closingActive = tabsStore.activeKey === item.key;
   tabsStore.close(item.key);
   if (closingActive) {
-    void router.push(tabsStore.activeKey);
+    const next = tabsStore.findByKey(tabsStore.activeKey);
+    if (next) void router.push(next.fullPath);
   }
 }
 </script>

@@ -133,8 +133,8 @@ async function loadBranches(repositoryId?: number) {
   }
   branchesLoading.value = true;
   try {
-    const branches = await listRepositoryBranches(repositoryId);
-    branchOptions.value = branches.map((b) => ({ label: b, value: b }));
+    const { items } = await listRepositoryBranches(repositoryId);
+    branchOptions.value = items.map((b) => ({ label: b, value: b }));
   } catch {
     branchOptions.value = [];
   } finally {

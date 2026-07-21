@@ -18,3 +18,8 @@ declare module "*.vue" {
   const component: DefineComponent<{}, {}, unknown>;
   export default component;
 }
+
+declare module "*.md?raw" {
+  const content: string;
+  export default content;
+}

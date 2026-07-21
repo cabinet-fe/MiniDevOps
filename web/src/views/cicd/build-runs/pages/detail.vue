@@ -42,7 +42,7 @@ function parseRouteId(raw: unknown): number | null {
 }
 
 const canExecute = computed(() => hasPermission("cicd_build_jobs:execute"));
-// Layout keys detail by fullPath and keep-alive caches the instance. Freeze the id at
+// Layout keys detail by path and keep-alive caches the instance. Freeze the id at
 // setup so deactivated instances do not re-read the global route (which loses :id).
 const runId = parseRouteId(route.params.id);
 

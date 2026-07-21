@@ -201,7 +201,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <u-scroll class="dashboard">
+  <div class="dashboard">
     <div class="dashboard__toolbar">
       <template v-if="editing">
         <u-button text @click="cancelEdit">取消</u-button>
@@ -234,7 +234,7 @@ onUnmounted(() => {
     </u-dialog>
 
     <div v-if="loading" v-loading="true" class="dashboard__loading" />
-    <template v-else>
+    <u-scroll v-else class="dashboard__content">
       <DashboardGrid
         v-if="visibleCards.length"
         :items="layout"
@@ -248,8 +248,8 @@ onUnmounted(() => {
         @open-agent-run="openAgentRun"
       />
       <u-empty v-else class="dashboard__empty" text="当前没有可见卡片。请打开「管理卡片」启用。" />
-    </template>
-  </u-scroll>
+    </u-scroll>
+  </div>
 </template>
 
 <style scoped lang="scss">
@@ -259,17 +259,24 @@ onUnmounted(() => {
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  min-height: 100%;
-  padding: fn.use-var(gap, large);
+  gap: 12px;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .dashboard__toolbar {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: flex-end;
   gap: 8px;
   min-height: 32px;
+}
+
+.dashboard__content {
+  flex: 1;
+  min-height: 0;
 }
 
 .dashboard__editor-hint {
@@ -304,7 +311,6 @@ onUnmounted(() => {
 }
 
 .dashboard__empty {
-  flex: 1;
   padding: 48px 0;
 }
 </style>

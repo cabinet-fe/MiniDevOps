@@ -55,6 +55,7 @@ func EnsureRBACResources(db *gorm.DB) error {
 						{Code: "system_status", Title: "系统状态", SortKey: 40},
 					},
 				},
+				{Code: "handbook", Title: "操作手册", Route: "/handbook", SortKey: 20, Actions: []string{"view"}},
 			},
 		},
 		{
@@ -95,8 +96,9 @@ func EnsureRBACResources(db *gorm.DB) error {
 					Code: "project_projects", Title: "产品项目", Route: "/project/projects", SortKey: 10,
 					Actions: append(append([]string{}, standardCRUD...), "view_all", "manage_all"),
 				},
-				{Code: "project_requirements", Title: "需求管理", Route: "/project/requirements", SortKey: 20, Actions: standardCRUD},
-				{Code: "project_docs", Title: "接口文档", Route: "/project/docs", SortKey: 30, Actions: append(append([]string{}, standardCRUD...), "execute")},
+				// Hidden from nav: still seeded so project-detail tabs / API permissions keep working.
+				{Code: "project_requirements", Title: "需求管理", Route: "/project/requirements", SortKey: 20, Hidden: true, Actions: standardCRUD},
+				{Code: "project_docs", Title: "接口文档", Route: "/project/docs", SortKey: 30, Hidden: true, Actions: append(append([]string{}, standardCRUD...), "execute")},
 			},
 		},
 		{
@@ -126,8 +128,24 @@ func EnsureRBACResources(db *gorm.DB) error {
 				return err
 			}
 		}
+		if err := hideMenus(tx, "project_requirements", "project_docs"); err != nil {
+			return err
+		}
 		return removeRetiredMenus(tx, "dashboard_system_info", "dashboard_system_status", "resource_clis")
 	})
+}
+
+// hideMenus marks existing menus as hidden (seed ensure leaves existing rows untouched).
+func hideMenus(tx *gorm.DB, fullCodes ...string) error {
+	for _, code := range fullCodes {
+		res := tx.Model(&model.RbacResource{}).
+			Where("full_code = ? AND type = ? AND hidden = ?", code, model.ResourceTypeMenu, false).
+			Updates(map[string]any{"hidden": true, "updated_at": time.Now().UTC()})
+		if res.Error != nil {
+			return fmt.Errorf("hide menu %s: %w", code, res.Error)
+		}
+	}
+	return nil
 }
 
 // removeRetiredMenus deletes obsolete menu resources and their feature children.

@@ -1,5 +1,6 @@
-import type { GridStackWidget } from "gridstack";
+import type { InjectionKey } from "vue";
 
+import type { GridStackWidget } from "@/lib/gridstack-vue";
 import type {
   AgentRunSummary,
   BuildSummary,
@@ -18,6 +19,9 @@ export interface DashboardWidgetHostContext {
   openBuildRun: (id: number) => void;
   openAgentRun: (id: number) => void;
 }
+
+export const DASHBOARD_WIDGET_CTX: InjectionKey<DashboardWidgetHostContext> =
+  Symbol("dashboard-widget-ctx");
 
 export const DASHBOARD_GRID_COLUMNS = 12;
 export const DASHBOARD_MIN_W = 2;
@@ -66,6 +70,7 @@ export function toGridWidgets(cards: DashboardCardLayout[]): GridStackWidget[] {
     h: card.h,
     minW: DASHBOARD_MIN_W,
     minH: DASHBOARD_MIN_H,
+    component: card.id,
   }));
 }
 

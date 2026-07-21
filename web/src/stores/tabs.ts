@@ -2,9 +2,10 @@ import { computed, ref } from "vue";
 import { defineStore } from "pinia";
 
 export type WorkspaceTab = {
-  /** Stable tab id — usually fullPath */
+  /** Stable identity = route.path. Sub-tab query changes update this tab. */
   key: string;
-  path: string;
+  /** Latest fullPath; layout tab navigation always uses this. */
+  fullPath: string;
   title: string;
   /** Vue component name for keep-alive include */
   name: string;
@@ -13,7 +14,7 @@ export type WorkspaceTab = {
 
 const HOME_TAB: WorkspaceTab = {
   key: "/",
-  path: "/",
+  fullPath: "/",
   title: "首页",
   name: "HomePage",
   closable: false,
@@ -49,18 +50,22 @@ export const useTabsStore = defineStore("tabs", () => {
     })),
   );
 
+  function findByKey(key: string) {
+    return tabs.value.find((t) => t.key === key);
+  }
+
   function open(tab: Omit<WorkspaceTab, "closable"> & { closable?: boolean }) {
-    const existing = tabs.value.find((t) => t.key === tab.key);
+    const existing = findByKey(tab.key);
     if (existing) {
       existing.title = tab.title;
-      existing.path = tab.path;
+      existing.fullPath = tab.fullPath;
       existing.name = tab.name;
       activeKey.value = existing.key;
       return;
     }
     tabs.value.push({
       key: tab.key,
-      path: tab.path,
+      fullPath: tab.fullPath,
       title: tab.title,
       name: tab.name,
       closable: tab.closable ?? tab.key !== "/",
@@ -99,13 +104,12 @@ export const useTabsStore = defineStore("tabs", () => {
     title: string,
   ) {
     if (route.path === "/login") return;
-    const key = route.path === "/" ? "/" : route.fullPath;
     open({
-      key,
-      path: key,
+      key: route.path,
+      fullPath: route.fullPath,
       title,
       name: keepAliveNameFromRoute(route),
-      closable: key !== "/",
+      closable: route.path !== "/",
     });
   }
 
@@ -119,6 +123,7 @@ export const useTabsStore = defineStore("tabs", () => {
     activeKey,
     cachedNames,
     tabItems,
+    findByKey,
     open,
     close,
     syncFromRoute,

@@ -126,6 +126,7 @@ function openRun(run: DashboardRecentAgentRun) {
   min-height: 0;
   display: flex;
   flex-direction: column;
+  container-type: inline-size;
   background: color-mix(in srgb, fn.use-var(bg-color, top) 88%, fn.use-var(color, primary) 4%);
 }
 
@@ -178,7 +179,7 @@ function openRun(run: DashboardRecentAgentRun) {
 
 .metrics {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
   gap: 10px;
 }
 
@@ -208,7 +209,10 @@ function openRun(run: DashboardRecentAgentRun) {
 
 .metric__value {
   color: fn.use-var(text-color, title);
-  font-size: clamp(28px, 3.2vw, 36px);
+  font-size: clamp(24px, 6cqw, 34px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-weight: 650;
   font-variant-numeric: tabular-nums;
   line-height: 1.1;
