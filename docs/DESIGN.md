@@ -38,7 +38,7 @@
 | D14 | 凭证授权时点 | **绑定/修改**时校验 `resource_credentials:use`；之后执行仅需任务 `execute` |
 | D15 | Webhook | 优先平台签名头 + delivery ID 去重；保留 URL secret 兼容；日志脱敏 |
 | D16 | Cron | 每任务 IANA 时区；禁止同任务重叠；停机错过的触发**跳过** |
-| D17 | PAT scope | 固定白名单：`skills:read`、`agents:run`；哈希存储、一次性回显、可过期/吊销；**不替代 HTTPS/TLS**；供 Skill 安装器与 `agents:run` API 对接 |
+| D17 | PAT scope | 固定白名单：`skills:read`、`agents:run`、`docs:write`、`docs:publish`；前缀 `br_`+hex（不兼容旧 `br_pat_`）；哈希存储、一次性回显、可过期/吊销；**不替代 HTTPS/TLS**；供 Skill 安装器、`agents:run` 与文档推送/发布 API 对接 |
 | D18 | 重启恢复 | `queued` 恢复调度；`running` → `interrupted`（可人工重试）；不做断点续跑 |
 | D19 | 平台支持 | 生产：Linux amd64/arm64；macOS 仅开发；部署目标继续支持 Linux/Windows |
 | D20 | 非功能验收 | **仅功能 Gate**；不设容量/延迟 SLO |
@@ -57,7 +57,7 @@
 | D28 | 前端迁移 | 原 React `web/` 已移除；Vue 3 `web/` 为唯一 embed 源 |
 | D29 | Run 快照 | 创建运行时强制写入最小配置快照（只读复现） |
 | D30 | 状态字段 | `status`（结果）与 `stage`（活动阶段）分离；流水线**无**内嵌 agent 阶段 |
-| D31 | Agent 工作区与制品 | 每个 Agent 有一个持久根工作区与一个固定 `output_dir` 产出目录，跨 Run 复用且不清空根目录；AgentRun 不绑定、归档或下载文件制品，BuildRun 制品能力不变 |
+| D31 | Agent 工作区与制品 | 每个 Agent 有一个持久根工作区与一个固定 `output_dir` 产出目录，跨 Run 复用且不清空根目录与产出目录；AgentRun 不绑定、归档或下载文件制品，BuildRun 制品能力不变 |
 
 ### 1.4 已接受风险（必须对外声明）
 
@@ -151,7 +151,7 @@ docs/
 - **User**：可禁用；绑定 **多个 Role**；权限 = 各角色权限码并集。
 - **Super Admin**：`users.is_super_admin` 为鉴权真源；内置角色 `code=super_admin`（`type=builtin`）与唯一超管用户 1:1 同步；不可删、不可改权限、不可通过用户角色绑定 API 赋给他人。
 - **自定义 Role**：`type=custom`；绑定功能 `full_code` 集合。
-- **PAT**：属于 User；scope ⊆ {`skills:read`,`agents:run`}；存储哈希；创建时明文回显一次。
+- **PAT**：属于 User；scope ⊆ {`skills:read`,`agents:run`,`docs:write`,`docs:publish`}；明文前缀 `br_`+hex；存储哈希；创建时明文回显一次。
 
 ### 4.2 权限码
 
@@ -280,9 +280,11 @@ flowchart TB
 Agent 工作区与记录规则：
 
 1. 每个 Agent 的唯一执行目录为 `{workspace}/agents/agent-{id}/`。同一 Agent 的所有 Run 直接复用该持久根工作区，开始新 Run 时不清空根目录已有文件；不同 Agent 以各自根目录为边界。
-2. 每个 Agent 另有一个固定产出目录 `{agentRoot}/{output_dir}`（配置字段 `output_dir`，默认相对名 `output`）。CLI 注入 `BEDROCK_AGENT_WORKDIR`（根）与 `BEDROCK_AGENT_OUTPUT`（固定产出目录）。不创建 `runs/run-{id}/output` 或任何 per-run 输出子目录；后续 Run 可覆盖同一产出目录（运行前可清空该产出子目录内容，但不删除 Agent 根下其他文件）。
-3. AgentRun 保留状态、日志、文本输出、`work_dir` 与关联上下文，不含 `artifact_path`，不创建归档，也没有文件制品下载 API。
-4. AgentRun 的无制品语义不影响 CI/CD：BuildRun 仍按 §5.2 完成输出归档、保留、下载与重新分发。
+2. 工作区代码绑定为多组 `{repository_id, branch}`（同 Agent 内 `repository_id` 唯一）。创建/更新 Agent 后将 `workspace_status` 置为 `pending` 并**异步**初始化工作区（技能注入 + `GitCloneOrPull` checkout）；成功 → `ready`，失败 → `failed`（写入 `workspace_error`，不回滚删除配置）。仅 `workspace_status=ready` 时可创建 Run（手动 / API / cron / 构建事件）。每次 Run 执行前仍增量同步绑定分支。不再软链构建任务 `job-*` 工作区。分支存在性保存时不校验。
+3. 每个 Agent 另有一个固定产出目录 `{agentRoot}/{output_dir}`（配置字段 `output_dir`，默认相对名 `output`）。CLI 注入 `BEDROCK_AGENT_WORKDIR`（根）与 `BEDROCK_AGENT_OUTPUT`（固定产出目录）。不创建 `runs/run-{id}/output` 或任何 per-run 输出子目录；后续 Run 复用同一产出目录且不清空既有内容（便于缓存与增量写入），由 Agent/CLI 自行覆盖需要更新的文件。
+4. AgentRun 保留状态、日志、文本输出、`work_dir` 与关联上下文，不含 `artifact_path`，不创建归档，也没有文件制品下载 API。
+5. AgentRun 的无制品语义不影响 CI/CD：BuildRun 仍按 §5.2 完成输出归档、保留、下载与重新分发。
+6. 构建事件触发（`AgentTrigger.build_event` / `BuildJob.agent_id`）与上述仓库绑定解耦，语义不变。
 
 ### 5.4 文档节点双态
 
