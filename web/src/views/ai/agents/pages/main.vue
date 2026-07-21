@@ -17,17 +17,31 @@ import {
   updateAgent,
 } from "@/api/ai";
 import { listBuildJobs } from "@/api/cicd";
-import type { AiAgent, BuildJob, SkillPackage } from "@/api/types";
+import { listRepositories, listRepositoryBranches, syncRepositoryBranches } from "@/api/resource";
+import type { AiAgent, AiAgentRepoBinding, BuildJob, SkillPackage } from "@/api/types";
 import FormDialog from "@/components/form-dialog";
 import ProTable, { defineProTableColumns } from "@/components/pro-table";
 import { usePermission } from "@/composables/use-permission";
 import { tagType, type TagType } from "@/lib/tag";
+import RunHistoryDialog from "../components/run-history-dialog.vue";
 
 const CLI_KEY_TAG: Record<string, TagType> = {
   claude_code: "primary",
   opencode: "info",
   reasonix: "success",
   codex: "warning",
+};
+
+const WORKSPACE_STATUS_TAG: Record<string, TagType> = {
+  ready: "success",
+  pending: "warning",
+  failed: "danger",
+};
+
+const WORKSPACE_STATUS_LABEL: Record<string, string> = {
+  ready: "就绪",
+  pending: "初始化中",
+  failed: "失败",
 };
 
 const TRIGGER_TYPE_LABEL: Record<string, string> = {
@@ -47,13 +61,24 @@ type TriggerDraft = {
   build_event: string;
 };
 
+type RepoBindingDraft = {
+  repository_id?: number;
+  branch: string;
+};
+
 const { hasPermission } = usePermission();
 const router = useRouter();
 const table = useTemplateRef("table");
 const dialogOpen = ref(false);
+const historyOpen = ref(false);
+const historyAgent = ref<AiAgent | null>(null);
 const editing = ref<AiAgent | null>(null);
 const skills = ref<SkillPackage[]>([]);
 const buildJobs = ref<BuildJob[]>([]);
+const repoOptions = ref<{ label: string; value: number }[]>([]);
+const branchOptionsByRepo = ref<Record<number, { label: string; value: string }[]>>({});
+const branchesLoadingByRepo = ref<Record<number, boolean>>({});
+const branchesSyncingByRepo = ref<Record<number, boolean>>({});
 /** Triggers shown in the agent form (existing + newly added drafts). */
 const formTriggers = ref<TriggerDraft[]>([]);
 /** Snapshot of server trigger ids when the edit dialog opened. */
@@ -66,7 +91,7 @@ const form = reactive({
   cli_key: "claude_code",
   system_prompt: "",
   skill_ids: [] as number[],
-  build_job_ids: [] as number[],
+  repo_bindings: [] as RepoBindingDraft[],
   output_dir: "output",
   stream_output: false,
   timeout_sec: 600,
@@ -99,12 +124,14 @@ const columns = defineProTableColumns([
   { key: "id", name: "ID", width: 70 },
   { key: "name", name: "名称" },
   { key: "cli_key", name: "CLI", width: 120 },
+  { key: "workspace_status", name: "工作区", width: 110 },
   { key: "enabled", name: "启用", width: 80 },
   { key: "action", name: "操作", width: 260, align: "center", fixed: "right" },
 ]);
 
 function openRunHistory(row: AiAgent) {
-  void router.push({ path: "/ai/runs", query: { agent_id: String(row.id) } });
+  historyAgent.value = row;
+  historyOpen.value = true;
 }
 
 onMounted(async () => {
@@ -131,6 +158,17 @@ onMounted(async () => {
         }),
     );
   }
+  if (hasPermission("resource_repositories:view")) {
+    tasks.push(
+      listRepositories({ page: 1, page_size: 200 })
+        .then((res) => {
+          repoOptions.value = (res.items ?? []).map((r) => ({ label: r.name, value: r.id }));
+        })
+        .catch(() => {
+          repoOptions.value = [];
+        }),
+    );
+  }
   await Promise.all(tasks);
 });
 
@@ -138,8 +176,83 @@ function resetTriggerDraft() {
   Object.assign(triggerDraft, TRIGGER_DRAFT_DEFAULTS);
 }
 
+async function loadBranches(repositoryId?: number, force = false) {
+  if (!repositoryId) return;
+  if (!force && branchOptionsByRepo.value[repositoryId]) return;
+  branchesLoadingByRepo.value = { ...branchesLoadingByRepo.value, [repositoryId]: true };
+  try {
+    const { items } = await listRepositoryBranches(repositoryId);
+    branchOptionsByRepo.value = {
+      ...branchOptionsByRepo.value,
+      [repositoryId]: items.map((b) => ({ label: b, value: b })),
+    };
+  } catch {
+    branchOptionsByRepo.value = { ...branchOptionsByRepo.value, [repositoryId]: [] };
+  } finally {
+    branchesLoadingByRepo.value = { ...branchesLoadingByRepo.value, [repositoryId]: false };
+  }
+}
+
+async function refreshBranches(repositoryId?: number) {
+  if (!repositoryId) return;
+  if (!hasPermission("resource_repositories:update")) {
+    message.error("需要仓库更新权限才能同步分支");
+    return;
+  }
+  branchesSyncingByRepo.value = { ...branchesSyncingByRepo.value, [repositoryId]: true };
+  try {
+    const { items } = await syncRepositoryBranches(repositoryId);
+    branchOptionsByRepo.value = {
+      ...branchOptionsByRepo.value,
+      [repositoryId]: items.map((b) => ({ label: b, value: b })),
+    };
+    if (!items.length) {
+      message.warning("未获取到分支，请检查仓库 URL / 凭证");
+    }
+  } catch (error) {
+    message.error(error instanceof Error ? error.message : "同步分支失败");
+  } finally {
+    branchesSyncingByRepo.value = { ...branchesSyncingByRepo.value, [repositoryId]: false };
+  }
+}
+
+function branchOptionsFor(repositoryId?: number) {
+  if (!repositoryId) return [];
+  return branchOptionsByRepo.value[repositoryId] ?? [];
+}
+
+function branchPlaceholder(repositoryId?: number) {
+  if (!repositoryId) return "先选择仓库";
+  if (branchesLoadingByRepo.value[repositoryId] || branchesSyncingByRepo.value[repositoryId]) {
+    return "加载分支…";
+  }
+  const opts = branchOptionsByRepo.value[repositoryId];
+  if (opts && opts.length === 0) return "无缓存，可点同步";
+  return "选择或输入分支";
+}
+
+function onRepoChange(item: RepoBindingDraft) {
+  item.branch = "main";
+  void loadBranches(item.repository_id, true);
+}
+
+function canRun(row: AiAgent) {
+  return row.enabled && row.workspace_status === "ready";
+}
+
+function runDisabledTip(row: AiAgent) {
+  if (!row.enabled) return "智能体未启用";
+  if (row.workspace_status === "pending") return "工作区初始化中";
+  if (row.workspace_status === "failed") {
+    return row.workspace_error || "工作区初始化失败";
+  }
+  return "";
+}
+
 function openCreate() {
   editing.value = null;
+  form.skill_ids = [];
+  form.repo_bindings = [];
   formTriggers.value = [];
   initialTriggerIDs.value = [];
   resetTriggerDraft();
@@ -150,9 +263,15 @@ async function openEdit(row: AiAgent) {
   editing.value = row;
   o(form).extend(row);
   form.skill_ids = [...(row.skill_ids ?? [])];
-  form.build_job_ids = [...(row.build_job_ids ?? [])];
+  form.repo_bindings = (row.repo_bindings ?? []).map((b: AiAgentRepoBinding) => ({
+    repository_id: b.repository_id,
+    branch: b.branch || "main",
+  }));
   form.output_dir = row.output_dir || "output";
   resetTriggerDraft();
+  for (const b of form.repo_bindings) {
+    void loadBranches(b.repository_id);
+  }
   try {
     const items = await listTriggers(row.id);
     formTriggers.value = items.map((t) => ({
@@ -242,7 +361,28 @@ async function syncTriggers(agentID: number) {
 }
 
 async function save() {
-  const body = { ...form, output_dir: form.output_dir || "output" };
+  const bindings: AiAgentRepoBinding[] = [];
+  const seen = new Set<number>();
+  for (const b of form.repo_bindings) {
+    if (!b.repository_id) {
+      message.error("请为每条绑定选择仓库");
+      return;
+    }
+    if (seen.has(b.repository_id)) {
+      message.error("同一智能体内仓库不能重复绑定");
+      return;
+    }
+    seen.add(b.repository_id);
+    bindings.push({
+      repository_id: b.repository_id,
+      branch: (b.branch || "main").trim() || "main",
+    });
+  }
+  const body = {
+    ...form,
+    output_dir: form.output_dir || "output",
+    repo_bindings: bindings,
+  };
   try {
     let agentID: number;
     if (editing.value) {
@@ -261,6 +401,10 @@ async function save() {
 }
 
 async function run(row: AiAgent) {
+  if (!canRun(row)) {
+    message.error(runDisabledTip(row) || "无法运行");
+    return;
+  }
   try {
     const run = await manualRunAgent(row.id);
     message.success(`已创建运行 #${run.id}`);
@@ -298,6 +442,19 @@ async function remove(row: AiAgent) {
           {{ (rowData as AiAgent).cli_key }}
         </u-tag>
       </template>
+      <template #column:workspace_status="{ rowData }">
+        <u-tag
+          size="small"
+          :type="tagType((rowData as AiAgent).workspace_status, WORKSPACE_STATUS_TAG)"
+          :title="
+            (rowData as AiAgent).workspace_status === 'failed'
+              ? (rowData as AiAgent).workspace_error || '工作区初始化失败'
+              : undefined
+          "
+        >
+          {{ WORKSPACE_STATUS_LABEL[(rowData as AiAgent).workspace_status] ?? "未知" }}
+        </u-tag>
+      </template>
       <template #column:enabled="{ rowData }">
         <u-tag size="small" :type="(rowData as AiAgent).enabled ? 'success' : undefined">
           {{ (rowData as AiAgent).enabled ? "启用" : "停用" }}
@@ -308,7 +465,12 @@ async function remove(row: AiAgent) {
           <u-action v-if="hasPermission('ai_agents:update')" @run="openEdit(rowData as AiAgent)">
             编辑
           </u-action>
-          <u-action v-if="hasPermission('ai_agents:execute')" @run="run(rowData as AiAgent)">
+          <u-action
+            v-if="hasPermission('ai_agents:execute')"
+            :disabled="!canRun(rowData as AiAgent)"
+            :title="runDisabledTip(rowData as AiAgent)"
+            @run="run(rowData as AiAgent)"
+          >
             运行
           </u-action>
           <u-action v-if="hasPermission('ai_runs:view')" @run="openRunHistory(rowData as AiAgent)">
@@ -330,7 +492,7 @@ async function remove(row: AiAgent) {
       :title="editing ? '编辑智能体' : '新建智能体'"
       :model="form"
       label-width="110px"
-      style="width: 960px"
+      style="width: 1200px"
       @submit="save"
     >
       <u-input label="名称" field="name" :rules="{ required: '必填' }" />
@@ -351,7 +513,7 @@ async function remove(row: AiAgent) {
         field="system_prompt"
         span="full"
         :rows="6"
-        placeholder="描述任务目标；若需访问绑定的构建任务，请写相对路径，如 ./job-12（与选项「名称 (job-12)」一致）"
+        placeholder="描述任务目标；若需访问绑定仓库，请写相对路径，如 ./repo-12"
       />
       <u-multi-select
         label="技能"
@@ -361,14 +523,41 @@ async function remove(row: AiAgent) {
         filterable
         clearable
       />
-      <u-multi-select
-        label="构建任务"
-        field="build_job_ids"
-        :options="buildJobOptions"
-        placeholder="软链到构建任务工作区"
-        filterable
-        clearable
-      />
+      <u-group-input
+        field="repo_bindings"
+        label="仓库绑定"
+        span="full"
+        :item-default="{ repository_id: undefined, branch: 'main' }"
+        :item-style="{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%' }"
+      >
+        <template #default="{ item }">
+          <u-select
+            v-model="item.repository_id"
+            :options="repoOptions"
+            filterable
+            clearable
+            placeholder="选择仓库"
+            @change="onRepoChange(item)"
+          />
+          <u-select
+            v-model="item.branch"
+            :options="branchOptionsFor(item.repository_id)"
+            filterable
+            creatable
+            :disabled="!item.repository_id"
+            :placeholder="branchPlaceholder(item.repository_id)"
+            @focus="loadBranches(item.repository_id)"
+          />
+          <u-button
+            text
+            size="small"
+            :disabled="!item.repository_id || branchesSyncingByRepo[item.repository_id]"
+            @click="refreshBranches(item.repository_id)"
+          >
+            同步
+          </u-button>
+        </template>
+      </u-group-input>
       <u-input label="产出目录名" field="output_dir" placeholder="默认 output" />
       <u-number-input label="超时(秒)" field="timeout_sec" :min="30" />
       <u-switch label="流式输出" field="stream_output" />
@@ -444,10 +633,17 @@ async function remove(row: AiAgent) {
         </div>
       </u-form-item>
     </FormDialog>
+
+    <RunHistoryDialog v-model="historyOpen" :agent="historyAgent" />
   </div>
 </template>
 
 <style scoped lang="scss">
+:deep(.u-group-input__item > .u-select) {
+  flex: 1;
+  min-width: 0;
+}
+
 .trigger-section {
   width: 100%;
 }

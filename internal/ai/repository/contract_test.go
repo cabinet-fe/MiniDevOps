@@ -39,6 +39,11 @@ func TestContract_AI_CRUD(t *testing.T) {
 			if !gdb.Migrator().HasColumn("ai_agents", "output_dir") {
 				t.Fatalf("ai_agents.output_dir missing on %s", driver)
 			}
+			for _, column := range []string{"workspace_status", "workspace_error"} {
+				if !gdb.Migrator().HasColumn("ai_agents", column) {
+					t.Fatalf("ai_agents.%s missing on %s", column, driver)
+				}
+			}
 			if gdb.Migrator().HasColumn("agent_runs", "artifact_path") {
 				t.Fatalf("agent_runs.artifact_path still exists on %s", driver)
 			}
@@ -49,11 +54,30 @@ func TestContract_AI_CRUD(t *testing.T) {
 
 			agent := &model.AiAgent{
 				Name: "a", CliKey: "claude_code", Enabled: true, TimeoutSec: 60,
-				SkillIDsJSON: "[]", BuildJobIDsJSON: "[]",
-				OutputDir: "output",
+				SkillIDsJSON: "[]",
+				OutputDir:    "output",
 			}
 			if err := repo.CreateAgent(agent); err != nil {
 				t.Fatal(err)
+			}
+			if gdb.Migrator().HasColumn("ai_agents", "build_job_ids_json") {
+				t.Fatalf("ai_agents.build_job_ids_json still exists on %s", driver)
+			}
+			if !gdb.Migrator().HasTable("ai_agent_repo_bindings") {
+				t.Fatalf("ai_agent_repo_bindings missing on %s", driver)
+			}
+			if err := repo.ReplaceAgentRepoBindings(agent.ID, []model.RepoBinding{
+				{RepositoryID: 1, Branch: "main"},
+			}); err != nil {
+				t.Fatal(err)
+			}
+			bindings, err := repo.ListAgentRepoBindings(agent.ID)
+			if err != nil || len(bindings) != 1 || bindings[0].Branch != "main" {
+				t.Fatalf("bindings=%v err=%v", bindings, err)
+			}
+			n, err := repo.CountRepoBindingsByRepository(1)
+			if err != nil || n != 1 {
+				t.Fatalf("count=%d err=%v", n, err)
 			}
 			trig := &model.AgentTrigger{AgentID: agent.ID, Type: model.TriggerManual, Enabled: true}
 			if err := repo.CreateTrigger(trig); err != nil {

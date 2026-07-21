@@ -40,17 +40,19 @@ type TerminalNotifier interface {
 }
 
 type AgentService struct {
-	repo     *repository.AIRepository
-	cli      CLILookup
-	skills   *SkillService
-	hub      *ws.Hub
-	logger   *zap.Logger
-	workDir  string
-	logDir   string
-	docs     DocDraftWriter
-	jobs     BuildJobFinder
-	audit    AuditWriter
-	notifier TerminalNotifier
+	repo        *repository.AIRepository
+	cli         CLILookup
+	skills      *SkillService
+	hub         *ws.Hub
+	logger      *zap.Logger
+	workDir     string
+	logDir      string
+	docs        DocDraftWriter
+	repos       RepositoryFinder
+	secrets     SecretResolver
+	gitCheckout GitCheckoutFunc
+	audit       AuditWriter
+	notifier    TerminalNotifier
 
 	runs    chan uint
 	stop    chan struct{}
@@ -61,6 +63,9 @@ type AgentService struct {
 	cronMu  sync.Mutex
 	cron    *cron.Cron
 	cronIDs map[uint]cron.EntryID
+
+	wsInitMu  sync.Mutex
+	wsInitGen map[uint]uint64
 }
 
 // SetTerminalNotifier wires DESIGN §12 in-app notifications for agent terminal states.
@@ -93,7 +98,8 @@ func NewAgentService(
 		repo: repo, cli: cli, skills: skills, hub: hub, logger: logger,
 		workDir: workDir, logDir: logDir,
 		runs: make(chan uint, 128), stop: make(chan struct{}),
-		cronIDs: make(map[uint]cron.EntryID),
+		cronIDs:   make(map[uint]cron.EntryID),
+		wsInitGen: make(map[uint]uint64),
 	}
 	if len(audit) > 0 {
 		svc.audit = audit[0]
@@ -147,16 +153,16 @@ func (s *AgentService) RecoverOnStartup() error {
 }
 
 type AgentInput struct {
-	Name         string `json:"name"`
-	Description  string `json:"description"`
-	Enabled      *bool  `json:"enabled"`
-	CliKey       string `json:"cli_key"`
-	SystemPrompt string `json:"system_prompt"`
-	SkillIDs     []uint `json:"skill_ids"`
-	BuildJobIDs  []uint `json:"build_job_ids"`
-	OutputDir    string `json:"output_dir"`
-	StreamOutput *bool  `json:"stream_output"`
-	TimeoutSec   int    `json:"timeout_sec"`
+	Name         string              `json:"name"`
+	Description  string              `json:"description"`
+	Enabled      *bool               `json:"enabled"`
+	CliKey       string              `json:"cli_key"`
+	SystemPrompt string              `json:"system_prompt"`
+	SkillIDs     []uint              `json:"skill_ids"`
+	RepoBindings []model.RepoBinding `json:"repo_bindings"`
+	OutputDir    string              `json:"output_dir"`
+	StreamOutput *bool               `json:"stream_output"`
+	TimeoutSec   int                 `json:"timeout_sec"`
 }
 
 func (s *AgentService) CreateAgent(createdBy uint, in AgentInput) (*model.AiAgent, error) {
@@ -174,23 +180,26 @@ func (s *AgentService) CreateAgent(createdBy uint, in AgentInput) (*model.AiAgen
 		OutputDir:    stringOr(in.OutputDir, "output"),
 		StreamOutput: boolOr(in.StreamOutput, false),
 		TimeoutSec:   intOr(in.TimeoutSec, 600), CreatedBy: createdBy,
+		WorkspaceStatus: model.WorkspacePending,
+		WorkspaceError:  "",
 	}
 	if err := encodeSkillIDs(agent, in.SkillIDs); err != nil {
 		return nil, err
 	}
-	if err := encodeBuildJobIDs(agent, in.BuildJobIDs); err != nil {
+	bindings, err := s.normalizeRepoBindings(in.RepoBindings)
+	if err != nil {
 		return nil, err
 	}
 	if err := s.repo.CreateAgent(agent); err != nil {
 		return nil, err
 	}
-	decodeSkillIDs(agent)
-	decodeBuildJobIDs(agent)
-	if _, _, err := s.SyncAgentWorkspace(agent, createdBy, true); err != nil {
+	if err := s.repo.ReplaceAgentRepoBindings(agent.ID, bindings); err != nil {
 		_ = s.repo.DeleteAgent(agent.ID)
-		s.removeAgentWorkspace(agent.ID)
-		return nil, fmt.Errorf("同步工作区失败: %w", err)
+		return nil, err
 	}
+	decodeSkillIDs(agent)
+	agent.RepoBindings = bindings
+	s.enqueueWorkspaceInit(agent.ID, createdBy)
 	if s.audit != nil {
 		_ = s.audit.Write(createdBy, "", "agent_create", "ai_agent", fmt.Sprintf("%d", agent.ID), agent.Name, "")
 	}
@@ -225,8 +234,12 @@ func (s *AgentService) UpdateAgent(id, userID uint, in AgentInput) (*model.AiAge
 			return nil, err
 		}
 	}
-	if in.BuildJobIDs != nil {
-		if err := encodeBuildJobIDs(agent, in.BuildJobIDs); err != nil {
+	var bindings []model.RepoBinding
+	updateBindings := in.RepoBindings != nil
+	if updateBindings {
+		var err error
+		bindings, err = s.normalizeRepoBindings(in.RepoBindings)
+		if err != nil {
 			return nil, err
 		}
 	}
@@ -239,14 +252,21 @@ func (s *AgentService) UpdateAgent(id, userID uint, in AgentInput) (*model.AiAge
 	if in.TimeoutSec > 0 {
 		agent.TimeoutSec = in.TimeoutSec
 	}
+	agent.WorkspaceStatus = model.WorkspacePending
+	agent.WorkspaceError = ""
 	if err := s.repo.UpdateAgent(agent); err != nil {
 		return nil, err
 	}
-	decodeSkillIDs(agent)
-	decodeBuildJobIDs(agent)
-	if _, _, err := s.SyncAgentWorkspace(agent, userID, true); err != nil {
-		return nil, fmt.Errorf("同步工作区失败: %w", err)
+	if updateBindings {
+		if err := s.repo.ReplaceAgentRepoBindings(agent.ID, bindings); err != nil {
+			return nil, err
+		}
+		agent.RepoBindings = bindings
+	} else if err := s.attachRepoBindings(agent); err != nil {
+		return nil, err
 	}
+	decodeSkillIDs(agent)
+	s.enqueueWorkspaceInit(agent.ID, userID)
 	if s.audit != nil {
 		_ = s.audit.Write(userID, "", "agent_update", "ai_agent", fmt.Sprintf("%d", agent.ID), agent.Name, "")
 	}
@@ -271,17 +291,24 @@ func (s *AgentService) GetAgent(id uint) (*model.AiAgent, error) {
 		return nil, err
 	}
 	decodeSkillIDs(agent)
-	decodeBuildJobIDs(agent)
+	if err := s.attachRepoBindings(agent); err != nil {
+		return nil, err
+	}
 	return agent, nil
 }
 
 func (s *AgentService) ListAgents(page, pageSize int) ([]model.AiAgent, int64, error) {
 	items, total, err := s.repo.ListAgents(page, pageSize)
+	if err != nil {
+		return nil, 0, err
+	}
 	for i := range items {
 		decodeSkillIDs(&items[i])
-		decodeBuildJobIDs(&items[i])
+		if err := s.attachRepoBindings(&items[i]); err != nil {
+			return nil, 0, err
+		}
 	}
-	return items, total, err
+	return items, total, nil
 }
 
 type TriggerInput struct {
@@ -387,18 +414,23 @@ func (s *AgentService) CreateRun(agentID uint, in CreateRunInput) (*model.AgentR
 	if !agent.Enabled {
 		return nil, errors.New("智能体未启用")
 	}
+	if agent.WorkspaceStatus != model.WorkspaceReady {
+		return nil, errors.New("智能体工作区未初始化完成")
+	}
 	decodeSkillIDs(agent)
-	decodeBuildJobIDs(agent)
+	if err := s.attachRepoBindings(agent); err != nil {
+		return nil, err
+	}
 	snapshot, _ := json.Marshal(map[string]any{
 		"agent_id":      agent.ID,
 		"cli_key":       agent.CliKey,
 		"system_prompt": agent.SystemPrompt,
 		"skill_ids":     agent.SkillIDs,
-		"build_job_ids": agent.BuildJobIDs,
+		"repo_bindings": agent.RepoBindings,
 		"output_dir":    agent.OutputDir,
 		"stream_output": agent.StreamOutput,
 		"timeout_sec":   agent.TimeoutSec,
-		"context_note":  "persistent agent workspace + fixed output_dir + skills + build_job softlinks",
+		"context_note":  "persistent agent workspace + fixed output_dir + skills + repo checkouts",
 		"risk_notice":   resourcemodel.RiskNoticeSameUID,
 	})
 	run := &model.AgentRun{
@@ -543,7 +575,10 @@ func (s *AgentService) ExecuteRun(ctx context.Context, id uint) {
 		return
 	}
 	decodeSkillIDs(agent)
-	decodeBuildJobIDs(agent)
+	if err := s.attachRepoBindings(agent); err != nil {
+		s.failRun(run, err)
+		return
+	}
 	cli, err := s.cli.FindByKey(agent.CliKey)
 	if err != nil {
 		s.failRun(run, err)
@@ -574,7 +609,7 @@ func (s *AgentService) ExecuteRun(ctx context.Context, id uint) {
 	}
 	writeLog(resourcemodel.RiskNoticeSameUID)
 	writeLog(fmt.Sprintf("agent=%s cli=%s trigger=%s", agent.Name, agent.CliKey, run.TriggerType))
-	writeLog("context: persistent agent workspace (skills + build_job softlinks)")
+	writeLog("context: persistent agent workspace (skills + repo checkouts)")
 
 	timeout := time.Duration(agent.TimeoutSec) * time.Second
 	if timeout <= 0 {
@@ -583,7 +618,7 @@ func (s *AgentService) ExecuteRun(ctx context.Context, id uint) {
 	runCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	digests, jobDirs, err := s.SyncAgentWorkspace(agent, run.TriggeredBy, true)
+	digests, repoDirs, err := s.SyncAgentWorkspace(agent, run.TriggeredBy, true)
 	if err != nil {
 		s.failRun(run, err)
 		return
@@ -593,8 +628,8 @@ func (s *AgentService) ExecuteRun(ctx context.Context, id uint) {
 		run.SkillDigestJSON = string(b)
 		writeLog("injected skills: " + run.SkillDigestJSON)
 	}
-	if len(jobDirs) > 0 {
-		writeLog("bound job dirs: " + strings.Join(jobDirs, " "))
+	if len(repoDirs) > 0 {
+		writeLog("bound repo dirs: " + strings.Join(repoDirs, " "))
 	}
 
 	absRoot, _ := filepath.Abs(agentRoot)
@@ -622,7 +657,7 @@ func (s *AgentService) ExecuteRun(ctx context.Context, id uint) {
 
 	args := strings.Fields(cli.DefaultArgs)
 	args = appendFullPermissionArgs(agent.CliKey, args)
-	writeLog("cli full-permission flags enabled for softlink access (scope via prompt)")
+	writeLog("cli full-permission flags enabled for workspace access (scope via prompt)")
 	if agent.StreamOutput {
 		writeLog("cli stream-output: human-readable (CLI default)")
 	} else {

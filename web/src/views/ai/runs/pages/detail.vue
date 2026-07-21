@@ -10,7 +10,7 @@ import { getAccessToken } from "@/api/http";
 import type { AgentRun } from "@/api/types";
 import BuildLogViewer, { resolveBuildLogStatus } from "@/components/build-log-viewer";
 import { usePermission } from "@/composables/use-permission";
-import { formatDateTime } from "@/lib/datetime";
+import { formatDateTime, formatDurationMs } from "@/lib/datetime";
 import { JOB_STATUS_TAG, TRIGGER_TYPE_TAG, tagType } from "@/lib/tag";
 
 const route = useRoute();
@@ -28,7 +28,7 @@ function parseRouteId(raw: unknown): number | null {
 }
 
 const canExecute = computed(() => hasPermission("ai_agents:execute"));
-// Layout keys detail by fullPath and keep-alive caches the instance. Freeze the id at
+// Layout keys detail by path and keep-alive caches the instance. Freeze the id at
 // setup so deactivated instances do not re-read the global route (which loses :id).
 const runId = parseRouteId(route.params.id);
 
@@ -137,6 +137,18 @@ onMounted(async () => {
             <div class="meta-item">
               <span class="meta-label">文档节点</span>
               <span class="meta-value">{{ run.doc_node_id ?? "—" }}</span>
+            </div>
+            <div class="meta-item">
+              <span class="meta-label">运行时间</span>
+              <span class="meta-value">{{ formatDurationMs(run.duration_ms) || "—" }}</span>
+            </div>
+            <div class="meta-item">
+              <span class="meta-label">开始时间</span>
+              <span class="meta-value">{{ formatDateTime(run.started_at) || "—" }}</span>
+            </div>
+            <div class="meta-item">
+              <span class="meta-label">结束时间</span>
+              <span class="meta-value">{{ formatDateTime(run.finished_at) || "—" }}</span>
             </div>
             <div class="meta-item">
               <span class="meta-label">创建时间</span>

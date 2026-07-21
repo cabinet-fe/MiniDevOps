@@ -201,7 +201,7 @@ func main() {
 
 	agentSvc := aiservice.NewAgentService(aiRepo, cliSvc, skillSvc, hub, logger, agentWorkDir, cfg.Build.LogDir, auditSvc)
 	agentSvc.SetDocDraftWriter(projectSvc)
-	agentSvc.SetBuildJobFinder(jobRepo)
+	agentSvc.SetRepoCheckoutDeps(repoRepo, resourceservice.NewCredentialSecretResolver(credSvc))
 	agentSvc.SetTerminalNotifier(notifSvc)
 	docsBridge := aiservice.NewDocsBridge(agentSvc)
 	projectSvc.SetDocsAIBridge(docsBridge)

@@ -16,27 +16,52 @@ import (
 	"bedrock/internal/ai/model"
 	"bedrock/internal/ai/repository"
 	"bedrock/internal/ai/service"
-	cicdmodel "bedrock/internal/cicd/model"
 	"bedrock/internal/platform/config"
 	"bedrock/internal/platform/db"
 	"bedrock/internal/platform/migration"
 	_ "bedrock/internal/platform/migration/migrations"
+	resourcemodel "bedrock/internal/resource/model"
 	resourcerepo "bedrock/internal/resource/repository"
 	resourceservice "bedrock/internal/resource/service"
 	storagerepo "bedrock/internal/storage/repository"
 	storageservice "bedrock/internal/storage/service"
 )
 
-type stubJobFinder struct {
-	jobs map[uint]*cicdmodel.BuildJob
+type stubRepoFinder struct {
+	repos map[uint]*resourcemodel.Repository
 }
 
-func (f *stubJobFinder) FindByID(id uint) (*cicdmodel.BuildJob, error) {
-	job, ok := f.jobs[id]
+func (f *stubRepoFinder) FindByID(id uint) (*resourcemodel.Repository, error) {
+	repo, ok := f.repos[id]
 	if !ok {
-		return nil, fmt.Errorf("job %d not found", id)
+		return nil, fmt.Errorf("repo %d not found", id)
 	}
-	return job, nil
+	return repo, nil
+}
+
+func stubGitCheckout(_ context.Context, workDir, _repoURL, _authType, _username, _password, branch string, _logFn func(string)) error {
+	if err := os.MkdirAll(workDir, 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(workDir, "BRANCH"), []byte(branch), 0o644)
+}
+
+func waitWorkspaceStatus(t *testing.T, agents *service.AgentService, agentID uint, want string) *model.AiAgent {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		got, err := agents.GetAgent(agentID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.WorkspaceStatus == want {
+			return got
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	got, _ := agents.GetAgent(agentID)
+	t.Fatalf("workspace_status=%q want=%q err=%q", got.WorkspaceStatus, want, got.WorkspaceError)
+	return nil
 }
 
 func setupAgentWorkspace(t *testing.T) (*service.AgentService, *service.SkillService, *resourcerepo.CLIRepository, string) {
@@ -63,12 +88,13 @@ func setupAgentWorkspace(t *testing.T) (*service.AgentService, *service.SkillSer
 	work := filepath.Join(t.TempDir(), "work")
 	logs := filepath.Join(t.TempDir(), "logs")
 	agents := service.NewAgentService(repo, cli, skills, nil, zap.NewNop(), work, logs)
+	agents.SetGitCheckout(stubGitCheckout)
 	agents.Start()
 	t.Cleanup(agents.Shutdown)
 	return agents, skills, cliRepo, work
 }
 
-func TestAgentWorkspaceSyncSkillsAndSoftlinks(t *testing.T) {
+func TestAgentWorkspaceSyncSkillsAndRepoCheckouts(t *testing.T) {
 	agents, skills, _, work := setupAgentWorkspace(t)
 
 	z := zipBytes(t, map[string]string{"SKILL.md": "# workspace-skill"})
@@ -79,65 +105,145 @@ func TestAgentWorkspaceSyncSkillsAndSoftlinks(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	jobID := uint(42)
 	repoID := uint(7)
-	jobDir := filepath.Join(work, fmt.Sprintf("repo-%d", repoID), fmt.Sprintf("job-%d", jobID))
-	if err := os.MkdirAll(jobDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	agents.SetBuildJobFinder(&stubJobFinder{
-		jobs: map[uint]*cicdmodel.BuildJob{
-			jobID: {ID: jobID, RepositoryID: repoID, Name: "j"},
+	agents.SetRepoCheckoutDeps(&stubRepoFinder{
+		repos: map[uint]*resourcemodel.Repository{
+			repoID: {ID: repoID, Name: "demo", RepoURL: "https://example.com/demo.git", AuthType: "none"},
 		},
-	})
+	}, nil)
 
 	agent, err := agents.CreateAgent(1, service.AgentInput{
 		Name: "ws-agent", CliKey: "claude_code", SystemPrompt: "hello workspace",
-		SkillIDs: []uint{skill.ID}, BuildJobIDs: []uint{jobID},
-		TimeoutSec: 30,
+		SkillIDs:     []uint{skill.ID},
+		RepoBindings: []model.RepoBinding{{RepositoryID: repoID, Branch: "develop"}},
+		TimeoutSec:   30,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
+	if agent.WorkspaceStatus != model.WorkspacePending {
+		t.Fatalf("create should return pending, got %q", agent.WorkspaceStatus)
+	}
+	if len(agent.RepoBindings) != 1 || agent.RepoBindings[0].Branch != "develop" {
+		t.Fatalf("repo_bindings=%v", agent.RepoBindings)
+	}
+	agent = waitWorkspaceStatus(t, agents, agent.ID, model.WorkspaceReady)
 
 	root := filepath.Join(work, "agents", fmt.Sprintf("agent-%d", agent.ID))
-	skillMD := filepath.Join(root, ".agents", "skills", fmt.Sprintf("%d", skill.ID), "SKILL.md")
+	skillMD := filepath.Join(root, ".agents", "skills", skill.Name, "SKILL.md")
 	if _, err := os.Stat(skillMD); err != nil {
 		t.Fatalf("skill not extracted: %v", err)
+	}
+	nestedByID := filepath.Join(root, ".agents", "skills", fmt.Sprintf("%d", skill.ID), "SKILL.md")
+	if _, err := os.Stat(nestedByID); err == nil {
+		t.Fatalf("skill must not be nested under id folder %q", nestedByID)
 	}
 	prompt := filepath.Join(root, "SYSTEM_PROMPT.md")
 	data, err := os.ReadFile(prompt)
 	if err != nil || string(data) != "hello workspace" {
 		t.Fatalf("SYSTEM_PROMPT.md: %v %q", err, data)
 	}
-	link := filepath.Join(root, fmt.Sprintf("job-%d", jobID))
-	target, err := os.Readlink(link)
+	checkout := filepath.Join(root, fmt.Sprintf("repo-%d", repoID))
+	branchFile, err := os.ReadFile(filepath.Join(checkout, "BRANCH"))
 	if err != nil {
-		t.Fatalf("softlink missing: %v", err)
+		t.Fatalf("repo checkout missing: %v", err)
 	}
-	absJob, _ := filepath.Abs(jobDir)
-	if target != absJob {
-		t.Fatalf("softlink target=%q want=%q", target, absJob)
+	if string(branchFile) != "develop" {
+		t.Fatalf("branch=%q", branchFile)
+	}
+	if _, err := os.Lstat(filepath.Join(root, "job-1")); !os.IsNotExist(err) {
+		t.Fatalf("legacy job softlink must not exist, err=%v", err)
 	}
 }
 
-func TestAgentWorkspaceMissingJobDirSkipped(t *testing.T) {
-	agents, _, _, work := setupAgentWorkspace(t)
-	jobID := uint(99)
-	agents.SetBuildJobFinder(&stubJobFinder{
-		jobs: map[uint]*cicdmodel.BuildJob{
-			jobID: {ID: jobID, RepositoryID: 1, Name: "missing-ws"},
+func TestAgentWorkspaceDefaultBranchAndDuplicateRejected(t *testing.T) {
+	agents, _, _, _ := setupAgentWorkspace(t)
+	repoID := uint(3)
+	agents.SetRepoCheckoutDeps(&stubRepoFinder{
+		repos: map[uint]*resourcemodel.Repository{
+			repoID: {ID: repoID, Name: "r", RepoURL: "https://example.com/r.git", AuthType: "none"},
 		},
-	})
+	}, nil)
+
 	agent, err := agents.CreateAgent(1, service.AgentInput{
-		Name: "skip-link", CliKey: "claude_code", BuildJobIDs: []uint{jobID}, TimeoutSec: 10,
+		Name: "defaults", CliKey: "claude_code",
+		RepoBindings: []model.RepoBinding{{RepositoryID: repoID}},
+		TimeoutSec:   10,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	link := filepath.Join(work, "agents", fmt.Sprintf("agent-%d", agent.ID), fmt.Sprintf("job-%d", jobID))
-	if _, err := os.Lstat(link); !os.IsNotExist(err) {
-		t.Fatalf("expected missing softlink, got err=%v", err)
+	agent = waitWorkspaceStatus(t, agents, agent.ID, model.WorkspaceReady)
+	if len(agent.RepoBindings) != 1 || agent.RepoBindings[0].Branch != "main" {
+		t.Fatalf("expected default main, got %#v", agent.RepoBindings)
+	}
+
+	_, err = agents.CreateAgent(1, service.AgentInput{
+		Name: "dup", CliKey: "claude_code",
+		RepoBindings: []model.RepoBinding{
+			{RepositoryID: repoID, Branch: "a"},
+			{RepositoryID: repoID, Branch: "b"},
+		},
+		TimeoutSec: 10,
+	})
+	if err == nil || !strings.Contains(err.Error(), "重复") {
+		t.Fatalf("expected duplicate error, got %v", err)
+	}
+}
+
+func TestAgentWorkspaceRemovesStaleJobLinksAndUnboundRepos(t *testing.T) {
+	agents, _, _, work := setupAgentWorkspace(t)
+	repoKeep := uint(1)
+	repoDrop := uint(2)
+	agents.SetRepoCheckoutDeps(&stubRepoFinder{
+		repos: map[uint]*resourcemodel.Repository{
+			repoKeep: {ID: repoKeep, Name: "keep", RepoURL: "https://example.com/keep.git", AuthType: "none"},
+			repoDrop: {ID: repoDrop, Name: "drop", RepoURL: "https://example.com/drop.git", AuthType: "none"},
+		},
+	}, nil)
+
+	agent, err := agents.CreateAgent(1, service.AgentInput{
+		Name: "cleanup", CliKey: "claude_code",
+		RepoBindings: []model.RepoBinding{
+			{RepositoryID: repoKeep, Branch: "main"},
+			{RepositoryID: repoDrop, Branch: "main"},
+		},
+		TimeoutSec: 10,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	agent = waitWorkspaceStatus(t, agents, agent.ID, model.WorkspaceReady)
+	root := filepath.Join(work, "agents", fmt.Sprintf("agent-%d", agent.ID))
+	legacyJob := filepath.Join(root, "job-99")
+	if err := os.Symlink(root, legacyJob); err != nil {
+		t.Fatal(err)
+	}
+
+	updated, err := agents.UpdateAgent(agent.ID, 1, service.AgentInput{
+		Name: "cleanup",
+		RepoBindings: []model.RepoBinding{
+			{RepositoryID: repoKeep, Branch: "main"},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.WorkspaceStatus != model.WorkspacePending {
+		t.Fatalf("update should return pending, got %q", updated.WorkspaceStatus)
+	}
+	updated = waitWorkspaceStatus(t, agents, agent.ID, model.WorkspaceReady)
+	if len(updated.RepoBindings) != 1 {
+		t.Fatalf("bindings=%v", updated.RepoBindings)
+	}
+	if _, err := os.Lstat(legacyJob); !os.IsNotExist(err) {
+		t.Fatalf("legacy job link should be removed, err=%v", err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "repo-2")); !os.IsNotExist(err) {
+		t.Fatalf("unbound repo dir should be removed, err=%v", err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "repo-1")); err != nil {
+		t.Fatalf("kept repo missing: %v", err)
 	}
 }
 
@@ -149,6 +255,7 @@ func TestAgentWorkspaceDeleteRemovesDir(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	agent = waitWorkspaceStatus(t, agents, agent.ID, model.WorkspaceReady)
 	root := filepath.Join(work, "agents", fmt.Sprintf("agent-%d", agent.ID))
 	if _, err := os.Stat(root); err != nil {
 		t.Fatal(err)
@@ -179,9 +286,9 @@ if [ ! -d "$BEDROCK_AGENT_OUTPUT" ]; then
   exit 25
 fi
 if [ -f "$BEDROCK_AGENT_WORKDIR/note.txt" ]; then
-  # Output dir was cleared between runs; previous result.txt must be gone.
-  if [ -f "$BEDROCK_AGENT_OUTPUT/result.txt" ]; then
-    echo "output dir was not cleared"
+  # Output dir is preserved across runs so caches can be reused.
+  if [ ! -f "$BEDROCK_AGENT_OUTPUT/result.txt" ]; then
+    echo "output dir was cleared"
     exit 26
   fi
   printf 'second' > "$BEDROCK_AGENT_OUTPUT/result.txt"
@@ -213,6 +320,7 @@ echo "persistent output"
 	if err != nil {
 		t.Fatal(err)
 	}
+	agent = waitWorkspaceStatus(t, agents, agent.ID, model.WorkspaceReady)
 	if agent.OutputDir != "deliverables" {
 		t.Fatalf("output_dir=%q", agent.OutputDir)
 	}
@@ -247,7 +355,10 @@ echo "persistent output"
 		if !strings.Contains(run.SnapshotJSON, `"output_dir":"deliverables"`) {
 			t.Fatalf("snapshot missing output_dir: %s", run.SnapshotJSON)
 		}
-		for _, removed := range []string{"artifact_format", "max_artifacts", "artifact_path"} {
+		if !strings.Contains(run.SnapshotJSON, `"repo_bindings"`) {
+			t.Fatalf("snapshot missing repo_bindings: %s", run.SnapshotJSON)
+		}
+		for _, removed := range []string{"artifact_format", "max_artifacts", "artifact_path", "build_job_ids"} {
 			if strings.Contains(run.SnapshotJSON, removed) {
 				t.Fatalf("snapshot contains removed field %q: %s", removed, run.SnapshotJSON)
 			}
@@ -284,45 +395,71 @@ echo "persistent output"
 
 func TestAgentWorkspaceNoOpenCodeExternalDirs(t *testing.T) {
 	agents, _, _, work := setupAgentWorkspace(t)
-	jobID := uint(3)
 	repoID := uint(2)
-	jobDir := filepath.Join(work, fmt.Sprintf("repo-%d", repoID), fmt.Sprintf("job-%d", jobID))
-	if err := os.MkdirAll(jobDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	agents.SetBuildJobFinder(&stubJobFinder{
-		jobs: map[uint]*cicdmodel.BuildJob{
-			jobID: {ID: jobID, RepositoryID: repoID, Name: "j"},
+	agents.SetRepoCheckoutDeps(&stubRepoFinder{
+		repos: map[uint]*resourcemodel.Repository{
+			repoID: {ID: repoID, Name: "r", RepoURL: "https://example.com/r.git", AuthType: "none"},
 		},
-	})
+	}, nil)
 	agent, err := agents.CreateAgent(1, service.AgentInput{
-		Name: "oc", CliKey: "opencode", BuildJobIDs: []uint{jobID}, TimeoutSec: 10,
+		Name: "oc", CliKey: "opencode",
+		RepoBindings: []model.RepoBinding{{RepositoryID: repoID, Branch: "main"}},
+		TimeoutSec:   10,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
+	agent = waitWorkspaceStatus(t, agents, agent.ID, model.WorkspaceReady)
 	cfgPath := filepath.Join(work, "agents", fmt.Sprintf("agent-%d", agent.ID), "opencode.json")
 	if _, err := os.Stat(cfgPath); !os.IsNotExist(err) {
 		t.Fatalf("opencode.json should not be written, err=%v", err)
 	}
 }
 
+func TestAgentManualRunRejectedWhileWorkspacePending(t *testing.T) {
+	agents, _, _, _ := setupAgentWorkspace(t)
+	block := make(chan struct{})
+	agents.SetGitCheckout(func(ctx context.Context, workDir, repoURL, authType, username, password, branch string, logFn func(string)) error {
+		<-block
+		return stubGitCheckout(ctx, workDir, repoURL, authType, username, password, branch, logFn)
+	})
+	repoID := uint(11)
+	agents.SetRepoCheckoutDeps(&stubRepoFinder{
+		repos: map[uint]*resourcemodel.Repository{
+			repoID: {ID: repoID, Name: "r", RepoURL: "https://example.com/r.git", AuthType: "none"},
+		},
+	}, nil)
+
+	agent, err := agents.CreateAgent(1, service.AgentInput{
+		Name: "pending-run", CliKey: "claude_code",
+		RepoBindings: []model.RepoBinding{{RepositoryID: repoID, Branch: "main"}},
+		TimeoutSec:   10,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if agent.WorkspaceStatus != model.WorkspacePending {
+		t.Fatalf("status=%q", agent.WorkspaceStatus)
+	}
+	_, err = agents.ManualRun(agent.ID, 1)
+	if err == nil || !strings.Contains(err.Error(), "工作区未初始化完成") {
+		t.Fatalf("expected pending gate error, got %v", err)
+	}
+	close(block)
+	waitWorkspaceStatus(t, agents, agent.ID, model.WorkspaceReady)
+}
+
 func TestAgentRunPassesFullPermissionFlagsAndScopeHint(t *testing.T) {
 	if _, err := exec.LookPath("sh"); err != nil {
 		t.Skip("sh required")
 	}
-	agents, _, repo, work := setupAgentWorkspace(t)
-	jobID := uint(11)
+	agents, _, repo, _ := setupAgentWorkspace(t)
 	repoID := uint(9)
-	jobDir := filepath.Join(work, fmt.Sprintf("repo-%d", repoID), fmt.Sprintf("job-%d", jobID))
-	if err := os.MkdirAll(jobDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	agents.SetBuildJobFinder(&stubJobFinder{
-		jobs: map[uint]*cicdmodel.BuildJob{
-			jobID: {ID: jobID, RepositoryID: repoID, Name: "j"},
+	agents.SetRepoCheckoutDeps(&stubRepoFinder{
+		repos: map[uint]*resourcemodel.Repository{
+			repoID: {ID: repoID, Name: "r", RepoURL: "https://example.com/r.git", AuthType: "none"},
 		},
-	})
+	}, nil)
 
 	argvFile := filepath.Join(t.TempDir(), "argv.txt")
 	script := filepath.Join(t.TempDir(), "fake-cli-fullperm.sh")
@@ -344,11 +481,13 @@ func TestAgentRunPassesFullPermissionFlagsAndScopeHint(t *testing.T) {
 
 	agent, err := agents.CreateAgent(1, service.AgentInput{
 		Name: "fullperm", CliKey: "claude_code", SystemPrompt: "do work",
-		BuildJobIDs: []uint{jobID}, TimeoutSec: 30,
+		RepoBindings: []model.RepoBinding{{RepositoryID: repoID, Branch: "main"}},
+		TimeoutSec:   30,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
+	agent = waitWorkspaceStatus(t, agents, agent.ID, model.WorkspaceReady)
 	run, err := agents.ManualRun(agent.ID, 1)
 	if err != nil {
 		t.Fatal(err)
@@ -369,7 +508,7 @@ func TestAgentRunPassesFullPermissionFlagsAndScopeHint(t *testing.T) {
 				"--print",
 				"--dangerously-skip-permissions",
 				"$BEDROCK_AGENT_WORKDIR",
-				"./job-{id}",
+				"./repo-{id}",
 				"禁止访问该目录之外的任意路径",
 			} {
 				if !strings.Contains(joined, want) {
@@ -438,6 +577,7 @@ func TestAgentRunNonInteractiveCLIArgs(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			agent = waitWorkspaceStatus(t, agents, agent.ID, model.WorkspaceReady)
 			run, err := agents.ManualRun(agent.ID, 1)
 			if err != nil {
 				t.Fatal(err)
@@ -513,6 +653,7 @@ func TestAgentRunStreamOutputCLIArgs(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			agent = waitWorkspaceStatus(t, agents, agent.ID, model.WorkspaceReady)
 			run, err := agents.ManualRun(agent.ID, 1)
 			if err != nil {
 				t.Fatal(err)
@@ -597,6 +738,7 @@ func TestAgentRunNonStreamOutputCLIArgs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	agent = waitWorkspaceStatus(t, agents, agent.ID, model.WorkspaceReady)
 	run, err := agents.ManualRun(agent.ID, 1)
 	if err != nil {
 		t.Fatal(err)

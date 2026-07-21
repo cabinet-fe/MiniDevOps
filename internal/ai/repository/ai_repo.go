@@ -24,13 +24,49 @@ func (r *AIRepository) UpdateAgent(agent *model.AiAgent) error {
 	return r.db.Save(agent).Error
 }
 
+func (r *AIRepository) UpdateAgentFields(id uint, fields map[string]any) error {
+	return r.db.Model(&model.AiAgent{}).Where("id = ?", id).Updates(fields).Error
+}
+
 func (r *AIRepository) DeleteAgent(id uint) error {
 	return r.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("agent_id = ?", id).Delete(&model.AgentRepoBinding{}).Error; err != nil {
+			return err
+		}
 		if err := tx.Where("agent_id = ?", id).Delete(&model.AgentTrigger{}).Error; err != nil {
 			return err
 		}
 		return tx.Delete(&model.AiAgent{}, id).Error
 	})
+}
+
+func (r *AIRepository) ReplaceAgentRepoBindings(agentID uint, bindings []model.RepoBinding) error {
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("agent_id = ?", agentID).Delete(&model.AgentRepoBinding{}).Error; err != nil {
+			return err
+		}
+		for _, b := range bindings {
+			row := model.AgentRepoBinding{
+				AgentID: agentID, RepositoryID: b.RepositoryID, Branch: b.Branch,
+			}
+			if err := tx.Create(&row).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
+func (r *AIRepository) ListAgentRepoBindings(agentID uint) ([]model.AgentRepoBinding, error) {
+	var items []model.AgentRepoBinding
+	err := r.db.Where("agent_id = ?", agentID).Order("id ASC").Find(&items).Error
+	return items, err
+}
+
+func (r *AIRepository) CountRepoBindingsByRepository(repositoryID uint) (int64, error) {
+	var n int64
+	err := r.db.Model(&model.AgentRepoBinding{}).Where("repository_id = ?", repositoryID).Count(&n).Error
+	return n, err
 }
 
 func (r *AIRepository) FindAgent(id uint) (*model.AiAgent, error) {

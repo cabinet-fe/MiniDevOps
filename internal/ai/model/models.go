@@ -31,24 +31,49 @@ const (
 	EventNone                 = "none"
 )
 
-// AiAgent is a configured agent bound to one CLI, skills, and build-job workspaces.
+const (
+	WorkspacePending = "pending"
+	WorkspaceReady   = "ready"
+	WorkspaceFailed  = "failed"
+)
+
+// RepoBinding is the API projection of an agent↔repository checkout binding.
+type RepoBinding struct {
+	RepositoryID uint   `json:"repository_id"`
+	Branch       string `json:"branch"`
+}
+
+// AgentRepoBinding persists one repository+branch binding for an agent.
+type AgentRepoBinding struct {
+	ID           uint      `json:"id" gorm:"primaryKey"`
+	AgentID      uint      `json:"agent_id" gorm:"not null;uniqueIndex:uidx_agent_repo;index"`
+	RepositoryID uint      `json:"repository_id" gorm:"not null;uniqueIndex:uidx_agent_repo;index"`
+	Branch       string    `json:"branch" gorm:"size:200;not null;default:main"`
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
+}
+
+func (AgentRepoBinding) TableName() string { return "ai_agent_repo_bindings" }
+
+// AiAgent is a configured agent bound to one CLI, skills, and repository checkouts.
 type AiAgent struct {
-	ID              uint      `json:"id" gorm:"primaryKey"`
-	Name            string    `json:"name" gorm:"size:100;not null"`
-	Description     string    `json:"description" gorm:"size:500"`
-	Enabled         bool      `json:"enabled" gorm:"not null;default:true"`
-	CliKey          string    `json:"cli_key" gorm:"size:40;not null;index"`
-	SystemPrompt    string    `json:"system_prompt" gorm:"type:text"`
-	SkillIDsJSON    string    `json:"-" gorm:"type:text"`
-	SkillIDs        []uint    `json:"skill_ids" gorm:"-"`
-	BuildJobIDsJSON string    `json:"-" gorm:"type:text"`
-	BuildJobIDs     []uint    `json:"build_job_ids" gorm:"-"`
-	OutputDir       string    `json:"output_dir" gorm:"size:200;not null;default:output"`
-	StreamOutput    bool      `json:"stream_output" gorm:"not null;default:false"`
-	TimeoutSec      int       `json:"timeout_sec" gorm:"not null;default:600"`
-	CreatedBy       uint      `json:"created_by" gorm:"index"`
-	CreatedAt       time.Time `json:"created_at"`
-	UpdatedAt       time.Time `json:"updated_at"`
+	ID              uint          `json:"id" gorm:"primaryKey"`
+	Name            string        `json:"name" gorm:"size:100;not null"`
+	Description     string        `json:"description" gorm:"size:500"`
+	Enabled         bool          `json:"enabled" gorm:"not null;default:true"`
+	CliKey          string        `json:"cli_key" gorm:"size:40;not null;index"`
+	SystemPrompt    string        `json:"system_prompt" gorm:"type:text"`
+	SkillIDsJSON    string        `json:"-" gorm:"type:text"`
+	SkillIDs        []uint        `json:"skill_ids" gorm:"-"`
+	RepoBindings    []RepoBinding `json:"repo_bindings" gorm:"-"`
+	OutputDir       string        `json:"output_dir" gorm:"size:200;not null;default:output"`
+	StreamOutput    bool          `json:"stream_output" gorm:"not null;default:false"`
+	TimeoutSec      int           `json:"timeout_sec" gorm:"not null;default:600"`
+	WorkspaceStatus string        `json:"workspace_status" gorm:"size:20;not null;default:ready"`
+	WorkspaceError  string        `json:"workspace_error" gorm:"type:text"`
+	CreatedBy       uint          `json:"created_by" gorm:"index"`
+	CreatedAt       time.Time     `json:"created_at"`
+	UpdatedAt       time.Time     `json:"updated_at"`
 }
 
 func (AiAgent) TableName() string { return "ai_agents" }

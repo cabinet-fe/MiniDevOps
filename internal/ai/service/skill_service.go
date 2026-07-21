@@ -168,7 +168,9 @@ func (s *SkillService) OpenPackage(id, userID uint, isSuperAdmin bool) (*model.S
 	return skill, f, skill.Name + ".zip", nil
 }
 
-// InjectSkills extracts bound skills into workspaceDir/.agents/skills/<id>/ for agent runs.
+// InjectSkills extracts bound skills into workspaceDir/.agents/skills/<name>/ for agent runs.
+// ZIP contents are rooted at the directory that contains SKILL.md (wrapping folders and
+// __MACOSX are stripped), matching the Agent Skills layout.
 func (s *SkillService) InjectSkills(workspaceDir string, skillIDs []uint, userID uint, isSuperAdmin bool) (map[uint]string, error) {
 	digests := map[uint]string{}
 	if len(skillIDs) == 0 {
@@ -190,7 +192,7 @@ func (s *SkillService) InjectSkills(workspaceDir string, skillIDs []uint, userID
 		if err != nil {
 			return nil, err
 		}
-		dest := filepath.Join(skillsRoot, fmt.Sprintf("%d", id))
+		dest := filepath.Join(skillsRoot, skillDirName(skill.Name))
 		if err := extractSkillZIP(f, obj.Size, dest); err != nil {
 			f.Close()
 			return nil, err
@@ -250,6 +252,9 @@ func validateSkillZIP(r io.ReaderAt, size int64) error {
 		if err != nil {
 			return err
 		}
+		if isJunkZIPPath(clean) {
+			continue
+		}
 		if strings.EqualFold(path.Base(clean), "SKILL.md") {
 			hasSkillMD = true
 		}
@@ -265,9 +270,14 @@ func extractSkillZIP(r io.ReaderAt, size int64, dest string) error {
 	if err != nil {
 		return err
 	}
+	prefix, err := skillZIPContentPrefix(reader)
+	if err != nil {
+		return err
+	}
 	if err := os.MkdirAll(dest, 0o755); err != nil {
 		return err
 	}
+	cleanDest := filepath.Clean(dest)
 	for _, entry := range reader.File {
 		if err := validateZIPEntry(entry); err != nil {
 			return err
@@ -276,8 +286,18 @@ func extractSkillZIP(r io.ReaderAt, size int64, dest string) error {
 		if err != nil {
 			return err
 		}
-		target := filepath.Join(dest, filepath.FromSlash(clean))
-		if !strings.HasPrefix(target, filepath.Clean(dest)+string(os.PathSeparator)) && target != filepath.Clean(dest) {
+		if isJunkZIPPath(clean) {
+			continue
+		}
+		rel, ok := trimZIPPrefix(clean, prefix)
+		if !ok {
+			continue
+		}
+		if rel == "" {
+			continue
+		}
+		target := filepath.Join(dest, filepath.FromSlash(rel))
+		if !strings.HasPrefix(target, cleanDest+string(os.PathSeparator)) && target != cleanDest {
 			return errors.New("非法 ZIP 路径")
 		}
 		if entry.FileInfo().IsDir() {
@@ -309,6 +329,65 @@ func extractSkillZIP(r io.ReaderAt, size int64, dest string) error {
 		}
 	}
 	return nil
+}
+
+// skillZIPContentPrefix returns the directory prefix that contains SKILL.md so a ZIP
+// packaged as java-api-docs/SKILL.md extracts as SKILL.md under the dest folder.
+func skillZIPContentPrefix(reader *zip.Reader) (string, error) {
+	var skillMD string
+	for _, entry := range reader.File {
+		clean, err := cleanZIPPath(entry.Name)
+		if err != nil {
+			return "", err
+		}
+		if isJunkZIPPath(clean) {
+			continue
+		}
+		if strings.EqualFold(path.Base(clean), "SKILL.md") {
+			skillMD = clean
+			break
+		}
+	}
+	if skillMD == "" {
+		return "", ErrMissingSkillMD
+	}
+	dir := path.Dir(skillMD)
+	if dir == "." || dir == "" {
+		return "", nil
+	}
+	return dir + "/", nil
+}
+
+func trimZIPPrefix(clean, prefix string) (string, bool) {
+	if prefix == "" {
+		return clean, true
+	}
+	if clean == strings.TrimSuffix(prefix, "/") {
+		return "", true
+	}
+	if !strings.HasPrefix(clean, prefix) {
+		return "", false
+	}
+	return strings.TrimPrefix(clean, prefix), true
+}
+
+func isJunkZIPPath(clean string) bool {
+	if clean == "__MACOSX" || strings.HasPrefix(clean, "__MACOSX/") {
+		return true
+	}
+	base := path.Base(clean)
+	return strings.HasPrefix(base, "._")
+}
+
+func skillDirName(name string) string {
+	name = strings.TrimSpace(name)
+	name = strings.ReplaceAll(name, "/", "-")
+	name = strings.ReplaceAll(name, "\\", "-")
+	name = strings.Trim(name, ". ")
+	if name == "" || name == "." || name == ".." {
+		return "skill"
+	}
+	return name
 }
 
 func validateZIPEntry(entry *zip.File) error {

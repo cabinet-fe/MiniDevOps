@@ -159,12 +159,12 @@ func TestRepository_CRUD_and_deleteProtection(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	branches, err := repoSvc.ListBranches(repo.ID)
+	synced, err := repoSvc.SyncBranches(repo.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(branches) != 2 {
-		t.Fatalf("branches=%v", branches)
+	if len(synced.Branches) != 2 {
+		t.Fatalf("branches=%v", synced.Branches)
 	}
 
 	_, err = jobSvc.Create(1, service.CreateBuildJobInput{

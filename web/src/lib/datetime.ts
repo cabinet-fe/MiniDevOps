@@ -9,3 +9,16 @@ export function formatDateTime(value: string | number | Date | null | undefined)
   if (Number.isNaN(d.timestamp)) return "";
   return d.format(DATETIME_FORMAT);
 }
+
+/** Format elapsed milliseconds for table/list display; missing/non-positive → "". */
+export function formatDurationMs(ms: number | null | undefined): string {
+  if (ms == null || !Number.isFinite(ms) || ms <= 0) return "";
+  const totalSec = Math.floor(ms / 1000);
+  if (totalSec < 1) return `${ms}ms`;
+  const hours = Math.floor(totalSec / 3600);
+  const minutes = Math.floor((totalSec % 3600) / 60);
+  const seconds = totalSec % 60;
+  if (hours > 0) return `${hours}h ${minutes}m ${seconds}s`;
+  if (minutes > 0) return `${minutes}m ${seconds}s`;
+  return `${seconds}s`;
+}

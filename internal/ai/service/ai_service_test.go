@@ -4,6 +4,8 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -71,6 +73,7 @@ func TestTriggersCreateIndependentAgentRuns(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	agent = waitWorkspaceStatus(t, agents, agent.ID, model.WorkspaceReady)
 	manual, err := agents.ManualRun(agent.ID, 1)
 	if err != nil {
 		t.Fatal(err)
@@ -126,6 +129,7 @@ func TestAgentFailureDoesNotChangeBuildRun(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	agent = waitWorkspaceStatus(t, agents, agent.ID, model.WorkspaceReady)
 	build := &cicdmodel.BuildRun{ID: 5, Status: "success", ArtifactPath: "/a"}
 	job := &cicdmodel.BuildJob{ID: 1, AgentID: &agent.ID, AgentTriggerEvent: model.EventArtifactReady}
 	agents.OnBuildEvent(model.EventArtifactReady, job, build)
@@ -203,6 +207,46 @@ func TestPrivateSkillIsolation(t *testing.T) {
 	}
 }
 
+func TestInjectSkillsUsesNameAndStripsWrapper(t *testing.T) {
+	_, _, skills, _ := setupAI(t)
+	z := zipBytes(t, map[string]string{
+		"java-api-docs/SKILL.md":             "# nested-skill",
+		"java-api-docs/references/notes.md":  "refs",
+		"__MACOSX/java-api-docs/._SKILL.md":  "junk",
+	})
+	s, err := skills.Create(service.SkillUploadInput{
+		Name: "java-api-docs", Visibility: model.SkillPublic, Filename: "java-api-docs.zip",
+		Size: int64(len(z)), Source: bytes.NewReader(z), UserID: 1, IsSuperAdmin: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	tmp := t.TempDir()
+	if _, err := skills.InjectSkills(tmp, []uint{s.ID}, 1, true); err != nil {
+		t.Fatal(err)
+	}
+	skillMD := filepath.Join(tmp, ".agents", "skills", "java-api-docs", "SKILL.md")
+	data, err := os.ReadFile(skillMD)
+	if err != nil {
+		t.Fatalf("expected skill at name path: %v", err)
+	}
+	if !strings.Contains(string(data), "nested-skill") {
+		t.Fatalf("unexpected SKILL.md body: %q", data)
+	}
+	if _, err := os.Stat(filepath.Join(tmp, ".agents", "skills", "java-api-docs", "references", "notes.md")); err != nil {
+		t.Fatalf("nested references missing: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(tmp, ".agents", "skills", fmt.Sprintf("%d", s.ID))); err == nil {
+		t.Fatal("must not create id-named skill folder")
+	}
+	if _, err := os.Stat(filepath.Join(tmp, ".agents", "skills", "java-api-docs", "java-api-docs")); err == nil {
+		t.Fatal("must not keep ZIP wrapper directory under skill name")
+	}
+	if _, err := os.Stat(filepath.Join(tmp, ".agents", "skills", "java-api-docs", "__MACOSX")); err == nil {
+		t.Fatal("__MACOSX must be skipped")
+	}
+}
+
 func TestDocsGenerateWritesDraftOnly(t *testing.T) {
 	gdb, agents, _, projectSvc := setupAI(t)
 	owner := projectservice.NewAccessContext(1, true, []string{"project_projects:create", "project_docs:execute", "project_docs:view"})
@@ -216,6 +260,7 @@ func TestDocsGenerateWritesDraftOnly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	agent = waitWorkspaceStatus(t, agents, agent.ID, model.WorkspaceReady)
 	// Seed a fake successful run writing draft via bridge callback.
 	node := &projectmodel.ApiDocNode{
 		ProjectID: project.ID, Kind: projectmodel.DocNodeDocument, Name: "api",

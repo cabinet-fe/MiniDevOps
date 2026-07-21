@@ -1,7 +1,7 @@
 package service
 
 import (
-	"encoding/json"
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -10,29 +10,96 @@ import (
 	"go.uber.org/zap"
 
 	"bedrock/internal/ai/model"
-	cicdmodel "bedrock/internal/cicd/model"
+	"bedrock/internal/engine"
+	resourcemodel "bedrock/internal/resource/model"
 )
 
-// BuildJobFinder loads build jobs for agent workspace softlinks.
-type BuildJobFinder interface {
-	FindByID(id uint) (*cicdmodel.BuildJob, error)
+// RepositoryFinder loads code repositories for agent workspace checkouts.
+type RepositoryFinder interface {
+	FindByID(id uint) (*resourcemodel.Repository, error)
 }
 
-func (s *AgentService) SetBuildJobFinder(f BuildJobFinder) { s.jobs = f }
+// SecretResolver decrypts credentials for git auth (never exposed via API).
+type SecretResolver interface {
+	Resolve(id uint) (typ, username, secret, passphrase string, err error)
+}
+
+// GitCheckoutFunc clones or updates a repository into workDir at branch.
+type GitCheckoutFunc func(ctx context.Context, workDir, repoURL, authType, username, password, branch string, logFn func(string)) error
+
+// SetRepoCheckoutDeps wires repository + credential resolution for SyncAgentWorkspace.
+func (s *AgentService) SetRepoCheckoutDeps(repos RepositoryFinder, secrets SecretResolver) {
+	s.repos = repos
+	s.secrets = secrets
+}
+
+// SetGitCheckout overrides the git clone/pull implementation (tests).
+func (s *AgentService) SetGitCheckout(fn GitCheckoutFunc) {
+	s.gitCheckout = fn
+}
 
 func (s *AgentService) agentRoot(agentID uint) string {
 	return filepath.Join(s.workDir, "agents", fmt.Sprintf("agent-%d", agentID))
 }
 
+// enqueueWorkspaceInit starts async SyncAgentWorkspace for an agent.
+// Concurrent inits for the same agent are serialized by generation: only the
+// latest completion may write ready/failed status.
+func (s *AgentService) enqueueWorkspaceInit(agentID, userID uint) {
+	s.wsInitMu.Lock()
+	s.wsInitGen[agentID]++
+	gen := s.wsInitGen[agentID]
+	s.wsInitMu.Unlock()
+	go s.initAgentWorkspace(agentID, userID, gen)
+}
+
+func (s *AgentService) initAgentWorkspace(agentID, userID uint, gen uint64) {
+	agent, err := s.repo.FindAgent(agentID)
+	if err != nil {
+		return
+	}
+	decodeSkillIDs(agent)
+	if err := s.attachRepoBindings(agent); err != nil {
+		s.finishWorkspaceInit(agentID, gen, err)
+		return
+	}
+	_, _, err = s.SyncAgentWorkspace(agent, userID, true)
+	s.finishWorkspaceInit(agentID, gen, err)
+}
+
+func (s *AgentService) finishWorkspaceInit(agentID uint, gen uint64, syncErr error) {
+	s.wsInitMu.Lock()
+	current := s.wsInitGen[agentID]
+	s.wsInitMu.Unlock()
+	if gen != current {
+		return
+	}
+	fields := map[string]any{
+		"workspace_error":  "",
+		"workspace_status": model.WorkspaceReady,
+	}
+	if syncErr != nil {
+		fields["workspace_status"] = model.WorkspaceFailed
+		fields["workspace_error"] = syncErr.Error()
+		if s.logger != nil {
+			s.logger.Warn("agent workspace init failed",
+				zap.Uint("agent_id", agentID), zap.Error(syncErr))
+		}
+	}
+	_ = s.repo.UpdateAgentFields(agentID, fields)
+}
+
 // SyncAgentWorkspace ensures the persistent agent directory layout:
-// skills under .agents/skills, job-* softlinks to build-job workspaces, SYSTEM_PROMPT.md.
-// jobDirs are absolute paths of successfully linked build-job workspaces (for run logs).
-func (s *AgentService) SyncAgentWorkspace(agent *model.AiAgent, userID uint, isSuperAdmin bool) (digests map[uint]string, jobDirs []string, err error) {
+// skills under .agents/skills, repo-{id} checkouts for bindings, SYSTEM_PROMPT.md.
+// repoDirs are absolute paths of successfully synced repository checkouts (for run logs).
+func (s *AgentService) SyncAgentWorkspace(agent *model.AiAgent, userID uint, isSuperAdmin bool) (digests map[uint]string, repoDirs []string, err error) {
 	if agent == nil {
 		return nil, nil, fmt.Errorf("agent is nil")
 	}
 	decodeSkillIDs(agent)
-	decodeBuildJobIDs(agent)
+	if err := s.attachRepoBindings(agent); err != nil {
+		return nil, nil, err
+	}
 
 	root := s.agentRoot(agent.ID)
 	if err := os.MkdirAll(root, 0o755); err != nil {
@@ -49,7 +116,7 @@ func (s *AgentService) SyncAgentWorkspace(agent *model.AiAgent, userID uint, isS
 		}
 	}
 
-	jobDirs, err = s.rebuildJobLinks(root, agent.BuildJobIDs)
+	repoDirs, err = s.syncRepoCheckouts(root, agent.RepoBindings)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -60,63 +127,93 @@ func (s *AgentService) SyncAgentWorkspace(agent *model.AiAgent, userID uint, isS
 	if err := os.WriteFile(promptPath, []byte(agent.SystemPrompt), 0o644); err != nil {
 		return nil, nil, err
 	}
-	return digests, jobDirs, nil
+	return digests, repoDirs, nil
 }
 
-func (s *AgentService) rebuildJobLinks(agentRoot string, jobIDs []uint) ([]string, error) {
+func (s *AgentService) syncRepoCheckouts(agentRoot string, bindings []model.RepoBinding) ([]string, error) {
+	wanted := map[string]bool{}
+	for _, b := range bindings {
+		wanted[fmt.Sprintf("repo-%d", b.RepositoryID)] = true
+	}
+
 	entries, err := os.ReadDir(agentRoot)
 	if err != nil {
 		return nil, err
 	}
 	for _, e := range entries {
 		name := e.Name()
-		if !strings.HasPrefix(name, "job-") {
+		if strings.HasPrefix(name, "job-") {
+			_ = os.RemoveAll(filepath.Join(agentRoot, name))
 			continue
 		}
-		_ = os.Remove(filepath.Join(agentRoot, name))
+		if strings.HasPrefix(name, "repo-") && !wanted[name] {
+			_ = os.RemoveAll(filepath.Join(agentRoot, name))
+		}
 	}
-	if len(jobIDs) == 0 {
+
+	if len(bindings) == 0 {
 		return nil, nil
 	}
-	if s.jobs == nil {
-		if s.logger != nil {
-			s.logger.Warn("build job finder not configured; skipping agent job softlinks")
-		}
-		return nil, nil
+	if s.repos == nil {
+		return nil, fmt.Errorf("repository finder not configured")
 	}
-	var linked []string
-	for _, id := range jobIDs {
-		job, err := s.jobs.FindByID(id)
-		if err != nil {
-			if s.logger != nil {
-				s.logger.Warn("skip agent job softlink: job not found",
-					zap.Uint("build_job_id", id), zap.Error(err))
-			}
-			continue
-		}
-		target := filepath.Join(s.workDir, fmt.Sprintf("repo-%d", job.RepositoryID), fmt.Sprintf("job-%d", job.ID))
-		absTarget, err := filepath.Abs(target)
-		if err != nil {
-			absTarget = target
-		}
-		if _, err := os.Stat(absTarget); err != nil {
-			if s.logger != nil {
-				s.logger.Warn("skip agent job softlink: workspace missing",
-					zap.Uint("build_job_id", id), zap.String("target", absTarget), zap.Error(err))
-			}
-			continue
-		}
-		link := filepath.Join(agentRoot, fmt.Sprintf("job-%d", id))
-		if err := os.Symlink(absTarget, link); err != nil {
-			if s.logger != nil {
-				s.logger.Warn("failed to create agent job softlink",
-					zap.Uint("build_job_id", id), zap.String("link", link), zap.Error(err))
-			}
-			continue
-		}
-		linked = append(linked, absTarget)
+
+	checkout := s.gitCheckout
+	if checkout == nil {
+		checkout = engine.GitCloneOrPull
 	}
-	return linked, nil
+
+	var synced []string
+	for _, b := range bindings {
+		repo, err := s.repos.FindByID(b.RepositoryID)
+		if err != nil {
+			return nil, fmt.Errorf("仓库 %d 不存在: %w", b.RepositoryID, err)
+		}
+		authType, username, password, err := s.resolveRepoGitAuth(repo)
+		if err != nil {
+			return nil, fmt.Errorf("仓库 %d 凭证错误: %w", b.RepositoryID, err)
+		}
+		dest := filepath.Join(agentRoot, fmt.Sprintf("repo-%d", b.RepositoryID))
+		logFn := func(line string) {
+			if s.logger != nil {
+				s.logger.Info("agent git", zap.Uint("repository_id", b.RepositoryID), zap.String("line", line))
+			}
+		}
+		if err := checkout(context.Background(), dest, repo.RepoURL, authType, username, password, b.Branch, logFn); err != nil {
+			return nil, fmt.Errorf("同步仓库 %d (%s) 失败: %w", b.RepositoryID, b.Branch, err)
+		}
+		absDest, err := filepath.Abs(dest)
+		if err != nil {
+			absDest = dest
+		}
+		synced = append(synced, absDest)
+	}
+	return synced, nil
+}
+
+func (s *AgentService) resolveRepoGitAuth(repo *resourcemodel.Repository) (authType, username, password string, err error) {
+	switch strings.ToLower(strings.TrimSpace(repo.AuthType)) {
+	case "", "none":
+		return "none", "", "", nil
+	case "credential":
+		if repo.CredentialID == nil || *repo.CredentialID == 0 {
+			return "", "", "", fmt.Errorf("repository credential is empty")
+		}
+		if s.secrets == nil {
+			return "", "", "", fmt.Errorf("secret resolver not configured")
+		}
+		typ, user, secret, _, err := s.secrets.Resolve(*repo.CredentialID)
+		if err != nil {
+			return "", "", "", err
+		}
+		authType = "password"
+		if strings.EqualFold(typ, "token") || strings.EqualFold(typ, "api_key") {
+			authType = "token"
+		}
+		return authType, user, secret, nil
+	default:
+		return "none", "", "", nil
+	}
 }
 
 // appendNonStreamingOutputArgs prefers final/summary output for CLIs that support it.
@@ -132,8 +229,8 @@ func appendNonStreamingOutputArgs(cliKey string, args []string) []string {
 }
 
 // appendFullPermissionArgs enables each CLI's broad / bypass-sandbox mode so
-// job-* softlinks under the agent workspace can be followed. Scope is enforced
-// via prompt splicing (agentWorkspaceScopeHint), not per-directory allow lists.
+// nested repo-* checkouts under the agent workspace are fully usable. Scope is
+// enforced via prompt splicing (agentWorkspaceScopeHint), not per-directory allow lists.
 func appendFullPermissionArgs(cliKey string, args []string) []string {
 	switch cliKey {
 	case "claude_code", "opencode":
@@ -153,14 +250,14 @@ func appendFullPermissionArgs(cliKey string, args []string) []string {
 func agentWorkspaceScopeHint() string {
 	return "你的工作目录是 $BEDROCK_AGENT_WORKDIR（agents 下本智能体目录）。" +
 		"该目录是跨 Run 复用的持久工作区；不要删除其中已有文件，除非明确需要。" +
-		"只能在该目录内读写；通过 ./job-{id} 软链访问构建任务代码。" +
+		"只能在该目录内读写；通过 ./repo-{id} 访问绑定仓库代码。" +
 		"禁止访问该目录之外的任意路径。" +
-		"请将需交付的文件写入 $BEDROCK_AGENT_OUTPUT（本智能体固定产出目录，默认 ./output）。" +
+		"请将需交付的文件写入 $BEDROCK_AGENT_OUTPUT（本智能体固定产出目录，默认 ./output；跨 Run 保留，不清空）。" +
 		" Your working directory is $BEDROCK_AGENT_WORKDIR (this agent under agents/)." +
 		" This persistent workspace is reused across runs; do not delete existing files unless required." +
-		" Read/write only inside it; access bound build-job code via ./job-{id} softlinks." +
+		" Read/write only inside it; access bound repository code via ./repo-{id}." +
 		" Do not access any path outside this directory." +
-		" Write deliverable files into $BEDROCK_AGENT_OUTPUT (this agent's fixed output directory)."
+		" Write deliverable files into $BEDROCK_AGENT_OUTPUT (this agent's fixed output directory; preserved across runs)."
 }
 
 func (s *AgentService) removeAgentWorkspace(agentID uint) {
@@ -189,36 +286,55 @@ func resolveAgentOutputDir(agentRoot, outputDir string) (string, error) {
 	return out, nil
 }
 
-// prepareAgentOutputDir ensures the fixed output directory exists and clears
-// its previous contents so the next run can overwrite cleanly. The agent root
-// itself is never cleared.
+// prepareAgentOutputDir ensures the fixed output directory exists. Previous
+// contents are preserved across runs so agents can reuse caches and
+// incremental deliverables. The agent root itself is never cleared either.
 func prepareAgentOutputDir(outputDir string) error {
-	if err := os.RemoveAll(outputDir); err != nil {
-		return err
-	}
 	return os.MkdirAll(outputDir, 0o755)
 }
 
-func encodeBuildJobIDs(agent *model.AiAgent, ids []uint) error {
-	if ids == nil {
-		ids = []uint{}
+func (s *AgentService) attachRepoBindings(agent *model.AiAgent) error {
+	if agent == nil {
+		return nil
 	}
-	b, err := json.Marshal(ids)
+	rows, err := s.repo.ListAgentRepoBindings(agent.ID)
 	if err != nil {
 		return err
 	}
-	agent.BuildJobIDsJSON = string(b)
-	agent.BuildJobIDs = ids
+	bindings := make([]model.RepoBinding, 0, len(rows))
+	for _, row := range rows {
+		bindings = append(bindings, model.RepoBinding{
+			RepositoryID: row.RepositoryID, Branch: row.Branch,
+		})
+	}
+	agent.RepoBindings = bindings
 	return nil
 }
 
-func decodeBuildJobIDs(agent *model.AiAgent) {
-	if agent.BuildJobIDsJSON == "" {
-		agent.BuildJobIDs = []uint{}
-		return
+func (s *AgentService) normalizeRepoBindings(in []model.RepoBinding) ([]model.RepoBinding, error) {
+	if in == nil {
+		return []model.RepoBinding{}, nil
 	}
-	_ = json.Unmarshal([]byte(agent.BuildJobIDsJSON), &agent.BuildJobIDs)
-	if agent.BuildJobIDs == nil {
-		agent.BuildJobIDs = []uint{}
+	seen := map[uint]struct{}{}
+	out := make([]model.RepoBinding, 0, len(in))
+	for _, b := range in {
+		if b.RepositoryID == 0 {
+			return nil, fmt.Errorf("repository_id 不能为空")
+		}
+		if _, dup := seen[b.RepositoryID]; dup {
+			return nil, fmt.Errorf("同一智能体内仓库不能重复绑定")
+		}
+		seen[b.RepositoryID] = struct{}{}
+		branch := strings.TrimSpace(b.Branch)
+		if branch == "" {
+			branch = "main"
+		}
+		if s.repos != nil {
+			if _, err := s.repos.FindByID(b.RepositoryID); err != nil {
+				return nil, fmt.Errorf("仓库不存在: %d", b.RepositoryID)
+			}
+		}
+		out = append(out, model.RepoBinding{RepositoryID: b.RepositoryID, Branch: branch})
 	}
+	return out, nil
 }

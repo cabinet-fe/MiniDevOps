@@ -49,7 +49,7 @@ func TestAgentWorkspaceScopeHint(t *testing.T) {
 	for _, want := range []string{
 		"$BEDROCK_AGENT_WORKDIR",
 		"$BEDROCK_AGENT_OUTPUT",
-		"./job-{id}",
+		"./repo-{id}",
 		"固定产出目录",
 		"只能在该目录内读写",
 		"禁止访问该目录之外的任意路径",
