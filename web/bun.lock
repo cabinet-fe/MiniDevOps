@@ -6,13 +6,16 @@
       "name": "web",
       "dependencies": {
         "@cat-kit/core": "^1.1.8",
+        "@cat-kit/excel": "^1.0.0",
         "@cat-kit/fe": "^1.1.8",
         "@cat-kit/http": "^1.1.8",
         "@noble/ciphers": "^2.2.0",
+        "@veltra/compositions": "1.3.1",
         "@veltra/desktop": "^1.3.1",
+        "@veltra/directives": "1.3.1",
         "@veltra/icons": "^1.3.1",
         "@veltra/styles": "^1.3.1",
-        "@veltra/utils": "^1.3.1",
+        "@veltra/utils": "1.3.1",
         "@xterm/addon-fit": "^0.11.0",
         "@xterm/addon-search": "^0.16.0",
         "@xterm/addon-webgl": "^0.19.0",
@@ -379,17 +382,17 @@
 
     "@types/trusted-types": ["@types/trusted-types@2.0.7", "", {}, "sha512-ScaPdn1dQczgbl0QFTeTOmVHFULt394XJgOQNoyVhZ6r2vLnMLJfBPd53SB52T/3G36VI1/g2MZaX0cwDuXsfw=="],
 
-    "@veltra/compositions": ["@veltra/compositions@1.2.31", "", { "dependencies": { "@floating-ui/dom": "^1.7.6" }, "peerDependencies": { "@cat-kit/core": ">=1.1.8", "@cat-kit/fe": ">=1.1.8", "@veltra/utils": "1.2.31", "vue": ">=3.5.39" } }, "sha512-/qXBLasxR/v75+WcBA3/sxhyQkxdQCArYfF8XIBLjj5kLSRrLaYuQilNA3N1RiuocmmvHUOg3Vqta7bvkth6wQ=="],
+    "@veltra/compositions": ["@veltra/compositions@1.3.1", "", { "dependencies": { "@floating-ui/dom": "^1.7.6" }, "peerDependencies": { "@cat-kit/core": ">=1.1.8", "@cat-kit/fe": ">=1.1.8", "@veltra/utils": "1.3.1", "vue": ">=3.5.39" } }, "sha512-nPzsW3kZMBenMaEMvUIDmjc2OfoXUtrwrEkhu6QdBJCrmyRjfLEU5equPz5Zm5BO6I/hP/JR3JhD6XXJLzg41A=="],
 
     "@veltra/desktop": ["@veltra/desktop@1.3.1", "", { "dependencies": { "@embedpdf/core": "^2.14.4", "@embedpdf/engines": "^2.14.4", "@embedpdf/plugin-document-manager": "^2.14.4", "@embedpdf/plugin-render": "^2.14.4", "@embedpdf/plugin-scroll": "^2.14.4", "@embedpdf/plugin-viewport": "^2.14.4", "@embedpdf/plugin-zoom": "^2.14.4", "@lexical/history": "^0.45.0", "@lexical/html": "^0.45.0", "@lexical/link": "^0.45.0", "@lexical/list": "^0.45.0", "@lexical/rich-text": "^0.45.0", "@lexical/selection": "^0.45.0", "@lexical/utils": "^0.45.0", "@visactor/vtable": "^1.26.3", "docx-preview": "^0.3.7", "lexical": "^0.45.0" }, "peerDependencies": { "@cat-kit/core": ">=1.1.8", "@cat-kit/excel": ">=1.0.0", "@cat-kit/fe": "^1.1.8", "@veltra/compositions": "1.3.1", "@veltra/directives": "1.3.1", "@veltra/icons": "1.3.1", "@veltra/styles": "1.3.1", "@veltra/utils": "1.3.1", "vue": ">=3.5.39" } }, "sha512-5MZ2OLpf+HOfdwSbv5pgLK7EQj6/Si1TIQppZma10OzYeqELd6p0UKDt7tYg69h2WFFo79BfFJwjUrqPtTOsgg=="],
 
-    "@veltra/directives": ["@veltra/directives@1.2.31", "", { "peerDependencies": { "@veltra/styles": "1.2.31", "@veltra/utils": "1.2.31", "vue": ">=3.5.39" } }, "sha512-4N6B00Z9Q7l2ZYlAUsC5Y+LQIyQXqAcsQmB3iI+r2YZgYHrJTp3Idt0F+NTIS/tz/IHvqXNoakt35uT//TMXkA=="],
+    "@veltra/directives": ["@veltra/directives@1.3.1", "", { "peerDependencies": { "@veltra/styles": "1.3.1", "@veltra/utils": "1.3.1", "vue": ">=3.5.39" } }, "sha512-T1mp23SHN7V6oBf61b5YeHXn3GILZokzrQ+bX2aUsV3vlp4ngYvamatajolaEon28hozyDacC6tdgXbzCQdXcA=="],
 
     "@veltra/icons": ["@veltra/icons@1.3.1", "", { "peerDependencies": { "vue": ">=3.5.39" } }, "sha512-d3uI1DpeARit0irS9yAW6yfQt9MySFrTQaBVM5pZh+yWPZXVMY3zLpVw8RLWxs75HiwHewVAmoNNPSlWVJWclQ=="],
 
     "@veltra/styles": ["@veltra/styles@1.3.1", "", { "peerDependencies": { "@cat-kit/core": ">=1.1.8", "@veltra/compositions": "1.3.1", "@veltra/utils": "1.3.1", "vue": ">=3.5.39" } }, "sha512-d9PXtxOdl0hIcwqHiIOh1Jc8/qDqpdsrTEyg/NAj9tqiS+Z/+ohYPA5/oiGsNKTQR+I4nxuPaQ41PpJMpN7GMQ=="],
 
-    "@veltra/utils": ["@veltra/utils@1.3.2", "", { "peerDependencies": { "@cat-kit/core": ">=1.1.8", "vue": ">=3.5.39" } }, "sha512-gFvhpxQOx0pt/p/MTB8GPubAe2JB8iX9P0+xcCc7ebrlIUqsWHkuUMvKMPEr3G4uZOYUPcZ6a4WO1i/8IGsSOQ=="],
+    "@veltra/utils": ["@veltra/utils@1.3.1", "", { "peerDependencies": { "@cat-kit/core": ">=1.1.8", "vue": ">=3.5.39" } }, "sha512-64Ds8SRCNcIKeQMFsNwVCe9i+g6w6BnHcdTiLyj2YE7A8zh8GpbjP5qc8nYeKbVG4AH5+bK498B5Mfe2/5ovmg=="],
 
     "@veltra/vite": ["@veltra/vite@1.2.34", "", { "peerDependencies": { "@veltra/desktop": "1.2.34", "unplugin-vue-components": ">=32.0.0" } }, "sha512-iOHSs8R7ByscNMqKLFlf/92Ys97CitSkTdfY9CTimwxul8JfDTCjhRDBAzOzAVLYCWtBwme2JiQL0Obd1++jUg=="],
 
