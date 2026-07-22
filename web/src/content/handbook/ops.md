@@ -31,21 +31,21 @@ curl -fsS http://127.0.0.1:8080/api/v1/health
 
 ## 2. 配置参考（config.yaml）
 
-| 配置项 | 默认值 | 说明 |
-| --- | --- | --- |
-| `server.port` / `server.host` | `8080` / `0.0.0.0` | HTTP 监听地址 |
-| `database.driver` | `sqlite` | `sqlite` / `postgres` / `mysql` |
-| `database.path` | `./data/bedrock.sqlite` | SQLite 文件路径 |
-| `database.host` / `port` / `name` / `user` / `password` / `ssl_mode` | — | Postgres / MySQL 连接参数 |
-| `jwt.secret` | `change-me-in-production` | **生产必改**；JWT 签名密钥 |
-| `jwt.access_ttl` / `jwt.refresh_ttl` | `2h` / `168h` | 访问 / 刷新令牌有效期 |
-| `build.max_concurrent` | `3` | 构建并发上限 |
-| `build.workspace_dir` / `artifact_dir` / `log_dir` / `cache_dir` | `./data/*` | 工作区 / 制品 / 日志 / 缓存目录 |
-| `storage.root` | `./data/storage` | 对象存储根目录 |
-| `storage.attachment_max_bytes` | `20971520`（20MB） | 附件上传上限 |
-| `storage.doc_import_max_bytes` | `104857600`（100MB） | 文档导入上限 |
-| `encryption.key` | 示例值 | **生产必改**；64 hex（32 字节），须与前端注入密钥一致 |
-| `admin.username` / `admin.password` | `admin` / `change-me-on-first-login` | 首启种子超管，**首次登录后立即修改** |
+| 配置项                                                               | 默认值                               | 说明                                                  |
+| -------------------------------------------------------------------- | ------------------------------------ | ----------------------------------------------------- |
+| `server.port` / `server.host`                                        | `8080` / `0.0.0.0`                   | HTTP 监听地址                                         |
+| `database.driver`                                                    | `sqlite`                             | `sqlite` / `postgres` / `mysql`                       |
+| `database.path`                                                      | `./data/bedrock.sqlite`              | SQLite 文件路径                                       |
+| `database.host` / `port` / `name` / `user` / `password` / `ssl_mode` | —                                    | Postgres / MySQL 连接参数                             |
+| `jwt.secret`                                                         | `change-me-in-production`            | **生产必改**；JWT 签名密钥                            |
+| `jwt.access_ttl` / `jwt.refresh_ttl`                                 | `2h` / `168h`                        | 访问 / 刷新令牌有效期                                 |
+| `build.max_concurrent`                                               | `3`                                  | 构建并发上限                                          |
+| `build.workspace_dir` / `artifact_dir` / `log_dir` / `cache_dir`     | `./data/*`                           | 工作区 / 制品 / 日志 / 缓存目录                       |
+| `storage.root`                                                       | `./data/storage`                     | 对象存储根目录                                        |
+| `storage.attachment_max_bytes`                                       | `20971520`（20MB）                   | 附件上传上限                                          |
+| `storage.doc_import_max_bytes`                                       | `104857600`（100MB）                 | 文档导入上限                                          |
+| `encryption.key`                                                     | 示例值                               | **生产必改**；64 hex（32 字节），须与前端注入密钥一致 |
+| `admin.username` / `admin.password`                                  | `admin` / `change-me-on-first-login` | 首启种子超管，**首次登录后立即修改**                  |
 
 ---
 
@@ -73,11 +73,11 @@ make smoke-three-db
 
 平台不提供跨引擎统一物理备份，按驱动选择官方方案：
 
-| 驱动 | 建议 |
-| --- | --- |
-| SQLite | 停写后复制 `database.path` 文件（或使用 SQLite 备份命令） |
-| Postgres | `pg_dump` / PITR 等官方工具 |
-| MySQL | `mysqldump` / 官方备份方案 |
+| 驱动     | 建议                                                      |
+| -------- | --------------------------------------------------------- |
+| SQLite   | 停写后复制 `database.path` 文件（或使用 SQLite 备份命令） |
+| Postgres | `pg_dump` / PITR 等官方工具                               |
+| MySQL    | `mysqldump` / 官方备份方案                                |
 
 除数据库外，以下目录需按业务 RPO 一并纳入备份：
 
@@ -135,10 +135,10 @@ Release 将 `web/dist` 拷入 `cmd/server/dist` 后 `go build` embed；回滚步
 
 ## 8. 日常排障
 
-| 现象 | 排查 |
-| --- | --- |
-| 无法启动 | 检查数据库连通性配置（错误配置会拒绝启动）；查看启动日志中的 migration 错误 |
-| 升级后拒绝启动 | 多为旧 Agent 数据清理失败（见 5.1）；按错误提示修正路径/权限，勿跳过 migration |
-| 接口探活 | `curl -fsS http://host:8080/api/v1/health` |
-| 构建 / 运行日志 | 页面内实时日志（WebSocket）；落盘日志见 `build.log_dir` |
-| 登录问题 | 确认种子超管未被改密；`jwt.secret` 变更会使全部令牌失效，需重新登录 |
+| 现象            | 排查                                                                           |
+| --------------- | ------------------------------------------------------------------------------ |
+| 无法启动        | 检查数据库连通性配置（错误配置会拒绝启动）；查看启动日志中的 migration 错误    |
+| 升级后拒绝启动  | 多为旧 Agent 数据清理失败（见 5.1）；按错误提示修正路径/权限，勿跳过 migration |
+| 接口探活        | `curl -fsS http://host:8080/api/v1/health`                                     |
+| 构建 / 运行日志 | 页面内实时日志（WebSocket）；落盘日志见 `build.log_dir`                        |
+| 登录问题        | 确认种子超管未被改密；`jwt.secret` 变更会使全部令牌失效，需重新登录            |

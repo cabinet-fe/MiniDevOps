@@ -245,7 +245,10 @@ function onNavClick(item: NavItem) {
 }
 
 .app-main {
-  height: 100%;
+  /* 不能用 height: 100%：那会占满 .app-body 全高并顶出 rail 的高度，
+     导致页面底部被 overflow:hidden 裁掉一截 */
+  flex: 1;
+  min-height: 0;
 }
 
 .app-page {
