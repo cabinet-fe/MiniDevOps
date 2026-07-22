@@ -10,27 +10,44 @@ permissions:
   contents: write
 
 jobs:
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - name: Ban supported 1.x→2.0 data migration paths
+        run: bash scripts/check-ga-guardrails.sh
+      - name: Ensure embed dist exists
+        run: |
+          mkdir -p cmd/server/dist
+          if [ ! -f cmd/server/dist/index.html ]; then
+            printf '%s\n' '<!doctype html><html><head></head><body>ci placeholder</body></html>' > cmd/server/dist/index.html
+          fi
+      - name: Go test
+        run: go test ./...
+
   frontend:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
       - uses: oven-sh/setup-bun@v2.2.0
-      - name: Install vp
-        run: bun add -g vite-plus
       - name: Build web (FRONTEND_DIR=web)
+        working-directory: web
         env:
-          FRONTEND_DIR: web
+          VITE_APP_VERSION: ${{ github.ref_name }}
         run: |
-          cd web
-          vp install
-          vp build
+          bun install
+          bun run check
+          bun run build
       - uses: actions/upload-artifact@v7
         with:
           name: frontend-dist
           path: web/dist
 
   binaries:
-    needs: frontend
+    needs: [gate, frontend]
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -53,6 +70,8 @@ jobs:
         with:
           name: frontend-dist
           path: cmd/server/dist
+      - name: Verify embedded frontend
+        run: test -f cmd/server/dist/index.html
       - name: Build Server + Deploy Agent
         env:
           CGO_ENABLED: "0"
@@ -84,10 +103,29 @@ jobs:
         with:
           pattern: bedrock-*
           merge-multiple: true
+      - name: Aggregate SHA256SUMS
+        run: |
+          sha256sum \
+            bedrock-linux-amd64 \
+            bedrock-agent-linux-amd64 \
+            bedrock-linux-arm64 \
+            bedrock-agent-linux-arm64 \
+            bedrock-windows-amd64.exe \
+            bedrock-agent-windows-amd64.exe \
+            > SHA256SUMS
       - name: Create release
         uses: softprops/action-gh-release@v3.0.1
         with:
           generate_release_notes: true
+          fail_on_unmatched_files: true
+          overwrite_files: true
+          body: |
+            ## 重要说明
+
+            - **不提供** 1.x → 2.0 数据迁移；请全新安装或自备备份策略。
+            - 产物前缀为 `bedrock-*`（不再使用 `buildflow-*`）。
+            - Server 与 Deploy Agent 须使用**同一版本**。
+            - 校验：各平台 `*.sha256`，或汇总文件 `SHA256SUMS`。
           files: |
             bedrock-*
-          overwrite_files: true
+            SHA256SUMS
