@@ -58,30 +58,33 @@ const STATUS_TAG: Record<TokenStatus, "success" | "warning" | "danger"> = {
 };
 
 const columns = defineProTableColumns([
-  { key: "id", name: "ID", width: 70 },
-  { key: "name", name: "名称", minWidth: 120 },
-  { key: "token_prefix", name: "前缀", width: 140 },
-  { key: "scopes", name: "Scope", minWidth: 200 },
-  { key: "status", name: "状态", width: 100 },
+  { key: "id", name: "ID" },
+  { key: "name", name: "名称" },
+  { key: "token_prefix", name: "前缀" },
+  { key: "scopes", name: "Scope" },
+  { key: "status", name: "状态", width: 100, align: "center" },
   {
     key: "expires_at",
     name: "过期时间",
-    minWidth: 160,
+    width: 170,
+    align: "center",
     render: ({ val }) => formatDateTime(val) || "永不过期",
   },
   {
     key: "last_used_at",
     name: "最近使用",
-    minWidth: 160,
+    width: 170,
+    align: "center",
     render: ({ val }) => formatDateTime(val) || "—",
   },
   {
     key: "created_at",
     name: "创建时间",
-    minWidth: 160,
+    width: 170,
+    align: "center",
     render: ({ val }) => formatDateTime(val),
   },
-  { key: "action", name: "操作", width: 100, align: "center", fixed: "right" },
+  { key: "action", name: "操作", width: 120, align: "center", fixed: "right" },
 ]);
 
 function tokenStatus(row: PersonalAccessToken): TokenStatus {

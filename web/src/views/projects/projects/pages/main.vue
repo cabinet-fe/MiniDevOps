@@ -13,11 +13,15 @@ import ProTable, { defineProTableColumns } from "@/components/pro-table";
 import { usePermission } from "@/composables/use-permission";
 import { formatDateTime } from "@/lib/datetime";
 
+import MembersPanel from "../../components/members-panel.vue";
+
 const router = useRouter();
 const { hasPermission } = usePermission();
 const tableRef = useTemplateRef("table");
 const query = reactive({ keyword: "", status: "" });
 const dialogOpen = ref(false);
+const membersOpen = ref(false);
+const membersProject = ref<ProductProject | null>(null);
 const editing = ref<ProductProject | null>(null);
 const form = reactive({
   name: "",
@@ -29,10 +33,17 @@ const form = reactive({
 const columns = defineProTableColumns([
   { key: "name", name: "项目", sortable: true },
   { key: "slug", name: "标识" },
-  { key: "status", name: "状态", width: 100 },
+  { key: "status", name: "状态", width: 100, align: "center" },
   { key: "tags", name: "标签" },
-  { key: "updated_at", name: "更新时间", sortable: true, render: ({ val }) => formatDateTime(val) },
-  { key: "action", name: "操作", width: 220, align: "center", fixed: "right" },
+  {
+    key: "updated_at",
+    name: "更新时间",
+    width: 170,
+    align: "center",
+    sortable: true,
+    render: ({ val }) => formatDateTime(val),
+  },
+  { key: "action", name: "操作", width: 380, align: "center", fixed: "right" },
 ]);
 
 function openCreate() {
@@ -44,6 +55,11 @@ function openEdit(project: ProductProject) {
   editing.value = project;
   o(form).extend(project);
   dialogOpen.value = true;
+}
+
+function openMembers(project: ProductProject) {
+  membersProject.value = project;
+  membersOpen.value = true;
 }
 
 async function save() {
@@ -95,6 +111,10 @@ function splitTags(raw?: string | null): string[] {
     .split(/[,，]/)
     .map((t) => t.trim())
     .filter(Boolean);
+}
+
+async function onOwnerTransferred() {
+  await tableRef.value?.reload();
 }
 </script>
 
@@ -150,8 +170,9 @@ function splitTags(raw?: string | null): string[] {
         </span>
       </template>
       <template #column:action="{ rowData }">
-        <u-action-group :max="4">
+        <u-action-group :max="5">
           <u-action @run="openProject(rowData as ProductProject)">进入</u-action>
+          <u-action @run="openMembers(rowData as ProductProject)">成员</u-action>
           <u-action
             v-if="(rowData as ProductProject).permissions?.update"
             @run="openEdit(rowData as ProductProject)"
@@ -198,6 +219,22 @@ function splitTags(raw?: string | null): string[] {
       <u-input label="标签" field="tags" placeholder="逗号分隔" />
       <u-textarea label="描述" field="description" :rows="4" />
     </FormDialog>
+
+    <u-dialog
+      v-model="membersOpen"
+      :title="membersProject ? `项目成员 · ${membersProject.name}` : '项目成员'"
+      style="width: 800px"
+    >
+      <MembersPanel
+        v-if="membersOpen && membersProject"
+        :project="membersProject"
+        height="420px"
+        @owner-transferred="onOwnerTransferred"
+      />
+      <template #footer="{ close }">
+        <u-button text @click="close()">关闭</u-button>
+      </template>
+    </u-dialog>
   </div>
 </template>
 

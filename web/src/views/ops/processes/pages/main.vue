@@ -30,22 +30,23 @@ const query = reactive({
 });
 
 const columns = defineProTableColumns([
-  { key: "pid", name: "PID", width: 90 },
+  { key: "pid", name: "PID" },
   { key: "name", name: "名称", sortable: true },
-  { key: "cpu_percent", name: "CPU", width: 90, sortable: true },
-  { key: "memory_bytes", name: "内存", width: 100, sortable: true },
-  { key: "username", name: "用户", width: 100 },
-  { key: "num_threads", name: "线程", width: 80 },
-  { key: "status", name: "状态", width: 80 },
+  { key: "cpu_percent", name: "CPU", sortable: true },
+  { key: "memory_bytes", name: "内存", sortable: true },
+  { key: "username", name: "用户" },
+  { key: "num_threads", name: "线程" },
+  { key: "status", name: "状态", width: 80, align: "center" },
   {
     key: "start_time",
     name: "启动时间",
     width: 170,
+    align: "center",
     render: ({ val }) => (val ? formatDateTime(val) : "—"),
   },
-  { key: "ports", name: "监听端口", width: 120 },
+  { key: "ports", name: "监听端口" },
   { key: "cmdline", name: "命令行" },
-  { key: "action", name: "操作", width: 90, align: "center", fixed: "right" },
+  { key: "action", name: "操作", width: 120, align: "center", fixed: "right" },
 ]);
 
 function formatBytes(value: number): string {

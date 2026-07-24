@@ -90,7 +90,7 @@ function openRun(run: DashboardRecentBuildRun) {
           <li v-for="run in data.recent" :key="run.id">
             <button type="button" class="recent__row" @click="openRun(run)">
               <span class="recent__num">#{{ run.build_number }}</span>
-              <u-tag size="small" dark :type="tagType(run.status, JOB_STATUS_TAG)">
+              <u-tag size="small" :type="tagType(run.status, JOB_STATUS_TAG)">
                 {{ statusLabel(run.status) }}
               </u-tag>
               <span class="recent__branch">{{ run.branch || "默认分支" }}</span>

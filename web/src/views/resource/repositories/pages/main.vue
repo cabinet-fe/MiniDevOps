@@ -43,13 +43,13 @@ const form = reactive({
 });
 
 const columns = defineProTableColumns([
-  { key: "id", name: "ID", width: 80 },
+  { key: "id", name: "ID" },
   { key: "name", name: "名称" },
   { key: "repo_url", name: "URL" },
-  { key: "auth_type", name: "认证", width: 100 },
-  { key: "branches", name: "分支数", width: 90 },
-  { key: "branches_synced_at", name: "分支同步", width: 170 },
-  { key: "action", name: "操作", width: 240, align: "center", fixed: "right" },
+  { key: "auth_type", name: "认证", width: 100, align: "center" },
+  { key: "branches", name: "分支数" },
+  { key: "branches_synced_at", name: "分支同步", width: 170, align: "center" },
+  { key: "action", name: "操作", width: 360, align: "center", fixed: "right" },
 ]);
 
 onMounted(async () => {

@@ -5,65 +5,43 @@ import { computed, ref, watch } from "vue";
 import { message } from "@veltra/desktop";
 import { useRoute, useRouter } from "vue-router";
 
-import { getProject, listProjectMembers } from "@/api/projects";
-import type { ProductProject, ProjectMember, ProjectRole } from "@/api/types";
+import { getProject } from "@/api/projects";
+import type { ProductProject } from "@/api/types";
 import { usePermission } from "@/composables/use-permission";
-import { useAuthStore } from "@/stores/auth";
 
 import DocsPanel from "../../components/docs-panel.vue";
-import MembersPanel from "../../components/members-panel.vue";
 import RequirementsPanel from "../../components/requirements-panel.vue";
 
 const route = useRoute();
 const router = useRouter();
 const { hasPermission } = usePermission();
-const auth = useAuthStore();
 const project = ref<ProductProject | null>(null);
-const members = ref<ProjectMember[]>([]);
 const tab = ref("requirements");
 
 const projectID = computed(() => Number(route.params.id));
-const projectRole = computed<ProjectRole | undefined>(
-  () => members.value.find((member) => member.user_id === auth.user?.id)?.role,
-);
+const projectRole = computed(() => project.value?.my_role);
 const canManageAll = computed(() => hasPermission("project_projects:manage_all"));
 const tabs = computed(
   () =>
     [
       hasPermission("project_requirements:view") ? { key: "requirements", name: "需求" } : null,
       hasPermission("project_docs:view") ? { key: "docs", name: "接口文档" } : null,
-      { key: "members", name: "成员" },
     ].filter(Boolean) as { key: string; name: string }[],
 );
 
 function resolveTab(preferred?: unknown): string {
   const key = typeof preferred === "string" ? preferred : "";
   if (key && tabs.value.some((item) => item.key === key)) return key;
-  return tabs.value[0]?.key ?? "members";
-}
-
-async function loadMembership() {
-  if (!project.value) {
-    members.value = [];
-    return;
-  }
-  try {
-    members.value = await listProjectMembers(project.value.id);
-  } catch (error) {
-    members.value = [];
-    message.error(error instanceof Error ? error.message : "成员权限加载失败");
-  }
+  return tabs.value[0]?.key ?? "";
 }
 
 async function load() {
   if (!Number.isSafeInteger(projectID.value) || projectID.value <= 0) {
     project.value = null;
-    members.value = [];
     return;
   }
   try {
     project.value = await getProject(projectID.value);
-    await loadMembership();
     tab.value = resolveTab(route.query.tab);
   } catch (error) {
     project.value = null;
@@ -82,36 +60,32 @@ watch(
 );
 
 watch(tab, (next) => {
-  if (route.query.tab === next) return;
+  if (!next || route.query.tab === next) return;
   void router.replace({ query: { ...route.query, tab: next } });
 });
 </script>
 
 <template>
-  <div>
+  <div class="project-detail">
     <div class="page-toolbar">
-      <u-button text @click="router.push({ name: 'projects' })">返回项目列表</u-button>
+      <u-button plain @click="router.push({ name: 'projects' })">返回项目列表</u-button>
     </div>
 
     <template v-if="project">
       <u-tabs v-model="tab" :items="tabs" />
       <RequirementsPanel
         v-if="tab === 'requirements' && hasPermission('project_requirements:view')"
+        class="project-detail__panel"
         :project="project"
         :project-role="projectRole"
         :manage-all="canManageAll"
       />
       <DocsPanel
         v-else-if="tab === 'docs' && hasPermission('project_docs:view')"
+        class="project-detail__panel"
         :project="project"
         :project-role="projectRole"
         :manage-all="canManageAll"
-      />
-      <MembersPanel
-        v-else-if="tab === 'members'"
-        :project="project"
-        @members-changed="loadMembership"
-        @owner-transferred="load"
       />
     </template>
     <u-empty v-else text="项目不存在或无权访问" />
@@ -119,8 +93,22 @@ watch(tab, (next) => {
 </template>
 
 <style scoped>
+.project-detail {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  gap: 12px;
+}
+
 .page-toolbar {
   display: flex;
+  flex-shrink: 0;
   align-items: center;
+}
+
+.project-detail__panel {
+  flex: 1;
+  min-height: 0;
 }
 </style>

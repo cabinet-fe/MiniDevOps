@@ -16,17 +16,27 @@ const tabs = [
 <template>
   <u-tabs v-model="tab" :items="tabs" class="resources-page">
     <template #resources>
-      <ResourcesPanel />
+      <ResourcesPanel class="resources-page__panel" />
     </template>
 
     <template #groups>
-      <MenuGroupsPanel />
+      <MenuGroupsPanel class="resources-page__panel" />
     </template>
   </u-tabs>
 </template>
 
 <style scoped lang="scss">
 .resources-page {
+  height: 100%;
+  min-height: 0;
+
+  /* UTabs 单根插槽不会包 .u-tabs__content，需自行占满剩余高度 */
+  :deep(.u-scroll__content) {
+    height: 100%;
+  }
+}
+
+.resources-page__panel {
   height: 100%;
 }
 </style>

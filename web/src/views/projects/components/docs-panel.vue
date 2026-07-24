@@ -1,14 +1,11 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from "vue";
-import { message } from "@veltra/desktop";
-import MarkdownRender from "markstream-vue";
-import "markstream-vue/index.css";
+import { computed, reactive, ref, watch } from "vue";
+import { message, type TabItem } from "@veltra/desktop";
+import { Books, Folder } from "@veltra/icons/normal";
 
-import { listAgents } from "@/api/ai";
 import {
   createDocNode,
   deleteDocNode,
-  generateDocs,
   getDocDiff,
   getDocNode,
   importDocsZIP,
@@ -20,6 +17,7 @@ import {
 } from "@/api/projects";
 import type { ApiDocDiff, ApiDocNode, ProductProject, ProjectRole } from "@/api/types";
 import FormDialog from "@/components/form-dialog";
+import MarkdownViewer from "@/components/markdown-viewer";
 import { usePermission } from "@/composables/use-permission";
 
 const props = defineProps<{
@@ -33,16 +31,16 @@ const tree = ref<ApiDocNode[]>([]);
 const selectedID = ref<number>();
 const selected = ref<ApiDocNode | null>(null);
 const draftContent = ref("");
-const previewMode = ref<"draft" | "published">("draft");
+const docPane = ref("preview");
 const diff = ref<ApiDocDiff | null>(null);
 const nodeDialogOpen = ref(false);
 const moveDialogOpen = ref(false);
 const creatingKind = ref<"dir" | "doc">("doc");
+const createParentID = ref<number | null>(null);
+/** 当前正在移动的节点（来自树节点操作，非右侧内容区） */
+const movingNode = ref<ApiDocNode | null>(null);
 const nodeForm = reactive({ name: "" });
 const moveForm = reactive({ parent_id: undefined as number | undefined, sort_order: 0 });
-const generateAgentID = ref<number>();
-const agentOptions = ref<{ label: string; value: number }[]>([]);
-const generating = ref(false);
 
 const canEditProjectContent = computed(
   () =>
@@ -63,14 +61,40 @@ const canUpdate = computed(
 const canDelete = computed(
   () => hasPermission("project_docs:delete") && canAdminProjectContent.value,
 );
-const canGenerate = computed(
-  () => hasPermission("project_docs:execute") && canEditProjectContent.value,
+const docPaneTabs = computed<TabItem[]>(() =>
+  canUpdate.value
+    ? [
+        { key: "preview", name: "预览" },
+        { key: "edit", name: "编辑" },
+      ]
+    : [{ key: "preview", name: "预览" }],
 );
-const renderedContent = computed(() =>
-  previewMode.value === "published"
-    ? (selected.value?.published_content ?? "")
-    : draftContent.value,
+const renderedContent = computed(
+  () => draftContent.value || selected.value?.published_content || "",
 );
+/** 移动弹框可选父目录：仅目录节点 */
+const moveDirTree = computed(() => filterDirNodes(tree.value));
+/** 不可选为父目录的节点（自身及其子孙） */
+const moveBlockedIds = computed(() => {
+  const ids = new Set<number>();
+  if (movingNode.value) collectNodeIds(movingNode.value, ids);
+  return ids;
+});
+
+function filterDirNodes(nodes: ApiDocNode[]): ApiDocNode[] {
+  return nodes
+    .filter((n) => n.kind === "dir")
+    .map((n) => ({ ...n, children: filterDirNodes(n.children ?? []) }));
+}
+
+function collectNodeIds(node: ApiDocNode, out: Set<number>) {
+  out.add(node.id);
+  for (const child of node.children ?? []) collectNodeIds(child, out);
+}
+
+function isMoveTargetDisabled(item: Record<string, any>) {
+  return moveBlockedIds.value.has(item.id as number);
+}
 
 async function loadTree() {
   try {
@@ -92,17 +116,23 @@ async function selectNode(id?: number) {
     const node = await getDocNode(props.project.id, id);
     selected.value = node;
     draftContent.value = node.draft_content ?? "";
-    previewMode.value = node.draft_updated_at ? "draft" : "published";
+    // 默认预览；编辑需用户主动切换
+    docPane.value = "preview";
     if (node.kind === "doc") diff.value = await getDocDiff(props.project.id, node.id);
   } catch (error) {
     message.error(error instanceof Error ? error.message : "读取文档失败");
   }
 }
 
-function openCreate(kind: "dir" | "doc") {
+function openCreate(kind: "dir" | "doc", parentID?: number | null) {
   creatingKind.value = kind;
+  createParentID.value = parentID !== undefined ? parentID : selectedDirectoryID();
   nodeForm.name = "";
   nodeDialogOpen.value = true;
+}
+
+function openCreateDoc(parentID: number) {
+  openCreate("doc", parentID);
 }
 
 function selectedDirectoryID() {
@@ -115,7 +145,7 @@ async function createNode() {
     const node = await createDocNode(props.project.id, {
       kind: creatingKind.value,
       name: nodeForm.name,
-      parent_id: selectedDirectoryID(),
+      parent_id: createParentID.value,
     });
     nodeDialogOpen.value = false;
     await loadTree();
@@ -135,50 +165,29 @@ async function saveDraft() {
     selected.value = node;
     diff.value = await getDocDiff(props.project.id, node.id);
     await loadTree();
-    message.success("草稿已保存");
+    message.success("已保存");
   } catch (error) {
-    message.error(error instanceof Error ? error.message : "草稿保存失败");
+    message.error(error instanceof Error ? error.message : "保存失败");
   }
 }
 
-async function runGenerate() {
+async function saveAndPublish() {
   if (!selected.value || selected.value.kind !== "doc") return;
-  if (!generateAgentID.value) {
-    message.error("请选择智能体");
-    return;
-  }
-  generating.value = true;
+  if (!window.confirm(`确认保存并发布文档「${selected.value.name}」？`)) return;
   try {
-    const result = await generateDocs(props.project.id, {
-      agent_id: generateAgentID.value,
-      node_id: selected.value.id,
+    const saved = await updateDocNode(props.project.id, selected.value.id, {
+      draft_content: draftContent.value,
     });
-    message.success(`已创建 AgentRun #${result.agent_run_id}；成功后仅写入草稿，请人工发布`);
-  } catch (error) {
-    message.error(error instanceof Error ? error.message : "生成失败");
-  } finally {
-    generating.value = false;
-  }
-}
-
-async function publish() {
-  if (!selected.value || selected.value.kind !== "doc") return;
-  if (!window.confirm(`确认发布文档「${selected.value.name}」的草稿？`)) return;
-  try {
-    const node = await publishDocNode(
-      props.project.id,
-      selected.value.id,
-      selected.value.content_version,
-    );
+    const node = await publishDocNode(props.project.id, saved.id, saved.content_version);
     selected.value = node;
     draftContent.value = "";
     diff.value = await getDocDiff(props.project.id, node.id);
     await loadTree();
-    message.success("文档已发布");
+    message.success("文档已保存并发布");
   } catch (error) {
-    const text = error instanceof Error ? error.message : "发布失败";
+    const text = error instanceof Error ? error.message : "保存并发布失败";
     message.error(text.includes("版本冲突") ? "版本冲突：请刷新文档后重试" : text);
-    if (text.includes("版本冲突")) await selectNode(selected.value.id);
+    if (text.includes("版本冲突") && selected.value) await selectNode(selected.value.id);
   }
 }
 
@@ -194,23 +203,25 @@ async function removeNode() {
   }
 }
 
-function openMove() {
-  if (!selected.value) return;
-  moveForm.parent_id = selected.value.parent_id ?? undefined;
-  moveForm.sort_order = selected.value.sort_order;
+function openMove(node: ApiDocNode) {
+  movingNode.value = node;
+  moveForm.parent_id = node.parent_id ?? undefined;
+  moveForm.sort_order = node.sort_order;
   moveDialogOpen.value = true;
 }
 
 async function move() {
-  if (!selected.value) return;
+  if (!movingNode.value) return;
   try {
-    await moveDocNode(props.project.id, selected.value.id, {
+    const nodeID = movingNode.value.id;
+    await moveDocNode(props.project.id, nodeID, {
       parent_id: moveForm.parent_id ?? null,
       sort_order: moveForm.sort_order,
     });
     moveDialogOpen.value = false;
+    movingNode.value = null;
     await loadTree();
-    await selectNode(selected.value.id);
+    await selectNode(nodeID);
     message.success("节点已移动");
   } catch (error) {
     message.error(error instanceof Error ? error.message : "移动失败");
@@ -253,14 +264,8 @@ watch(
   { immediate: true },
 );
 
-onMounted(() => {
-  void listAgents({ page: 1, page_size: 100 })
-    .then((page) => {
-      agentOptions.value = (page.items ?? []).map((a) => ({ label: a.name, value: a.id }));
-    })
-    .catch(() => {
-      /* AI menu may be unavailable */
-    });
+watch(canUpdate, (ok) => {
+  if (!ok) docPane.value = "preview";
 });
 </script>
 
@@ -269,13 +274,11 @@ onMounted(() => {
     <aside class="tree-panel">
       <div class="tree-head">
         <strong>文档树</strong>
-        <u-action-group v-if="canCreate" :max="4">
-          <u-action @run="openCreate('dir')">新建目录</u-action>
-          <u-action @run="openCreate('doc')">新建文档</u-action>
-        </u-action-group>
+        <u-action v-if="canCreate" @run="openCreate('dir')">新建目录</u-action>
       </div>
       <u-tree
         v-model:selected="selectedID"
+        class="doc-tree"
         :data="tree"
         label-key="name"
         value-key="id"
@@ -283,7 +286,29 @@ onMounted(() => {
         selectable
         expand-all
         @update:selected="selectNode"
-      />
+      >
+        <template #default="{ data }">
+          <div class="tree-node" :class="data.kind === 'dir' ? 'is-dir' : 'is-doc'">
+            <span class="tree-node__main">
+              <u-icon class="tree-node__icon" :size="14">
+                <Folder v-if="data.kind === 'dir'" />
+                <Books v-else />
+              </u-icon>
+              <span class="tree-node__name">{{ data.name }}</span>
+            </span>
+            <span
+              v-if="canUpdate || (canCreate && data.kind === 'dir')"
+              class="tree-node__actions"
+              @click.stop
+            >
+              <u-action v-if="canUpdate" @run="openMove(data as ApiDocNode)">移动</u-action>
+              <u-action v-if="canCreate && data.kind === 'dir'" @run="openCreateDoc(data.id)">
+                新建文档
+              </u-action>
+            </span>
+          </div>
+        </template>
+      </u-tree>
       <div v-if="canCreate" class="uploads">
         <u-file-picker accept=".md,text/markdown" @pick="uploadMarkdownFile" />
         <u-file-picker accept=".zip,application/zip" @pick="importZIPFile" />
@@ -303,43 +328,40 @@ onMounted(() => {
               <span v-if="selected.kind === 'doc'">已发布版本 {{ selected.content_version }}</span>
             </p>
           </div>
-          <u-action-group :max="4">
-            <u-action v-if="canUpdate" @run="openMove">移动</u-action>
-            <u-action v-if="canDelete" type="danger" @run="removeNode">删除</u-action>
+          <u-action-group v-if="canDelete" :max="4">
+            <u-action type="danger" @run="removeNode">删除</u-action>
           </u-action-group>
         </div>
 
         <template v-if="selected.kind === 'doc'">
-          <div class="doc-actions">
-            <u-button v-if="canUpdate" type="primary" @click="saveDraft">保存草稿</u-button>
-            <u-button v-if="canUpdate && selected.draft_updated_at" type="success" @click="publish">
-              发布草稿
-            </u-button>
-            <template v-if="canGenerate">
-              <u-select
-                v-model="generateAgentID"
-                :options="agentOptions"
-                placeholder="选择智能体"
-                style="width: 160px"
-              />
-              <u-button :loading="generating" @click="runGenerate">AI 生成草稿</u-button>
-            </template>
-          </div>
-          <p v-if="selected.draft_source_run_id" class="gen-hint">
-            草稿来源 AgentRun #{{ selected.draft_source_run_id }}（需人工发布）
-          </p>
-          <u-textarea
-            v-if="canUpdate"
-            v-model="draftContent"
-            :rows="16"
-            placeholder="Markdown 草稿"
-          />
-          <div class="markdown-preview">
-            <MarkdownRender :content="renderedContent" />
-          </div>
           <div v-if="diff" class="diff-summary">
             草稿 {{ diff.draft_lines }} 行，已发布 {{ diff.published_lines }} 行，新增
             {{ diff.added_lines }} 行，移除 {{ diff.removed_lines }} 行。
+          </div>
+          <u-tabs
+            v-model="docPane"
+            :items="docPaneTabs"
+            position="left"
+            keep-alive
+            class="doc-tabs"
+          >
+            <template #preview>
+              <u-scroll class="doc-pane">
+                <MarkdownViewer :content="renderedContent" />
+              </u-scroll>
+            </template>
+            <template v-if="canUpdate" #edit>
+              <u-code-editor
+                v-model="draftContent"
+                :langs="['markdown']"
+                class="doc-pane doc-editor"
+              />
+            </template>
+          </u-tabs>
+          <!-- 仅编辑态展示；固定在内容区底部 -->
+          <div v-if="canUpdate && docPane === 'edit'" class="doc-footer">
+            <u-button type="primary" @click="saveDraft">保存</u-button>
+            <u-button type="success" @click="saveAndPublish">保存并发布</u-button>
           </div>
         </template>
         <u-empty v-else text="目录不包含 Markdown 内容" />
@@ -360,87 +382,183 @@ onMounted(() => {
       v-model="moveDialogOpen"
       title="移动节点"
       :model="moveForm"
+      confirm-text="移动"
       label-width="100px"
       style="width: 420px"
       @submit="move"
+      @closed="movingNode = null"
     >
-      <u-number-input label="父目录 ID" field="parent_id" placeholder="留空表示根目录" />
+      <u-tree-select
+        label="父目录"
+        field="parent_id"
+        :data="moveDirTree"
+        label-key="name"
+        value-key="id"
+        children-key="children"
+        clearable
+        filterable
+        expand-all
+        placeholder="根目录"
+        :disabled-node="isMoveTargetDisabled"
+      />
       <u-number-input label="排序" field="sort_order" />
     </FormDialog>
   </section>
 </template>
 
-<style scoped>
+<style scoped lang="scss">
 .docs {
   display: grid;
-  min-height: 460px;
-  grid-template-columns: 280px minmax(0, 1fr);
+  height: 100%;
+  min-height: 0;
+  grid-template-columns: 360px minmax(0, 1fr);
   gap: 16px;
 }
+
 .tree-panel,
 .editor-panel {
   min-width: 0;
+  min-height: 0;
   padding: 14px;
   border-radius: 8px;
   background: var(--u-bg-color-top, #fff);
 }
+
 .tree-panel {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  overflow: hidden;
 }
+
+.doc-tree {
+  flex: 1;
+  min-height: 0;
+}
+
+.tree-node {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+}
+
+.tree-node__main {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.tree-node__icon {
+  flex-shrink: 0;
+}
+
+.tree-node.is-dir .tree-node__icon {
+  color: var(--u-color-warning, #d48806);
+}
+
+.tree-node.is-doc .tree-node__icon {
+  color: var(--u-color-primary, #1677ff);
+}
+
+.tree-node__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tree-node__actions {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 4px;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.tree-node:hover .tree-node__actions,
+.tree-node:focus-within .tree-node__actions {
+  opacity: 1;
+}
+
 .tree-head,
 .editor-head,
 .editor-head p,
-.doc-actions,
-.uploads {
+.uploads,
+.doc-footer {
   display: flex;
   align-items: center;
 }
+
 .tree-head,
 .editor-head {
+  flex-shrink: 0;
   justify-content: space-between;
   gap: 12px;
 }
+
 .uploads {
+  flex-shrink: 0;
   flex-wrap: wrap;
   gap: 8px;
 }
+
 .editor-panel {
   display: flex;
   flex-direction: column;
   gap: 14px;
 }
+
+.editor-head,
+.diff-summary,
+.doc-footer {
+  flex-shrink: 0;
+}
+
 .editor-head h3,
 .editor-head p {
   margin: 0;
 }
+
 .editor-head p {
   gap: 8px;
   margin-top: 5px;
   color: var(--u-text-color-assist, #7c8494);
   font-size: 13px;
 }
-.doc-actions {
-  flex-wrap: wrap;
-  gap: 8px;
-}
-.gen-hint {
-  margin: 0;
-  font-size: 12px;
-  color: var(--u-color-text-secondary, #666);
-}
-.markdown-preview {
-  max-height: 260px;
-  overflow: auto;
-  padding: 12px;
-  border-radius: 6px;
-  background: var(--u-bg-color-middle, #f6f7f9);
-}
+
 .diff-summary {
   color: var(--u-text-color-second, #626b7d);
   font-size: 13px;
 }
+
+.doc-tabs {
+  flex: 1;
+  height: 100%;
+  min-height: 0;
+}
+
+.doc-pane {
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+
+.doc-editor {
+  height: 100%;
+  max-height: none;
+}
+
+.doc-footer {
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--u-border-color, #e8eaef);
+}
+
 @media (max-width: 900px) {
   .docs {
     grid-template-columns: 1fr;

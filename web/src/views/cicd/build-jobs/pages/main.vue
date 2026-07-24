@@ -107,23 +107,30 @@ const repoNameMap = computed(() => {
 });
 
 const columns = defineProTableColumns([
-  { key: "id", name: "ID", width: 80 },
+  { key: "id", name: "ID" },
   { key: "name", name: "名称" },
-  { key: "repository", name: "仓库", width: 140 },
+  { key: "repository", name: "仓库" },
   { key: "branch", name: "分支" },
-  { key: "enabled", name: "启用", width: 80 },
+  { key: "enabled", name: "启用", width: 80, align: "center" },
   { key: "triggers", name: "触发" },
-  { key: "action", name: "操作", width: 380, align: "center", fixed: "right" },
+  { key: "action", name: "操作", width: 400, align: "center", fixed: "right" },
 ]);
 
 const historyColumns = defineProTableColumns([
-  { key: "build_number", name: "#", width: 70 },
-  { key: "status", name: "状态", width: 100 },
-  { key: "stage", name: "阶段", width: 100 },
+  { key: "build_number", name: "#" },
+  { key: "status", name: "状态", width: 100, align: "center" },
+  { key: "stage", name: "阶段", width: 100, align: "center" },
   { key: "branch", name: "分支" },
-  { key: "trigger_type", name: "触发", width: 100 },
-  { key: "created_at", name: "创建时间", sortable: true, render: ({ val }) => formatDateTime(val) },
-  { key: "action", name: "操作", width: 100, align: "center", fixed: "right" },
+  { key: "trigger_type", name: "触发", width: 100, align: "center" },
+  {
+    key: "created_at",
+    name: "创建时间",
+    width: 170,
+    align: "center",
+    sortable: true,
+    render: ({ val }) => formatDateTime(val),
+  },
+  { key: "action", name: "操作", width: 140, align: "center", fixed: "right" },
 ]);
 
 async function loadBranches(repositoryId?: number) {

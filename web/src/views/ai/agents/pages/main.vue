@@ -134,12 +134,12 @@ const buildJobOptions = computed(() =>
 );
 
 const columns = defineProTableColumns([
-  { key: "id", name: "ID", width: 70 },
+  { key: "id", name: "ID" },
   { key: "name", name: "名称" },
-  { key: "cli_key", name: "CLI", width: 120 },
-  { key: "workspace_status", name: "工作区", width: 110 },
-  { key: "enabled", name: "启用", width: 80 },
-  { key: "action", name: "操作", width: 260, align: "center", fixed: "right" },
+  { key: "cli_key", name: "CLI", width: 120, align: "center" },
+  { key: "workspace_status", name: "工作区", width: 110, align: "center" },
+  { key: "enabled", name: "启用", width: 80, align: "center" },
+  { key: "action", name: "操作", width: 320, align: "center", fixed: "right" },
 ]);
 
 function openRunHistory(row: AiAgent) {

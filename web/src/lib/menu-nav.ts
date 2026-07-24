@@ -1,6 +1,55 @@
 import type { GroupNavGroup, NavItem } from "@veltra/desktop";
+import {
+  Agent,
+  Books,
+  Build,
+  Checklist,
+  Folder,
+  GitBranch,
+  History,
+  House,
+  Key,
+  List,
+  Process,
+  Role,
+  Secured,
+  Server,
+  Skill,
+  Terminal,
+  Token,
+  User,
+} from "@veltra/icons/normal";
+import type { Component } from "vue";
 
 import type { MenuGroupNode } from "@/api/types";
+
+/** 后端 icon 为空时按 path 回退；仅前端展示预设，菜单仍以后端下发为准 */
+const MENU_DEFAULT_ICONS: Record<string, Component> = {
+  "/": House,
+  "/handbook": Books,
+  "/ops/processes": Process,
+  "/ops/dev-environments": Terminal,
+  "/resource/repositories": GitBranch,
+  "/resource/servers": Server,
+  "/resource/credentials": Key,
+  "/resource/tokens": Token,
+  "/cicd/build-jobs": Build,
+  "/cicd/build-runs": History,
+  "/project/projects": Folder,
+  "/ai/agents": Agent,
+  "/ai/runs": History,
+  "/ai/skills": Skill,
+  "/system/users": User,
+  "/system/roles": Role,
+  "/system/resources": Secured,
+  "/system/dictionaries": Books,
+  "/system/operation-logs": Checklist,
+};
+
+function resolveMenuIcon(path: string, icon?: string): NonNullable<NavItem["icon"]> {
+  if (icon) return icon;
+  return (MENU_DEFAULT_ICONS[path] ?? List) as NonNullable<NavItem["icon"]>;
+}
 
 /** Map /auth/me MenuGroupNode[] → @veltra/desktop GroupNavGroup. */
 export function menuGroupsToGroupNav(groups: MenuGroupNode[] | undefined | null): GroupNavGroup[] {
@@ -11,7 +60,7 @@ export function menuGroupsToGroupNav(groups: MenuGroupNode[] | undefined | null)
       (child): NavItem => ({
         title: child.title,
         path: child.path,
-        ...(child.icon ? { icon: child.icon } : {}),
+        icon: resolveMenuIcon(child.path, child.icon),
       }),
     ),
   }));

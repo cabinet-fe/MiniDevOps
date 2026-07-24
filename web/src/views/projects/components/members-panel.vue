@@ -1,17 +1,17 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from "vue";
+import { computed, reactive, ref, useTemplateRef } from "vue";
 import { o } from "@cat-kit/core";
-import { defineTableColumns, message } from "@veltra/desktop";
+import { message } from "@veltra/desktop";
 
 import {
   addProjectMember,
-  listProjectMembers,
   removeProjectMember,
   transferProjectOwner,
   updateProjectMember,
 } from "@/api/projects";
 import type { ProductProject, ProjectMember, ProjectRole } from "@/api/types";
 import FormDialog from "@/components/form-dialog";
+import ProTable, { defineProTableColumns } from "@/components/pro-table";
 import { usePermission } from "@/composables/use-permission";
 import { formatDateTime } from "@/lib/datetime";
 import { tagType, type TagType } from "@/lib/tag";
@@ -31,13 +31,17 @@ const ROLE_LABEL: Record<string, string> = {
   readonly: "Readonly",
 };
 
-const props = defineProps<{ project: ProductProject }>();
-const emit = defineEmits<{ membersChanged: []; ownerTransferred: [] }>();
+const props = defineProps<{
+  project: ProductProject;
+  /** ProTable 高度；弹窗内建议固定高度 */
+  height?: string;
+}>();
+const emit = defineEmits<{ ownerTransferred: [] }>();
 
 const auth = useAuthStore();
 const { hasPermission } = usePermission();
+const tableRef = useTemplateRef("table");
 const members = ref<ProjectMember[]>([]);
-const loading = ref(false);
 const dialogOpen = ref(false);
 const editing = ref<ProjectMember | null>(null);
 const form = reactive({ user_id: 0, role: "member" as Exclude<ProjectRole, "owner"> });
@@ -57,27 +61,21 @@ const canTransferOwner = computed(
     (canManageAll.value || selfMember.value?.role === "owner"),
 );
 
-const columns = defineTableColumns([
-  { key: "user_id", name: "用户 ID", minWidth: 120 },
-  { key: "role", name: "项目角色", minWidth: 140 },
+const columns = defineProTableColumns([
+  { key: "user_id", name: "用户 ID" },
+  { key: "role", name: "项目角色", width: 140, align: "center" },
   {
     key: "created_at",
     name: "加入时间",
-    minWidth: 180,
+    width: 170,
+    align: "center",
     render: ({ val }) => formatDateTime(val),
   },
-  { key: "action", name: "操作", width: 220, minWidth: 180, fixed: "right" },
+  { key: "action", name: "操作", width: 320, align: "center", fixed: "right" },
 ]);
 
-async function load() {
-  loading.value = true;
-  try {
-    members.value = await listProjectMembers(props.project.id);
-  } catch (error) {
-    message.error(error instanceof Error ? error.message : "成员加载失败");
-  } finally {
-    loading.value = false;
-  }
+function onLoaded(items: ProjectMember[]) {
+  members.value = items;
 }
 
 function openAdd() {
@@ -92,6 +90,10 @@ function openEdit(member: ProjectMember) {
   dialogOpen.value = true;
 }
 
+async function refresh() {
+  await tableRef.value?.reload();
+}
+
 async function save() {
   try {
     if (editing.value) {
@@ -102,20 +104,17 @@ async function save() {
       message.success("成员已添加");
     }
     dialogOpen.value = false;
-    await load();
-    emit("membersChanged");
+    await refresh();
   } catch (error) {
     message.error(error instanceof Error ? error.message : "保存失败");
   }
 }
 
 async function remove(member: ProjectMember) {
-  if (!window.confirm(`确认移除用户 #${member.user_id}？`)) return;
   try {
     await removeProjectMember(props.project.id, member.user_id);
     message.success("成员已移除");
-    await load();
-    emit("membersChanged");
+    await refresh();
   } catch (error) {
     message.error(error instanceof Error ? error.message : "移除失败");
   }
@@ -127,58 +126,62 @@ async function transfer(member: ProjectMember) {
     await transferProjectOwner(props.project.id, member.user_id);
     message.success("Owner 已转让");
     emit("ownerTransferred");
-    await load();
+    await tableRef.value?.reload();
   } catch (error) {
     message.error(error instanceof Error ? error.message : "转让失败");
   }
 }
-
-onMounted(() => void load());
 </script>
 
 <template>
   <section class="panel">
-    <div class="panel-head">
-      <div>
-        <h3>项目成员</h3>
-        <p>Owner 可转让负责人；Admin 可管理非 Owner 成员。</p>
-      </div>
-      <u-button v-if="canManageMembers" type="primary" @click="openAdd">添加成员</u-button>
-    </div>
-
-    <div v-loading="loading" class="table-wrap">
-      <u-table :columns="columns" :data="members" row-key="id">
-        <template #column:role="{ rowData }">
-          <u-tag size="small" :type="tagType((rowData as ProjectMember).role, ROLE_TAG)">
-            {{ ROLE_LABEL[(rowData as ProjectMember).role] ?? (rowData as ProjectMember).role }}
-          </u-tag>
-        </template>
-        <template #column:action="{ rowData }">
-          <u-action-group :max="3">
-            <u-action
-              v-if="canManageMembers && (rowData as ProjectMember).role !== 'owner'"
-              @run="openEdit(rowData as ProjectMember)"
-            >
-              修改角色
-            </u-action>
-            <u-action
-              v-if="canTransferOwner && (rowData as ProjectMember).role !== 'owner'"
-              @run="transfer(rowData as ProjectMember)"
-            >
-              转让 Owner
-            </u-action>
-            <u-action
-              v-if="canManageMembers && (rowData as ProjectMember).role !== 'owner'"
-              need-confirm
-              type="danger"
-              @run="remove(rowData as ProjectMember)"
-            >
-              移除
-            </u-action>
-          </u-action-group>
-        </template>
-      </u-table>
-    </div>
+    <ProTable
+      ref="table"
+      :url="`/projects/${project.id}/members`"
+      :columns="columns"
+      :height="height"
+      @loaded="onLoaded"
+    >
+      <template #filters>
+        <u-button
+          v-if="canManageMembers"
+          type="primary"
+          style="margin-left: auto"
+          @click.prevent="openAdd"
+        >
+          添加成员
+        </u-button>
+      </template>
+      <template #column:role="{ rowData }">
+        <u-tag size="small" :type="tagType((rowData as ProjectMember).role, ROLE_TAG)">
+          {{ ROLE_LABEL[(rowData as ProjectMember).role] ?? (rowData as ProjectMember).role }}
+        </u-tag>
+      </template>
+      <template #column:action="{ rowData }">
+        <u-action-group :max="3">
+          <u-action
+            v-if="canManageMembers && (rowData as ProjectMember).role !== 'owner'"
+            @run="openEdit(rowData as ProjectMember)"
+          >
+            修改角色
+          </u-action>
+          <u-action
+            v-if="canTransferOwner && (rowData as ProjectMember).role !== 'owner'"
+            @run="transfer(rowData as ProjectMember)"
+          >
+            转让 Owner
+          </u-action>
+          <u-action
+            v-if="canManageMembers && (rowData as ProjectMember).role !== 'owner'"
+            need-confirm
+            type="danger"
+            @run="remove(rowData as ProjectMember)"
+          >
+            移除
+          </u-action>
+        </u-action-group>
+      </template>
+    </ProTable>
 
     <FormDialog
       v-model="dialogOpen"
@@ -210,28 +213,9 @@ onMounted(() => void load());
 <style scoped>
 .panel {
   display: flex;
+  min-height: 0;
+  flex: 1;
   flex-direction: column;
   gap: 16px;
-}
-.panel-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-}
-.panel-head h3,
-.panel-head p {
-  margin: 0;
-}
-.panel-head p {
-  margin-top: 4px;
-  color: var(--u-text-color-assist, #7c8494);
-  font-size: 13px;
-}
-.table-wrap {
-  min-height: 180px;
-  padding: 12px;
-  border-radius: 8px;
-  background: var(--u-bg-color-top, #fff);
 }
 </style>

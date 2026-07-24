@@ -31,7 +31,6 @@ function handleClose(item: TabItem) {
       :items="tabsStore.tabItems"
       closable
       block
-      size="small"
       @update:model-value="activate"
       @close="handleClose"
     />

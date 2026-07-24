@@ -122,8 +122,14 @@ onUnmounted(() => {
 <template>
   <u-dropdown trigger="click" width="360px" content-class="notif-dropdown">
     <template #trigger>
-      <u-badge :value="store.unreadCount" type="danger" :max="99" :hidden="unreadHidden">
-        <u-button text type="primary" aria-label="通知">
+      <u-badge
+        class="notif-badge"
+        :value="store.unreadCount"
+        size="small"
+        :max="99"
+        :hidden="unreadHidden"
+      >
+        <u-button text type="primary" class="notif-trigger" aria-label="通知">
           <Bell class="notif-bell-icon" />
         </u-button>
       </u-badge>
@@ -166,6 +172,38 @@ onUnmounted(() => {
 
 <style scoped lang="scss">
 @use "pkg:@veltra/styles/functions" as fn;
+
+/* 默认 UBadge 无 top/right，会落在触发器后方并叠到头像上；钉到铃铛右上角 */
+.notif-badge {
+  display: inline-flex;
+  vertical-align: middle;
+  /* 给角标外溢留一点空隙，避免贴住头像 */
+  margin-right: 4px;
+
+  :deep(.u-badge__sup) {
+    top: -2px;
+    right: -2px;
+    /* 覆盖组件内联 transform，避免半截漂到头像上 */
+    transform: none !important;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    /* 与登录页朱砂印同色；勿用 type=danger 浅底字色 */
+    background-color: #b3452e !important;
+    color: #fff;
+    border: 1.5px solid fn.use-var(bg-color, top);
+    font-size: 10px;
+    font-weight: 600;
+    line-height: 1;
+    box-sizing: border-box;
+  }
+}
+
+.notif-trigger {
+  min-width: 32px;
+  min-height: 32px;
+  padding: 0 6px;
+}
 
 .notif-bell-icon {
   width: 18px;

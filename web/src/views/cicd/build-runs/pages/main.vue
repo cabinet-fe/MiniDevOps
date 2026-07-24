@@ -31,8 +31,15 @@ const columns = defineProTableColumns([
   { key: "distribution_summary", name: "分发" },
   { key: "branch", name: "分支" },
   { key: "trigger_type", name: "触发" },
-  { key: "created_at", name: "创建时间", sortable: true, render: ({ val }) => formatDateTime(val) },
-  { key: "action", name: "操作", width: 100, align: "center", fixed: "right" },
+  {
+    key: "created_at",
+    name: "创建时间",
+    width: 170,
+    align: "center",
+    sortable: true,
+    render: ({ val }) => formatDateTime(val),
+  },
+  { key: "action", name: "操作", width: 120, align: "center", fixed: "right" },
 ]);
 
 const jobOptions = computed(() =>

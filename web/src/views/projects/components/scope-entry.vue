@@ -20,9 +20,16 @@ const actionLabel = computed(() => (projectTab.value === "docs" ? "进入文档"
 const columns = defineProTableColumns([
   { key: "name", name: "项目", sortable: true },
   { key: "slug", name: "标识" },
-  { key: "status", name: "状态", width: 100 },
-  { key: "updated_at", name: "更新时间", sortable: true, render: ({ val }) => formatDateTime(val) },
-  { key: "action", name: "操作", width: 120, align: "center", fixed: "right" },
+  { key: "status", name: "状态", width: 100, align: "center" },
+  {
+    key: "updated_at",
+    name: "更新时间",
+    width: 170,
+    align: "center",
+    sortable: true,
+    render: ({ val }) => formatDateTime(val),
+  },
+  { key: "action", name: "操作", width: 140, align: "center", fixed: "right" },
 ]);
 
 function openProject(project: ProductProject) {

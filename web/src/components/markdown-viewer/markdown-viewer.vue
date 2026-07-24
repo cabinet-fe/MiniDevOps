@@ -8,9 +8,7 @@ defineProps<{
 </script>
 
 <template>
-  <!-- markstream-vue 的暗色变量挂靠在 .dark 类上（而非 data-theme 属性），
-       此处显式补类名，否则暗色主题下按浅色配色渲染导致文字看不清 -->
-  <div class="markdown-viewer dark">
+  <div class="markdown-viewer">
     <MarkdownRender :content="content" />
   </div>
 </template>
@@ -21,7 +19,7 @@ defineProps<{
   padding: 16px 20px;
   border-radius: 8px;
   background: var(--u-bg-color-top, #fff);
-  color-scheme: dark;
+  color-scheme: light;
   line-height: 1.65;
 
   :deep(h1),

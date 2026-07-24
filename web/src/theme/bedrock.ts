@@ -1,43 +1,43 @@
-import { heroDarkTheme } from "@veltra/styles/theme";
+import { lightTheme } from "@veltra/styles/theme";
 
 /**
- * Forge Console theme — ink / verdigris / bone aligned with the login palette.
- * All chrome colors flow through Veltra tokens via loadTheme; do not hardcode
- * business colors for theme matching elsewhere.
+ * 磐石主题 — 宣纸 / 黛墨 / 松烟绿的古风亮色系，与登录页同源。
+ * 全局颜色均经 Veltra token 由 loadTheme 注入；业务侧勿为配色硬编码色值。
  */
-export const bedrockTheme = heroDarkTheme.new({
+export const bedrockTheme = lightTheme.new({
   color: {
-    primary: "#4a7a64",
+    primary: "#3d6b58", // 松烟绿
   },
   bg: {
     color: {
-      bottom: "#070a08",
-      middle: "#0e1411",
-      top: "#141b17",
-      hover: "#1c2621",
+      bottom: "#f1ede0", // 宣纸底
+      middle: "#f7f4ea",
+      top: "#fdfbf4",
+      hover: "#e9e2cf",
     },
   },
   "text-color": {
-    title: "#d4cfc3",
-    main: "#d4cfc3",
-    second: "#a8b0a8",
-    assist: "#a8b0a8",
-    placeholder: "#9aa49a",
+    title: "#2b2a26", // 黛墨
+    main: "#403c34",
+    second: "#7a7264",
+    assist: "#a89f8c",
+    placeholder: "#a89f8c",
   },
   border: {
-    color: "#2a483c",
-    mutedColor: "#1e332b",
+    width: 1,
+    color: "#e4dcc8",
+    mutedColor: "#d2c8ac",
   },
   radius: {
     small: 4,
     default: 8,
-    large: 14,
+    large: 12,
   },
   shadow: {
-    color: "rgba(0, 0, 0, 0.45)",
+    color: "rgba(64, 54, 32, 0.14)",
     x: 0,
-    y: 8,
-    blur: 28,
-    spread: -4,
+    y: 4,
+    blur: 16,
+    spread: -2,
   },
 });

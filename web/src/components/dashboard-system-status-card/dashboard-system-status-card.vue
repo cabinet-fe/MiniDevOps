@@ -65,7 +65,7 @@ function shortPath(path: string): string {
             }}
           </p>
         </div>
-        <u-tag class="tile__health" size="small" dark :type="healthMeta.type">
+        <u-tag class="tile__health" size="small" :type="healthMeta.type">
           {{ healthMeta.label }}
         </u-tag>
       </div>

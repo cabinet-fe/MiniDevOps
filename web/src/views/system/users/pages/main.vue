@@ -41,14 +41,14 @@ const roleNameById = computed(() => {
 });
 
 const columns = defineProTableColumns([
-  { key: "id", name: "ID", width: 80 },
+  { key: "id", name: "ID" },
   { key: "username", name: "用户名" },
   { key: "display_name", name: "显示名" },
   { key: "role_ids", name: "角色" },
   { key: "email", name: "邮箱" },
-  { key: "is_active", name: "状态", width: 90 },
-  { key: "is_super_admin", name: "超管", width: 80 },
-  { key: "action", name: "操作", width: 160, align: "center", fixed: "right" },
+  { key: "is_active", name: "状态", width: 90, align: "center" },
+  { key: "is_super_admin", name: "超管", width: 80, align: "center" },
+  { key: "action", name: "操作", width: 200, align: "center", fixed: "right" },
 ]);
 
 onMounted(async () => {

@@ -61,15 +61,15 @@ const form = reactive({
 });
 
 const columns = defineProTableColumns([
-  { key: "title", name: "标题", minWidth: 140 },
-  { key: "type", name: "类型", width: 90 },
-  { key: "code", name: "Code", minWidth: 140 },
-  { key: "full_code", name: "Full Code", minWidth: 180 },
-  { key: "route", name: "路由", minWidth: 140 },
-  { key: "sort_key", name: "排序", width: 70 },
-  { key: "flags", name: "标志", width: 140 },
-  { key: "enabled", name: "状态", width: 80 },
-  { key: "action", name: "操作", width: 220, fixed: "right" },
+  { key: "title", name: "标题" },
+  { key: "type", name: "类型", width: 90, align: "center" },
+  { key: "code", name: "Code" },
+  { key: "full_code", name: "Full Code" },
+  { key: "route", name: "路由" },
+  { key: "sort_key", name: "排序" },
+  { key: "flags", name: "标志", width: 140, align: "center" },
+  { key: "enabled", name: "状态", width: 80, align: "center" },
+  { key: "action", name: "操作", width: 280, align: "center", fixed: "right" },
 ]);
 
 const groupOptions = computed(() =>

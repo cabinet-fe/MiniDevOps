@@ -109,13 +109,20 @@ const filterStatusOptions = computed(() => [
 ]);
 
 const columns = defineProTableColumns([
-  { key: "id", name: "ID", width: 70 },
+  { key: "id", name: "ID" },
   { key: "title", name: "标题", sortable: true },
-  { key: "status", name: "状态", width: 100 },
-  { key: "priority", name: "优先级", width: 100, sortable: true },
-  { key: "assignee_id", name: "负责人", width: 90 },
-  { key: "updated_at", name: "更新时间", sortable: true, render: ({ val }) => formatDateTime(val) },
-  { key: "action", name: "操作", width: 180, align: "center", fixed: "right" },
+  { key: "status", name: "状态", width: 100, align: "center" },
+  { key: "priority", name: "优先级", width: 100, align: "center", sortable: true },
+  { key: "assignee_id", name: "负责人" },
+  {
+    key: "updated_at",
+    name: "更新时间",
+    width: 170,
+    align: "center",
+    sortable: true,
+    render: ({ val }) => formatDateTime(val),
+  },
+  { key: "action", name: "操作", width: 280, align: "center", fixed: "right" },
 ]);
 
 function defaultStatus() {
@@ -298,11 +305,6 @@ onMounted(() => void loadRequirementStatuses());
 
 <template>
   <section class="panel">
-    <div class="panel-head">
-      <h3>需求</h3>
-      <u-button v-if="canCreateRequirement" type="primary" @click="openCreate"> 新建需求 </u-button>
-    </div>
-
     <ProTable
       ref="table"
       :url="`/projects/${project.id}/requirements`"
@@ -325,6 +327,14 @@ onMounted(() => void loadRequirementStatuses());
           ]"
           style="width: 120px"
         />
+        <u-button
+          v-if="canCreateRequirement"
+          type="primary"
+          style="margin-left: auto"
+          @click.prevent="openCreate"
+        >
+          新建需求
+        </u-button>
       </template>
       <template #column:title="{ rowData }">
         <u-action @run="showDetail(rowData as Requirement)">
@@ -439,14 +449,12 @@ onMounted(() => void loadRequirementStatuses());
   flex-direction: column;
   gap: 16px;
 }
-.panel-head,
 .detail-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
 }
-.panel-head h3,
 .detail-section p {
   margin: 0;
 }

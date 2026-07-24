@@ -22,13 +22,20 @@ const ACTION_TAG: Record<string, TagType> = {
 };
 
 const columns = defineProTableColumns([
-  { key: "id", name: "ID", width: 80 },
+  { key: "id", name: "ID" },
   { key: "username", name: "用户" },
-  { key: "action", name: "动作", width: 90 },
+  { key: "action", name: "动作", width: 90, align: "center" },
   { key: "resource_type", name: "资源" },
-  { key: "resource_id", name: "资源ID", width: 90 },
-  { key: "ip_address", name: "IP", width: 130 },
-  { key: "created_at", name: "时间", sortable: true, render: ({ val }) => formatDateTime(val) },
+  { key: "resource_id", name: "资源ID" },
+  { key: "ip_address", name: "IP" },
+  {
+    key: "created_at",
+    name: "时间",
+    width: 170,
+    align: "center",
+    sortable: true,
+    render: ({ val }) => formatDateTime(val),
+  },
 ]);
 </script>
 

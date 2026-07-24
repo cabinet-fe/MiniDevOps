@@ -23,11 +23,11 @@ const form = reactive({
 });
 
 const columns = defineProTableColumns([
-  { key: "id", name: "ID", width: 80 },
+  { key: "id", name: "ID" },
   { key: "name", name: "名称" },
   { key: "code", name: "编码" },
   { key: "description", name: "描述" },
-  { key: "action", name: "操作", width: 160, align: "center", fixed: "right" },
+  { key: "action", name: "操作", width: 200, align: "center", fixed: "right" },
 ]);
 
 function openCreate() {

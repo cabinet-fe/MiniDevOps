@@ -197,7 +197,7 @@ function onNavClick(item: NavItem) {
   flex-shrink: 0;
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
   margin-left: auto;
 }
 
@@ -206,8 +206,8 @@ function onNavClick(item: NavItem) {
   align-items: center;
   gap: 8px;
   min-width: 0;
-  margin: 0 4px 0 2px;
-  padding: 0 4px;
+  margin: 0;
+  padding: 0 2px;
 }
 
 .app-rail__avatar {

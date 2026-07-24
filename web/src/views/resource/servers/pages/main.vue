@@ -52,13 +52,13 @@ const form = reactive({
 });
 
 const columns = defineProTableColumns([
-  { key: "id", name: "ID", width: 80 },
+  { key: "id", name: "ID" },
   { key: "name", name: "名称" },
   { key: "host", name: "主机" },
-  { key: "port", name: "端口", width: 80 },
-  { key: "auth_type", name: "认证", width: 100 },
-  { key: "status", name: "状态", width: 100 },
-  { key: "action", name: "操作", width: 220, align: "center", fixed: "right" },
+  { key: "port", name: "端口" },
+  { key: "auth_type", name: "认证", width: 100, align: "center" },
+  { key: "status", name: "状态", width: 100, align: "center" },
+  { key: "action", name: "操作", width: 280, align: "center", fixed: "right" },
 ]);
 
 onMounted(async () => {

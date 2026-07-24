@@ -34,12 +34,12 @@ const form = reactive({
 });
 
 const columns = defineProTableColumns([
-  { key: "id", name: "ID", width: 80 },
+  { key: "id", name: "ID" },
   { key: "name", name: "名称" },
-  { key: "type", name: "类型", width: 100 },
+  { key: "type", name: "类型", width: 100, align: "center" },
   { key: "username", name: "用户名" },
-  { key: "has_secret", name: "密文", width: 80 },
-  { key: "action", name: "操作", width: 160, align: "center", fixed: "right" },
+  { key: "has_secret", name: "密文", width: 80, align: "center" },
+  { key: "action", name: "操作", width: 200, align: "center", fixed: "right" },
 ]);
 
 function openCreate() {

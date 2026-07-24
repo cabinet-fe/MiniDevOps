@@ -26,17 +26,24 @@ const table = useTemplateRef("table");
 const query = reactive({ agent_id: undefined as number | undefined });
 
 const columns = defineProTableColumns([
-  { key: "id", name: "ID", width: 70 },
-  { key: "trigger_type", name: "触发", width: 110 },
-  { key: "status", name: "状态", width: 100 },
+  { key: "id", name: "ID" },
+  { key: "trigger_type", name: "触发", width: 110, align: "center" },
+  { key: "status", name: "状态", width: 100, align: "center" },
   {
     key: "duration_ms",
     name: "运行时间",
     width: 110,
+    align: "center",
     render: ({ val }) => formatDurationMs(val as number) || "—",
   },
-  { key: "created_at", name: "创建时间", render: ({ val }) => formatDateTime(val) },
-  { key: "action", name: "操作", width: 100, align: "center", fixed: "right" },
+  {
+    key: "created_at",
+    name: "创建时间",
+    width: 170,
+    align: "center",
+    render: ({ val }) => formatDateTime(val),
+  },
+  { key: "action", name: "操作", width: 120, align: "center", fixed: "right" },
 ]);
 
 function openDetail(row: AgentRun) {

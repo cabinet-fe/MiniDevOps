@@ -34,12 +34,12 @@ const catalog = ref<PermissionCatalogGroup[]>([]);
 const checked = ref<Set<string>>(new Set());
 
 const columns = defineProTableColumns([
-  { key: "id", name: "ID", width: 80 },
+  { key: "id", name: "ID" },
   { key: "name", name: "名称" },
   { key: "code", name: "编码" },
-  { key: "type", name: "类型", width: 90 },
+  { key: "type", name: "类型", width: 90, align: "center" },
   { key: "description", name: "描述" },
-  { key: "action", name: "操作", width: 200, align: "center", fixed: "right" },
+  { key: "action", name: "操作", width: 280, align: "center", fixed: "right" },
 ]);
 
 const isBuiltin = computed(() => editing.value?.type === "builtin");

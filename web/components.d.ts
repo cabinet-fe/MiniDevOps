@@ -64,5 +64,6 @@ declare module 'vue' {
     UTag: typeof import('@veltra/desktop')['UTag']
     UTextarea: typeof import('@veltra/desktop')['UTextarea']
     UTree: typeof import('@veltra/desktop')['UTree']
+    UTreeSelect: typeof import('@veltra/desktop')['UTreeSelect']
   }
 }

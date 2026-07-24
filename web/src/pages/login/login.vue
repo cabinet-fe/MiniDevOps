@@ -57,50 +57,45 @@ async function handleSubmit() {
     <div class="stage">
       <header class="brand">
         <p class="brand-en">BEDROCK</p>
-        <h1 class="brand-cn">磐石</h1>
-        <p class="brand-tag">开发基石 · 承压而立</p>
+        <h1 class="brand-cn">磐石<span class="seal" aria-hidden="true">磐</span></h1>
+        <p class="brand-tag">磐石者，万物之基也</p>
+        <p class="brand-intro">代码托管 · 持续集成 · 部署运维 · 智能协同，诸事归一</p>
       </header>
 
-      <div class="vault">
-        <span class="vault-wing vault-wing--left" aria-hidden="true" />
-        <span class="vault-wing vault-wing--right" aria-hidden="true" />
-        <span class="vault-bolt vault-bolt--tl" aria-hidden="true" />
-        <span class="vault-bolt vault-bolt--tr" aria-hidden="true" />
-        <span class="vault-bolt vault-bolt--bl" aria-hidden="true" />
-        <span class="vault-bolt vault-bolt--br" aria-hidden="true" />
-        <div class="vault-rail vault-rail--top" aria-hidden="true" />
-        <div class="vault-rail vault-rail--bottom" aria-hidden="true" />
+      <div class="paper">
+        <span class="paper-corner paper-corner--tl" aria-hidden="true" />
+        <span class="paper-corner paper-corner--tr" aria-hidden="true" />
+        <span class="paper-corner paper-corner--bl" aria-hidden="true" />
+        <span class="paper-corner paper-corner--br" aria-hidden="true" />
 
-        <div class="plate">
-          <p class="plate-caption">ACCESS · 准入</p>
+        <p class="paper-caption"><span class="paper-caption-text">准入</span></p>
 
-          <u-form
-            ref="form"
-            :model="formData"
-            label-position="top"
-            label-width="auto"
-            :cols="1"
-            class="login-form"
-            @keyup.enter="handleSubmit"
-          >
-            <u-input
-              label="用户名"
-              field="username"
-              placeholder="请输入用户名"
-              :rules="{ required: '请输入用户名' }"
-            />
-            <u-password-input
-              label="密码"
-              field="password"
-              placeholder="请输入密码"
-              :rules="{ required: '请输入密码' }"
-            />
-          </u-form>
+        <u-form
+          ref="form"
+          :model="formData"
+          label-position="top"
+          label-width="auto"
+          :cols="1"
+          class="login-form"
+          @keyup.enter="handleSubmit"
+        >
+          <u-input
+            label="用户名"
+            field="username"
+            placeholder="请输入用户名"
+            :rules="{ required: '请输入用户名' }"
+          />
+          <u-password-input
+            label="密码"
+            field="password"
+            placeholder="请输入密码"
+            :rules="{ required: '请输入密码' }"
+          />
+        </u-form>
 
-          <u-button type="primary" class="submit-btn" :loading="loading" @click="handleSubmit">
-            登录
-          </u-button>
-        </div>
+        <u-button type="primary" class="submit-btn" :loading="loading" @click="handleSubmit">
+          登录
+        </u-button>
       </div>
     </div>
   </div>
@@ -108,27 +103,13 @@ async function handleSubmit() {
 
 <style scoped lang="scss">
 .login-page {
-  --ink: #070a08;
-  --recess: #141b17;
-  --verdigris: #4a7a64;
-  --verdigris-bright: #6b9a82;
-  --brass: #b08a4a;
-  --brass-dim: #7a6238;
-  --bone: #d4cfc3;
-  --ash: #8e968e;
-  --rust-mist: rgb(138 79 58 / 22%);
-
-  --u-color-primary: var(--verdigris);
-  --u-color-primary-light-1: #527d6a;
-  --u-color-primary-dark-1: #355a4a;
-  --u-color-primary-dark-3: #2a483c;
-  --u-color-primary-a-10: rgb(74 122 100 / 10%);
-  --u-color-primary-a-16: rgb(74 122 100 / 16%);
-  --u-color-primary-a-22: rgb(74 122 100 / 22%);
-  --u-color-primary-a-28: rgb(74 122 100 / 28%);
-  --u-color-primary-a-40: rgb(74 122 100 / 40%);
-  --u-color-primary-a-50: rgb(74 122 100 / 50%);
-  --u-color-primary-a-60: rgb(74 122 100 / 60%);
+  --paper: #f6f2e6;
+  --paper-deep: #ede7d5;
+  --ink: #2b2a26;
+  --ink-soft: #7a7264;
+  --pine: #3d6b58;
+  --cinnabar: #b3452e;
+  --line: #d8cfb6;
 
   position: fixed;
   inset: 0;
@@ -140,35 +121,20 @@ async function handleSubmit() {
   flex-direction: column;
   align-items: center;
   justify-content: flex-start;
-  padding: clamp(28px, 8vh, 88px) 20px 28px;
+  padding: clamp(28px, 7vh, 72px) 20px 28px;
   box-sizing: border-box;
-  background: var(--ink);
-  color: var(--bone);
-  font-family: ui-monospace, "SF Mono", Menlo, Consolas, "Courier New", monospace;
+  background: var(--paper);
+  color: var(--ink);
 }
 
 .stage {
   position: relative;
   z-index: 1;
-  width: min(420px, 100%);
+  width: min(400px, 100%);
   display: flex;
   flex-direction: column;
-  gap: 22px;
+  gap: 24px;
   flex-shrink: 0;
-
-  &::before {
-    content: "";
-    position: absolute;
-    z-index: -1;
-    left: -18%;
-    right: -18%;
-    top: 18%;
-    bottom: -8%;
-    background:
-      radial-gradient(ellipse 55% 50% at 50% 55%, rgb(74 122 100 / 12%), transparent 72%),
-      radial-gradient(ellipse 70% 60% at 50% 58%, rgb(0 0 0 / 55%), transparent 75%);
-    filter: blur(2px);
-  }
 }
 
 .brand {
@@ -177,210 +143,147 @@ async function handleSubmit() {
 }
 
 .brand-en {
-  margin: 0 0 4px;
+  margin: 0 0 6px;
   font-size: 11px;
   font-weight: 500;
   letter-spacing: 0.42em;
-  color: var(--brass);
   text-indent: 0.42em;
-  text-shadow: 0 0 20px rgb(176 138 74 / 25%);
+  color: var(--ink-soft);
 }
 
 .brand-cn {
+  position: relative;
+  display: inline-block;
   margin: 0;
   font-family: "Songti SC", "STSong", "SimSun", "Noto Serif CJK SC", serif;
-  font-size: clamp(52px, 11vw, 76px);
+  font-size: clamp(52px, 11vw, 72px);
   font-weight: 700;
   line-height: 1;
   letter-spacing: 0.18em;
   text-indent: 0.18em;
-  color: var(--bone);
-  text-shadow:
-    0 1px 0 rgb(0 0 0 / 65%),
-    0 14px 40px rgb(0 0 0 / 55%),
-    0 0 24px rgb(74 122 100 / 18%);
+  color: var(--ink);
+}
+
+/* 朱砂小印，缀于题名之侧 */
+.seal {
+  position: absolute;
+  right: -34px;
+  bottom: 4px;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 4px;
+  background: var(--cinnabar);
+  color: #f8f3e6;
+  font-family: "Songti SC", "STSong", "SimSun", "Noto Serif CJK SC", serif;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-indent: 0;
+  box-shadow: 0 1px 3px rgb(43 42 38 / 25%);
+  transform: rotate(3deg);
 }
 
 .brand-tag {
   margin: 14px 0 0;
-  font-size: 12px;
-  letter-spacing: 0.28em;
-  text-indent: 0.28em;
-  color: var(--ash);
+  font-family: "Songti SC", "STSong", "SimSun", "Noto Serif CJK SC", serif;
+  font-size: 14px;
+  letter-spacing: 0.32em;
+  text-indent: 0.32em;
+  color: var(--ink);
 }
 
-.vault {
+.brand-intro {
+  margin: 8px 0 0;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  color: var(--ink-soft);
+}
+
+/* 笺纸面板：双线边框 + 四角回纹 */
+.paper {
   position: relative;
-  padding: 14px;
+  padding: 26px 22px 22px;
   background:
-    linear-gradient(165deg, rgb(120 140 128 / 14%) 0%, transparent 42%),
-    linear-gradient(
-      180deg,
-      rgb(42 52 46 / 78%) 0%,
-      rgb(22 30 26 / 82%) 45%,
-      rgb(12 16 14 / 88%) 100%
-    );
-  border: 1px solid rgb(176 138 74 / 38%);
-  backdrop-filter: blur(1.5px);
+    linear-gradient(180deg, rgb(255 255 255 / 55%) 0%, transparent 30%), var(--paper-deep);
+  border: 1px solid var(--line);
   box-shadow:
-    0 0 0 1px rgb(0 0 0 / 60%),
-    0 1px 0 rgb(255 255 255 / 7%) inset,
-    0 24px 48px rgb(0 0 0 / 45%),
-    0 0 60px rgb(74 122 100 / 10%),
-    0 -40px 80px rgb(0 0 0 / 35%);
-  animation: plate-settle 1.05s cubic-bezier(0.22, 1, 0.36, 1) 0.12s both;
+    0 1px 0 rgb(255 255 255 / 60%) inset,
+    0 12px 32px rgb(64 54 32 / 12%);
+  animation: paper-settle 1.05s cubic-bezier(0.22, 1, 0.36, 1) 0.12s both;
 
   &::before {
     content: "";
     position: absolute;
     inset: 5px;
-    border: 1px solid rgb(74 122 100 / 28%);
-    box-shadow:
-      0 0 28px rgb(74 122 100 / 8%) inset,
-      inset 0 0 40px rgb(0 0 0 / 20%);
+    border: 1px solid rgb(61 107 88 / 22%);
     pointer-events: none;
-  }
-
-  &::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-    background: repeating-linear-gradient(
-      8deg,
-      transparent 0 48px,
-      rgb(255 255 255 / 1.5%) 48px 49px,
-      transparent 49px 100px,
-      rgb(0 0 0 / 10%) 100px 102px
-    );
-    opacity: 0.55;
-    mix-blend-mode: soft-light;
   }
 }
 
-.vault-wing {
+.paper-corner {
   position: absolute;
-  top: 18%;
-  bottom: 18%;
-  width: min(18vw, 96px);
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--pine);
+  opacity: 0.55;
   pointer-events: none;
-  box-shadow: 0 0 24px rgb(0 0 0 / 35%);
-  opacity: 0.7;
-
-  &--left {
-    right: 100%;
-    margin-right: -1px;
-    background:
-      linear-gradient(90deg, transparent, rgb(30 40 34 / 75%) 40%, rgb(42 52 46 / 55%)),
-      linear-gradient(
-        180deg,
-        transparent 0%,
-        rgb(176 138 74 / 28%) 14%,
-        rgb(74 122 100 / 20%) 50%,
-        rgb(176 138 74 / 28%) 86%,
-        transparent 100%
-      );
-    mask-image: linear-gradient(90deg, transparent, #000 55%);
-  }
-
-  &--right {
-    left: 100%;
-    margin-left: -1px;
-    background:
-      linear-gradient(270deg, transparent, rgb(30 40 34 / 75%) 40%, rgb(42 52 46 / 55%)),
-      linear-gradient(
-        180deg,
-        transparent 0%,
-        rgb(176 138 74 / 28%) 14%,
-        rgb(74 122 100 / 20%) 50%,
-        rgb(176 138 74 / 28%) 86%,
-        transparent 100%
-      );
-    mask-image: linear-gradient(270deg, transparent, #000 55%);
-  }
-}
-
-.vault-rail {
-  position: absolute;
-  left: 18%;
-  right: 18%;
-  height: 2px;
-  background: linear-gradient(
-    90deg,
-    transparent,
-    var(--brass-dim) 20%,
-    var(--brass) 50%,
-    var(--brass-dim) 80%,
-    transparent
-  );
-  opacity: 0.65;
-  animation: brass-sweep 8s ease-in-out infinite;
-
-  &--top {
-    top: 0;
-  }
-
-  &--bottom {
-    bottom: 0;
-    animation-delay: -4s;
-  }
-}
-
-.vault-bolt {
-  position: absolute;
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: radial-gradient(circle at 32% 28%, #d2b87a, var(--brass-dim) 52%, #2a2418 100%);
-  box-shadow:
-    0 1px 2px rgb(0 0 0 / 60%),
-    inset 0 1px 0 rgb(255 255 255 / 28%),
-    0 0 0 1px rgb(0 0 0 / 40%);
 
   &--tl {
-    top: 8px;
-    left: 8px;
+    top: -2px;
+    left: -2px;
+    border-right: none;
+    border-bottom: none;
   }
 
   &--tr {
-    top: 8px;
-    right: 8px;
+    top: -2px;
+    right: -2px;
+    border-left: none;
+    border-bottom: none;
   }
 
   &--bl {
-    bottom: 8px;
-    left: 8px;
+    bottom: -2px;
+    left: -2px;
+    border-right: none;
+    border-top: none;
   }
 
   &--br {
-    bottom: 8px;
-    right: 8px;
+    bottom: -2px;
+    right: -2px;
+    border-left: none;
+    border-top: none;
   }
 }
 
-.plate {
-  position: relative;
-  padding: 22px 18px 18px;
-  color: var(--bone);
-  background:
-    linear-gradient(180deg, rgb(255 255 255 / 3%) 0%, transparent 28%),
-    repeating-linear-gradient(90deg, transparent 0 10px, rgb(255 255 255 / 1.5%) 10px 11px),
-    linear-gradient(180deg, #1c2621 0%, var(--recess) 100%);
-  border: 1px solid rgb(0 0 0 / 55%);
-  box-shadow:
-    0 0 0 1px rgb(74 122 100 / 16%),
-    0 2px 0 rgb(255 255 255 / 4%) inset,
-    0 -18px 36px rgb(0 0 0 / 35%) inset,
-    inset 0 0 40px rgb(0 0 0 / 25%);
+.paper-caption {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0 0 18px;
+
+  &::before,
+  &::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--line));
+  }
+
+  &::after {
+    background: linear-gradient(270deg, transparent, var(--line));
+  }
 }
 
-.plate-caption {
-  margin: 0 0 16px;
-  font-size: 10px;
-  letter-spacing: 0.32em;
-  color: var(--verdigris-bright);
-  font-weight: 500;
-  text-shadow: 0 0 12px rgb(74 122 100 / 35%);
+.paper-caption-text {
+  font-family: "Songti SC", "STSong", "SimSun", "Noto Serif CJK SC", serif;
+  font-size: 14px;
+  letter-spacing: 0.42em;
+  text-indent: 0.42em;
+  color: var(--pine);
 }
 
 .login-form {
@@ -392,7 +295,7 @@ async function handleSubmit() {
 
   :deep(.u-form-item__label),
   :deep(.u-form-item__label-text) {
-    color: var(--ash) !important;
+    color: var(--ink-soft) !important;
   }
 
   :deep(.u-form-item__error) {
@@ -404,33 +307,12 @@ async function handleSubmit() {
     display: block;
     height: 18px;
   }
-
-  :deep(.u-input) {
-    background: linear-gradient(180deg, #c5cdc0 0%, #a8b3a6 100%) !important;
-    border: 1px solid rgb(0 0 0 / 45%) !important;
-    border-radius: 2px;
-    box-shadow:
-      inset 0 1px 3px rgb(0 0 0 / 28%),
-      0 0 0 1px rgb(74 122 100 / 18%) !important;
-    color: #141b17;
-  }
-
-  :deep(.u-input__native) {
-    color: #141b17;
-
-    &::placeholder {
-      color: rgb(20 27 23 / 45%);
-    }
-  }
 }
 
 .submit-btn {
   width: 100%;
-  letter-spacing: 0.18em;
-  text-indent: 0.18em;
-  font-family: inherit;
-  border-radius: 2px;
-  box-shadow: 0 0 20px rgb(74 122 100 / 22%);
+  letter-spacing: 0.32em;
+  text-indent: 0.32em;
 }
 
 @keyframes brand-rise {
@@ -445,7 +327,7 @@ async function handleSubmit() {
   }
 }
 
-@keyframes plate-settle {
+@keyframes paper-settle {
   from {
     opacity: 0;
     transform: translateY(22px);
@@ -454,19 +336,6 @@ async function handleSubmit() {
   to {
     opacity: 1;
     transform: translateY(0);
-  }
-}
-
-@keyframes brass-sweep {
-  0%,
-  100% {
-    opacity: 0.3;
-    filter: brightness(0.9);
-  }
-
-  50% {
-    opacity: 0.85;
-    filter: brightness(1.2);
   }
 }
 
@@ -480,12 +349,12 @@ async function handleSubmit() {
     text-indent: 0.12em;
   }
 
-  .vault {
-    padding: 12px;
+  .seal {
+    right: -30px;
   }
 
-  .plate {
-    padding: 18px 14px 14px;
+  .paper {
+    padding: 22px 16px 16px;
   }
 }
 </style>

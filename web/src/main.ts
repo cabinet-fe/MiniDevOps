@@ -13,9 +13,9 @@ import { setOnAuthExpired } from "./api/http";
 import { useAuthStore } from "./stores/auth";
 import { bedrockTheme } from "./theme/bedrock";
 
-// setTheme("dark") sets html[data-theme=dark] so Veltra injects dark component CSS vars.
-// loadTheme alone (even with heroDarkTheme) does not flip the attribute.
-setTheme("dark");
+// setTheme("light") sets html[data-theme=light] so Veltra injects light component CSS vars.
+// loadTheme alone does not flip the attribute.
+setTheme("light");
 loadTheme(bedrockTheme);
 
 const app = createApp(App);

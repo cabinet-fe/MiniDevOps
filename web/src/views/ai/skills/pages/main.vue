@@ -24,12 +24,12 @@ const form = reactive({
 });
 
 const columns = defineProTableColumns([
-  { key: "id", name: "ID", width: 70 },
+  { key: "id", name: "ID" },
   { key: "name", name: "名称" },
-  { key: "visibility", name: "可见性", width: 100 },
+  { key: "visibility", name: "可见性", width: 100, align: "center" },
   { key: "package_digest", name: "Digest" },
-  { key: "size_bytes", name: "大小", width: 100 },
-  { key: "action", name: "操作", width: 220, align: "center", fixed: "right" },
+  { key: "size_bytes", name: "大小" },
+  { key: "action", name: "操作", width: 280, align: "center", fixed: "right" },
 ]);
 
 function openUpload() {

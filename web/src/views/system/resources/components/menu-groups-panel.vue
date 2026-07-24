@@ -22,13 +22,13 @@ const form = reactive({
 });
 
 const columns = defineProTableColumns([
-  { key: "id", name: "ID", width: 80 },
+  { key: "id", name: "ID" },
   { key: "name", name: "名称" },
   { key: "code", name: "编码" },
   { key: "route_prefix", name: "路由前缀" },
-  { key: "sort_key", name: "排序", width: 80 },
-  { key: "enabled", name: "状态", width: 90 },
-  { key: "action", name: "操作", width: 160, fixed: "right" },
+  { key: "sort_key", name: "排序" },
+  { key: "enabled", name: "状态", width: 90, align: "center" },
+  { key: "action", name: "操作", width: 200, align: "center", fixed: "right" },
 ]);
 
 function openCreate() {
