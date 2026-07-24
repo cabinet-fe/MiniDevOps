@@ -160,6 +160,7 @@ type AgentInput struct {
 	SystemPrompt string              `json:"system_prompt"`
 	SkillIDs     []uint              `json:"skill_ids"`
 	RepoBindings []model.RepoBinding `json:"repo_bindings"`
+	EnvVars      []EnvVarInput       `json:"env_vars"`
 	OutputDir    string              `json:"output_dir"`
 	StreamOutput *bool               `json:"stream_output"`
 	TimeoutSec   int                 `json:"timeout_sec"`
@@ -190,6 +191,11 @@ func (s *AgentService) CreateAgent(createdBy uint, in AgentInput) (*model.AiAgen
 	if err != nil {
 		return nil, err
 	}
+	if in.EnvVars != nil {
+		if err := applyAgentEnvVarsInput(agent, in.EnvVars); err != nil {
+			return nil, err
+		}
+	}
 	if err := s.repo.CreateAgent(agent); err != nil {
 		return nil, err
 	}
@@ -199,6 +205,7 @@ func (s *AgentService) CreateAgent(createdBy uint, in AgentInput) (*model.AiAgen
 	}
 	decodeSkillIDs(agent)
 	agent.RepoBindings = bindings
+	projectAgentEnvVars(agent)
 	s.enqueueWorkspaceInit(agent.ID, createdBy)
 	if s.audit != nil {
 		_ = s.audit.Write(createdBy, "", "agent_create", "ai_agent", fmt.Sprintf("%d", agent.ID), agent.Name, "")
@@ -243,6 +250,11 @@ func (s *AgentService) UpdateAgent(id, userID uint, in AgentInput) (*model.AiAge
 			return nil, err
 		}
 	}
+	if in.EnvVars != nil {
+		if err := applyAgentEnvVarsInput(agent, in.EnvVars); err != nil {
+			return nil, err
+		}
+	}
 	if strings.TrimSpace(in.OutputDir) != "" {
 		agent.OutputDir = strings.TrimSpace(in.OutputDir)
 	}
@@ -266,6 +278,7 @@ func (s *AgentService) UpdateAgent(id, userID uint, in AgentInput) (*model.AiAge
 		return nil, err
 	}
 	decodeSkillIDs(agent)
+	projectAgentEnvVars(agent)
 	s.enqueueWorkspaceInit(agent.ID, userID)
 	if s.audit != nil {
 		_ = s.audit.Write(userID, "", "agent_update", "ai_agent", fmt.Sprintf("%d", agent.ID), agent.Name, "")
@@ -294,6 +307,7 @@ func (s *AgentService) GetAgent(id uint) (*model.AiAgent, error) {
 	if err := s.attachRepoBindings(agent); err != nil {
 		return nil, err
 	}
+	projectAgentEnvVars(agent)
 	return agent, nil
 }
 
@@ -307,6 +321,7 @@ func (s *AgentService) ListAgents(page, pageSize int) ([]model.AiAgent, int64, e
 		if err := s.attachRepoBindings(&items[i]); err != nil {
 			return nil, 0, err
 		}
+		projectAgentEnvVars(&items[i])
 	}
 	return items, total, nil
 }
@@ -427,6 +442,7 @@ func (s *AgentService) CreateRun(agentID uint, in CreateRunInput) (*model.AgentR
 		"system_prompt": agent.SystemPrompt,
 		"skill_ids":     agent.SkillIDs,
 		"repo_bindings": agent.RepoBindings,
+		"env_var_keys":  envVarKeys(agent),
 		"output_dir":    agent.OutputDir,
 		"stream_output": agent.StreamOutput,
 		"timeout_sec":   agent.TimeoutSec,
@@ -643,8 +659,14 @@ func (s *AgentService) ExecuteRun(ctx context.Context, id uint) {
 		return
 	}
 	absOutput, _ := filepath.Abs(outputDir)
+	envFile, agentEnv, err := s.writeAgentEnvFile(agent, agentRoot)
+	if err != nil {
+		s.failRun(run, err)
+		return
+	}
 	writeLog("workdir=" + absRoot)
 	writeLog("BEDROCK_AGENT_OUTPUT=" + absOutput)
+	writeLog("BEDROCK_AGENT_ENV_FILE=" + envFile)
 	writeLog("请将需交付的文件写入 $BEDROCK_AGENT_OUTPUT（固定产出目录，跨 Run 复用）")
 
 	binary, lookErr := ResolveBinary(cli)
@@ -675,9 +697,14 @@ func (s *AgentService) ExecuteRun(ctx context.Context, id uint) {
 
 	cmd := exec.CommandContext(runCtx, binary, args...)
 	cmd.Dir = agentRoot
-	cmd.Env = append(removeEnv(BuildRuntimeEnv(cli, "", map[string]string{
-		"BEDROCK_AGENT_WORKDIR": absRoot,
-	}), "BEDROCK_AGENT_OUTPUT"), "BEDROCK_AGENT_OUTPUT="+absOutput)
+	runtimeExtra := map[string]string{
+		"BEDROCK_AGENT_WORKDIR":  absRoot,
+		"BEDROCK_AGENT_ENV_FILE": envFile,
+	}
+	for k, v := range agentEnv {
+		runtimeExtra[k] = v
+	}
+	cmd.Env = append(removeEnv(BuildRuntimeEnv(cli, "", runtimeExtra), "BEDROCK_AGENT_OUTPUT"), "BEDROCK_AGENT_OUTPUT="+absOutput)
 	stdout, _ := cmd.StdoutPipe()
 	stderr, _ := cmd.StderrPipe()
 	if err := cmd.Start(); err != nil {

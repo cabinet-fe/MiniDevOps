@@ -18,7 +18,13 @@ import {
 } from "@/api/ai";
 import { listBuildJobs } from "@/api/cicd";
 import { listRepositories, listRepositoryBranches, syncRepositoryBranches } from "@/api/resource";
-import type { AiAgent, AiAgentRepoBinding, BuildJob, SkillPackage } from "@/api/types";
+import type {
+  AiAgent,
+  AiAgentEnvVarInput,
+  AiAgentRepoBinding,
+  BuildJob,
+  SkillPackage,
+} from "@/api/types";
 import FormDialog from "@/components/form-dialog";
 import ProTable, { defineProTableColumns } from "@/components/pro-table";
 import { usePermission } from "@/composables/use-permission";
@@ -66,6 +72,12 @@ type RepoBindingDraft = {
   branch: string;
 };
 
+type EnvVarDraft = {
+  key: string;
+  value: string;
+  has_value?: boolean;
+};
+
 const { hasPermission } = usePermission();
 const router = useRouter();
 const table = useTemplateRef("table");
@@ -92,6 +104,7 @@ const form = reactive({
   system_prompt: "",
   skill_ids: [] as number[],
   repo_bindings: [] as RepoBindingDraft[],
+  env_vars: [] as EnvVarDraft[],
   output_dir: "output",
   stream_output: false,
   timeout_sec: 600,
@@ -253,6 +266,7 @@ function openCreate() {
   editing.value = null;
   form.skill_ids = [];
   form.repo_bindings = [];
+  form.env_vars = [];
   formTriggers.value = [];
   initialTriggerIDs.value = [];
   resetTriggerDraft();
@@ -266,6 +280,11 @@ async function openEdit(row: AiAgent) {
   form.repo_bindings = (row.repo_bindings ?? []).map((b: AiAgentRepoBinding) => ({
     repository_id: b.repository_id,
     branch: b.branch || "main",
+  }));
+  form.env_vars = (row.env_vars ?? []).map((e) => ({
+    key: e.key,
+    value: "",
+    has_value: e.has_value,
   }));
   form.output_dir = row.output_dir || "output";
   resetTriggerDraft();
@@ -378,10 +397,37 @@ async function save() {
       branch: (b.branch || "main").trim() || "main",
     });
   }
+  const envVars: AiAgentEnvVarInput[] = [];
+  const seenKeys = new Set<string>();
+  for (const e of form.env_vars) {
+    const key = e.key.trim();
+    if (!key) {
+      message.error("环境变量 key 不能为空");
+      return;
+    }
+    if (key.includes("=") || key.includes("\n")) {
+      message.error("环境变量 key 不能包含 = 或换行");
+      return;
+    }
+    if (seenKeys.has(key)) {
+      message.error(`环境变量 key 重复: ${key}`);
+      return;
+    }
+    seenKeys.add(key);
+    const row: AiAgentEnvVarInput = { key };
+    if (e.value !== "") {
+      row.value = e.value;
+    } else if (!e.has_value) {
+      message.error(`新建环境变量 ${key} 必须填写值`);
+      return;
+    }
+    envVars.push(row);
+  }
   const body = {
     ...form,
     output_dir: form.output_dir || "output",
     repo_bindings: bindings,
+    env_vars: envVars,
   };
   try {
     let agentID: number;
@@ -558,6 +604,22 @@ async function remove(row: AiAgent) {
           </u-button>
         </template>
       </u-group-input>
+      <u-group-input
+        field="env_vars"
+        label="环境变量"
+        span="full"
+        :item-default="{ key: '', value: '', has_value: false }"
+        :item-style="{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%' }"
+      >
+        <template #default="{ item }">
+          <u-input v-model="item.key" placeholder="KEY" />
+          <u-password-input
+            v-model="item.value"
+            :placeholder="item.has_value ? '已设置，留空不改' : '值'"
+            autocomplete="new-password"
+          />
+        </template>
+      </u-group-input>
       <u-input label="产出目录名" field="output_dir" placeholder="默认 output" />
       <u-number-input label="超时(秒)" field="timeout_sec" :min="30" />
       <u-switch label="流式输出" field="stream_output" />
@@ -639,7 +701,9 @@ async function remove(row: AiAgent) {
 </template>
 
 <style scoped lang="scss">
-:deep(.u-group-input__item > .u-select) {
+:deep(.u-group-input__item > .u-select),
+:deep(.u-group-input__item > .u-input),
+:deep(.u-group-input__item > .u-password-input) {
   flex: 1;
   min-width: 0;
 }

@@ -43,6 +43,12 @@ type RepoBinding struct {
 	Branch       string `json:"branch"`
 }
 
+// EnvVarView is the API projection of an agent env var (never includes plaintext value).
+type EnvVarView struct {
+	Key      string `json:"key"`
+	HasValue bool   `json:"has_value"`
+}
+
 // AgentRepoBinding persists one repository+branch binding for an agent.
 type AgentRepoBinding struct {
 	ID           uint      `json:"id" gorm:"primaryKey"`
@@ -66,6 +72,8 @@ type AiAgent struct {
 	SkillIDsJSON    string        `json:"-" gorm:"type:text"`
 	SkillIDs        []uint        `json:"skill_ids" gorm:"-"`
 	RepoBindings    []RepoBinding `json:"repo_bindings" gorm:"-"`
+	EnvVarsCipher   string        `json:"-" gorm:"type:text"`
+	EnvVars         []EnvVarView  `json:"env_vars" gorm:"-"`
 	OutputDir       string        `json:"output_dir" gorm:"size:200;not null;default:output"`
 	StreamOutput    bool          `json:"stream_output" gorm:"not null;default:false"`
 	TimeoutSec      int           `json:"timeout_sec" gorm:"not null;default:600"`

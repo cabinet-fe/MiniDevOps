@@ -569,6 +569,16 @@ export interface AiAgentRepoBinding {
   branch: string;
 }
 
+export interface AiAgentEnvVar {
+  key: string;
+  has_value: boolean;
+}
+
+export interface AiAgentEnvVarInput {
+  key: string;
+  value?: string;
+}
+
 export interface AiAgent {
   id: number;
   name: string;
@@ -578,6 +588,7 @@ export interface AiAgent {
   system_prompt: string;
   skill_ids: number[];
   repo_bindings: AiAgentRepoBinding[];
+  env_vars: AiAgentEnvVar[];
   output_dir: string;
   stream_output: boolean;
   timeout_sec: number;

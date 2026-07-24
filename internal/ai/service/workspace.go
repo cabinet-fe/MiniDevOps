@@ -127,6 +127,10 @@ func (s *AgentService) SyncAgentWorkspace(agent *model.AiAgent, userID uint, isS
 	if err := os.WriteFile(promptPath, []byte(agent.SystemPrompt), 0o644); err != nil {
 		return nil, nil, err
 	}
+	// 解密写入工作区 .env（同 UID 可见）；Run 时还会注入 cmd.Env。
+	if _, _, err := s.writeAgentEnvFile(agent, root); err != nil {
+		return nil, nil, err
+	}
 	return digests, repoDirs, nil
 }
 
