@@ -49,7 +49,6 @@ declare module 'vue' {
     UIcon: typeof import('@veltra/desktop')['UIcon']
     UInput: typeof import('@veltra/desktop')['UInput']
     UMultiSelect: typeof import('@veltra/desktop')['UMultiSelect']
-    UNav: typeof import('@veltra/desktop')['UNav']
     UNumberInput: typeof import('@veltra/desktop')['UNumberInput']
     UPaginator: typeof import('@veltra/desktop')['UPaginator']
     UPasswordInput: typeof import('@veltra/desktop')['UPasswordInput']
