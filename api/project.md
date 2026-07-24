@@ -214,7 +214,7 @@
 ### POST /projects/{id}/docs/push — 按路径推送文档草稿（外部 API）
 
 鉴权：JWT 需 `project_docs:create` + 项目 ACL；或 PAT scope `docs:write` + 项目 ACL
-路径参数：id*: integer
+路径参数：id*: integer | string（正整数按项目 ID；否则按 slug 解析，找不到 → 404）
 请求：{ api_dir, api_doc_name*, api_doc* }
 响应 201：新建文档节点；200：更新已有草稿
 错误：400 / 403 / 404
@@ -223,7 +223,7 @@
 ### POST /projects/{id}/docs/publish-path — 按路径发布文档草稿（外部 API）
 
 鉴权：JWT 需 `project_docs:update` + 项目 ACL；或 PAT scope `docs:publish` + 项目 ACL
-路径参数：id*: integer
+路径参数：id*: integer | string（正整数按项目 ID；否则按 slug 解析，找不到 → 404）
 请求：{ api_dir, api_doc_name* }
 响应 200：Published
 错误：400 / 403 / 404 / 409

@@ -19,7 +19,7 @@ const actionLabel = computed(() => (projectTab.value === "docs" ? "进入文档"
 
 const columns = defineProTableColumns([
   { key: "name", name: "项目", sortable: true },
-  { key: "slug", name: "Slug" },
+  { key: "slug", name: "标识" },
   { key: "status", name: "状态", width: 100 },
   { key: "updated_at", name: "更新时间", sortable: true, render: ({ val }) => formatDateTime(val) },
   { key: "action", name: "操作", width: 120, align: "center", fixed: "right" },
@@ -44,7 +44,7 @@ function openProject(project: ProductProject) {
       :auto-query-fields="['status']"
     >
       <template #filters>
-        <u-input v-model="query.keyword" placeholder="名称、Slug 或标签" style="width: 240px" />
+        <u-input v-model="query.keyword" placeholder="名称、标识或标签" style="width: 240px" />
         <u-select
           v-model="query.status"
           placeholder="全部状态"

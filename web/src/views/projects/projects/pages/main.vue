@@ -28,7 +28,7 @@ const form = reactive({
 
 const columns = defineProTableColumns([
   { key: "name", name: "项目", sortable: true },
-  { key: "slug", name: "Slug" },
+  { key: "slug", name: "标识" },
   { key: "status", name: "状态", width: 100 },
   { key: "tags", name: "标签" },
   { key: "updated_at", name: "更新时间", sortable: true, render: ({ val }) => formatDateTime(val) },
@@ -109,7 +109,7 @@ function splitTags(raw?: string | null): string[] {
       :auto-query-fields="['status']"
     >
       <template #filters>
-        <u-input v-model="query.keyword" placeholder="名称、Slug 或标签" style="width: 240px" />
+        <u-input v-model="query.keyword" placeholder="名称、标识或标签" style="width: 240px" />
         <u-select
           v-model="query.status"
           placeholder="全部状态"
@@ -188,7 +188,13 @@ function splitTags(raw?: string | null): string[] {
       @submit="save"
     >
       <u-input label="名称" field="name" :rules="{ required: '必填' }" />
-      <u-input label="Slug" field="slug" :rules="{ required: '必填' }" />
+      <u-input
+        label="标识"
+        field="slug"
+        placeholder="仅字母、数字、连字符，如 my-project"
+        :pattern="/^[a-zA-Z0-9\- ]*$/"
+        :rules="{ required: '必填' }"
+      />
       <u-input label="标签" field="tags" placeholder="逗号分隔" />
       <u-textarea label="描述" field="description" :rows="4" />
     </FormDialog>

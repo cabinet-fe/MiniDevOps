@@ -91,6 +91,24 @@ func TestPushAndPublishPathPATScope(t *testing.T) {
 	}
 }
 
+func TestPushDocByPathAcceptsSlug(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	handler, service := newProjectHandlerForTest(t)
+	owner := projectservice.NewAccessContext(1, true, nil)
+	project, err := service.CreateProject(owner, projectservice.CreateProjectInput{Name: "Slug Docs", Slug: "slug-docs"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	pushBody := `{"api_dir":"svc","api_doc_name":"api","api_doc":"# slug push"}`
+	if got := docsPathRequest(t, handler, http.MethodPost, "/docs/push", project.Slug, pushBody, true, []string{"docs:write"}); got != http.StatusCreated {
+		t.Fatalf("slug push = %d, want 201", got)
+	}
+	if got := docsPathRequest(t, handler, http.MethodPost, "/docs/push", "missing-slug", pushBody, true, []string{"docs:write"}); got != http.StatusNotFound {
+		t.Fatalf("missing slug = %d, want 404", got)
+	}
+}
+
 func docsPathRequest(t *testing.T, handler *ProjectHandler, method, suffix, projectID, body string, isPAT bool, scopes []string) int {
 	t.Helper()
 	recorder := httptest.NewRecorder()

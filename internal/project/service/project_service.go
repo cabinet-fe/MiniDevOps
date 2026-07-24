@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	projectmodel "bedrock/internal/project/model"
@@ -84,9 +85,15 @@ func (s *ProjectService) CreateProject(actor AccessContext, input CreateProjectI
 		return nil, NewForbidden("缺少全局权限: project_projects:create")
 	}
 	name := strings.TrimSpace(input.Name)
+	if name == "" {
+		return nil, errors.New("项目名称不能为空")
+	}
+	if strings.TrimSpace(input.Slug) == "" {
+		return nil, errors.New("项目标识不能为空")
+	}
 	slug := normalizeSlug(input.Slug)
-	if name == "" || slug == "" {
-		return nil, errors.New("项目名称与 slug 不能为空")
+	if slug == "" {
+		return nil, errors.New("项目标识无效，仅支持字母、数字与连字符")
 	}
 	project := &projectmodel.ProductProject{
 		Name: name, Slug: slug, Description: strings.TrimSpace(input.Description),
@@ -95,7 +102,7 @@ func (s *ProjectService) CreateProject(actor AccessContext, input CreateProjectI
 	}
 	if err := s.repo.CreateProjectWithOwner(project); err != nil {
 		if isUniqueError(err) {
-			return nil, NewConflict("项目 slug 已存在")
+			return nil, NewConflict("项目标识已存在")
 		}
 		return nil, err
 	}
@@ -140,6 +147,29 @@ func (s *ProjectService) GetProject(actor AccessContext, id uint) (*ProjectView,
 		return nil, err
 	}
 	return &views[0], nil
+}
+
+// ResolveProjectRef 解析路径参数：正整数按 ID；否则 normalizeSlug 后按 slug 查找。
+func (s *ProjectService) ResolveProjectRef(ref string) (uint, error) {
+	ref = strings.TrimSpace(ref)
+	if ref == "" {
+		return 0, NewNotFound("项目不存在")
+	}
+	if id, err := strconv.ParseUint(ref, 10, 64); err == nil && id > 0 {
+		if _, err := s.repo.FindProject(uint(id)); err != nil {
+			return 0, NewNotFound("项目不存在")
+		}
+		return uint(id), nil
+	}
+	slug := normalizeSlug(ref)
+	if slug == "" {
+		return 0, NewNotFound("项目不存在")
+	}
+	project, err := s.repo.FindProjectBySlug(slug)
+	if err != nil {
+		return 0, NewNotFound("项目不存在")
+	}
+	return project.ID, nil
 }
 
 func (s *ProjectService) projectViews(actor AccessContext, projects []projectmodel.ProductProject) ([]ProjectView, error) {
@@ -219,9 +249,12 @@ func (s *ProjectService) UpdateProject(actor AccessContext, id uint, input Updat
 		}
 	}
 	if input.Slug != nil {
+		if strings.TrimSpace(*input.Slug) == "" {
+			return nil, errors.New("项目标识不能为空")
+		}
 		slug := normalizeSlug(*input.Slug)
 		if slug == "" {
-			return nil, errors.New("slug 不能为空")
+			return nil, errors.New("项目标识无效，仅支持字母、数字与连字符")
 		}
 		project.Slug = slug
 	}
@@ -245,7 +278,7 @@ func (s *ProjectService) UpdateProject(actor AccessContext, id uint, input Updat
 	}
 	if err := s.repo.UpdateProject(project); err != nil {
 		if isUniqueError(err) {
-			return nil, NewConflict("项目 slug 已存在")
+			return nil, NewConflict("项目标识已存在")
 		}
 		return nil, err
 	}

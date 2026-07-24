@@ -724,7 +724,7 @@ func (h *ProjectHandler) PushDocByPath(c *gin.Context) {
 	if !h.requireDocsAuth(c, "docs:write", "project_docs:create") {
 		return
 	}
-	projectID, ok := parseID(c, "id")
+	projectID, ok := h.resolveProjectID(c)
 	if !ok {
 		return
 	}
@@ -768,7 +768,7 @@ func (h *ProjectHandler) PublishDocByPath(c *gin.Context) {
 	if !h.requireDocsAuth(c, "docs:publish", "project_docs:update") {
 		return
 	}
-	projectID, ok := parseID(c, "id")
+	projectID, ok := h.resolveProjectID(c)
 	if !ok {
 		return
 	}
@@ -927,6 +927,16 @@ func parseID(c *gin.Context, name string) (uint, bool) {
 		return 0, false
 	}
 	return uint(value), true
+}
+
+// resolveProjectID 支持数字 ID 或项目 slug（供 docs/push、publish-path 开放 API）。
+func (h *ProjectHandler) resolveProjectID(c *gin.Context) (uint, bool) {
+	id, err := h.svc.ResolveProjectRef(c.Param("id"))
+	if err != nil {
+		writeServiceError(c, err)
+		return 0, false
+	}
+	return id, true
 }
 
 func parseOptionalID(c *gin.Context, name string) (*uint, bool) {

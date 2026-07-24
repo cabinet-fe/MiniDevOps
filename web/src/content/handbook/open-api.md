@@ -45,12 +45,12 @@ curl -fsS -X POST "$HOST/api/v1/resource/tokens" \
 
 ## 3. 开放接口一览
 
-| scope          | 方法 | 路径                               | 说明                        |
-| -------------- | ---- | ---------------------------------- | --------------------------- |
-| `agents:run`   | POST | `/ai/agents/{id}/api-runs`         | 触发 Agent 运行（202 异步） |
-| `skills:read`  | GET  | `/skills/{id}/package`             | 下载技能包（二进制 ZIP）    |
-| `docs:write`   | POST | `/projects/{id}/docs/push`         | 按路径 upsert 文档草稿      |
-| `docs:publish` | POST | `/projects/{id}/docs/publish-path` | 按路径发布文档草稿          |
+| scope          | 方法 | 路径                               | 说明                                                   |
+| -------------- | ---- | ---------------------------------- | ------------------------------------------------------ |
+| `agents:run`   | POST | `/ai/agents/{id}/api-runs`         | 触发 Agent 运行（202 异步）                            |
+| `skills:read`  | GET  | `/skills/{id}/package`             | 下载技能包（二进制 ZIP）                               |
+| `docs:write`   | POST | `/projects/{id}/docs/push`         | 按路径 upsert 文档草稿；`{id}` 可为数字 ID 或项目 slug |
+| `docs:publish` | POST | `/projects/{id}/docs/publish-path` | 按路径发布文档草稿；`{id}` 可为数字 ID 或项目 slug     |
 
 以上接口也接受登录 JWT（此时校验 RBAC 权限而非 scope）：`api-runs` 需 `ai_agents:execute`，`package` 需 `ai_skills:download`，`push` 需 `project_docs:create`，`publish-path` 需 `project_docs:update`；项目文档接口另要求项目 ACL。
 
@@ -89,7 +89,7 @@ curl -fsS -OJ "$HOST/api/v1/skills/3/package" \
 
 ### 5.3 按路径推送文档草稿 — scope `docs:write`
 
-`POST /projects/{id}/docs/push` — 按 `api_dir` + `api_doc_name` upsert 草稿，**只写草稿、不自动发布**。
+`POST /projects/{id}/docs/push` — 按 `api_dir` + `api_doc_name` upsert 草稿，**只写草稿、不自动发布**。路径参数 `{id}` 为正整数时按项目 ID；否则按 slug 解析（找不到 → 404）。
 
 | 字段           | 必填 | 说明                                                                            |
 | -------------- | ---- | ------------------------------------------------------------------------------- |
@@ -101,7 +101,7 @@ curl -fsS -OJ "$HOST/api/v1/skills/3/package" \
 - 错误：`400` 参数无效；`403` scope 不足或不满足项目 ACL；`404` 项目不存在。
 
 ```bash
-curl -fsS -X POST "$HOST/api/v1/projects/7/docs/push" \
+curl -fsS -X POST "$HOST/api/v1/projects/my-product/docs/push" \
   -H "Authorization: Bearer br_..." \
   -H 'Content-Type: application/json' \
   -d '{"api_dir":"guides","api_doc_name":"getting-started","api_doc":"# 快速上手\n..."}'
@@ -109,7 +109,7 @@ curl -fsS -X POST "$HOST/api/v1/projects/7/docs/push" \
 
 ### 5.4 按路径发布文档草稿 — scope `docs:publish`
 
-`POST /projects/{id}/docs/publish-path` — 解析路径后以当前 `content_version` 发布草稿。
+`POST /projects/{id}/docs/publish-path` — 解析路径后以当前 `content_version` 发布草稿。路径参数 `{id}` 规则同 push（ID 或 slug）。
 
 | 字段           | 必填 | 说明               |
 | -------------- | ---- | ------------------ |
@@ -139,13 +139,13 @@ curl -fsS -X POST "$HOST/api/v1/projects/7/docs/push" \
 HOST=https://bedrock.example.com
 PAT=br_...   # scopes: docs:write, docs:publish, agents:run
 
-# 1. 推送接口文档草稿
-curl -fsS -X POST "$HOST/api/v1/projects/7/docs/push" \
+# 1. 推送接口文档草稿（也可用数字项目 ID）
+curl -fsS -X POST "$HOST/api/v1/projects/my-product/docs/push" \
   -H "Authorization: Bearer $PAT" -H 'Content-Type: application/json' \
   -d '{"api_dir":"openapi","api_doc_name":"v2","api_doc":"# API v2\n..."}'
 
 # 2. 发布
-curl -fsS -X POST "$HOST/api/v1/projects/7/docs/publish-path" \
+curl -fsS -X POST "$HOST/api/v1/projects/my-product/docs/publish-path" \
   -H "Authorization: Bearer $PAT" -H 'Content-Type: application/json' \
   -d '{"api_dir":"openapi","api_doc_name":"v2"}'
 
